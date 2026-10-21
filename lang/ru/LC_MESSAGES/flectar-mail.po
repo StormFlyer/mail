@@ -6050,7 +6050,7 @@ msgstr "Использовать во всех учётных записях (т
 msgid "Message list width"
 msgstr "Ширина списка писем"
 
-#: ui/views/mail-view.slint:692
+#: ui/views/mail-view.slint:683
 msgid "Close folders"
 msgstr "Закрыть список папок"
 

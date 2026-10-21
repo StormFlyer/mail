@@ -5968,7 +5968,7 @@ msgstr "Tüm hesaplarda kullan (yalnızca yerel)"
 msgid "Message list width"
 msgstr "İleti listesi genişliği"
 
-#: ui/views/mail-view.slint:692
+#: ui/views/mail-view.slint:683
 msgid "Close folders"
 msgstr "Klasörleri kapat"
 

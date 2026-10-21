@@ -5818,7 +5818,7 @@ msgstr "在所有账户中使用（仅本地）"
 msgid "Message list width"
 msgstr "邮件列表宽度"
 
-#: ui/views/mail-view.slint:692
+#: ui/views/mail-view.slint:683
 msgid "Close folders"
 msgstr "关闭文件夹"
 

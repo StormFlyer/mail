@@ -6061,7 +6061,7 @@ msgstr "Usar en todas las cuentas (solo local)"
 msgid "Message list width"
 msgstr "Ancho de la lista de mensajes"
 
-#: ui/views/mail-view.slint:692
+#: ui/views/mail-view.slint:683
 msgid "Close folders"
 msgstr "Cerrar carpetas"
 

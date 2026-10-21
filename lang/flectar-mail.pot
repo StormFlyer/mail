@@ -5912,7 +5912,7 @@ msgstr ""
 msgid "Message list width"
 msgstr ""
 
-#: ui/views/mail-view.slint:692
+#: ui/views/mail-view.slint:683
 msgid "Close folders"
 msgstr ""
 

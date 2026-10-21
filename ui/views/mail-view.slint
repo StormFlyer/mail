@@ -104,7 +104,7 @@ export component MailView inherits FocusScope {
         LayoutMetrics.list-pane-width,
         root.list-pane-maximum-width
     );
-    private property <length> single-pane-content-x: root.compact ? 0px : root.desktop-sidebar-width + 1px;
+    private property <length> single-pane-content-x: root.compact ? 0px : root.desktop-sidebar-width;
     private property <length> single-pane-content-width: max(0px, root.width - root.single-pane-content-x);
     private property <length> page-transition-distance: root.compact
         ? root.single-pane-content-width
@@ -498,15 +498,6 @@ export component MailView inherits FocusScope {
                     root.settings_tab = "Accounts";
                     root.settings_open = true;
                 }
-            }
-
-            Rectangle {
-                visible: !root.compact;
-                x: root.desktop-sidebar-width;
-                y: 0px;
-                width: 1px;
-                height: parent.height;
-                background: root.border;
             }
 
             compact-list-pane := MailListPane {
