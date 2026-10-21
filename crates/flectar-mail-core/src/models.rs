@@ -1546,6 +1546,10 @@ pub struct Settings {
     /// to at most one profile; provider state is never affected.
     #[serde(default)]
     pub mail_profiles: Vec<MailProfile>,
+    /// The profile whose accounts the mail view shows. `None` shows every
+    /// account. Never names a deleted or empty profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_mail_profile: Option<String>,
 }
 
 /// A named, rich-HTML signature belonging to one account.
@@ -1718,6 +1722,7 @@ impl Default for Settings {
             account_colors: std::collections::HashMap::new(),
             account_short_names: std::collections::HashMap::new(),
             mail_profiles: Vec::new(),
+            active_mail_profile: None,
         }
     }
 }

@@ -220,6 +220,7 @@ export global I18n {
         if (key == "Could not update account profile: {}") { return @tr("Could not update account profile: {}", argument); }
         if (key == "Profile deleted.") { return @tr("Profile deleted."); }
         if (key == "Could not delete profile: {}") { return @tr("Could not delete profile: {}", argument); }
+        if (key == "Could not switch profile: {}") { return @tr("Could not switch profile: {}", argument); }
         if (key == "Marker preference is active for this session.") { return @tr("Marker preference is active for this session."); }
         if (key == "Mail-list marker preference saved.") { return @tr("Mail-list marker preference saved."); }
         if (key == "Could not save mail-list marker preference: {}") { return @tr("Could not save mail-list marker preference: {}", argument); }
@@ -554,6 +555,10 @@ export component AppWindow inherits Window {
     callback assign_account_profile(int, string);
     callback save_account_color(int, color, bool);
     callback delete_mail_profile(string);
+    // Show only this profile's accounts in the mail view; empty shows all.
+    callback select_mail_profile(string);
+    // Rust: the active profile or its accounts changed.
+    callback mail_profile_changed();
     callback save_account_markers_visibility(bool);
     callback save_workspace_layout(string);
     callback save_workspace_list_pane_width(length);
@@ -675,6 +680,8 @@ export component AppWindow inherits Window {
     in property <[AccountRow]> connected_accounts: [];
     in property <[MailProfileRow]> mail_profiles: [];
     in property <[ProfileMemberRow]> profile_members: [];
+    // The profile the mail view shows; an empty id means every account.
+    in property <MailProfileRow> active_mail_profile;
     // Set to open Settings' profile editor for a new profile.
     in-out property <bool> new_profile_requested: false;
     // The saved visible page can paint before the core is safe to use. Keep
@@ -1317,6 +1324,15 @@ export component AppWindow inherits Window {
             thread_messages: root.thread_messages;
             selected_thread_index: root.selected_thread_index;
             sidebar_rows: root.sidebar_rows;
+            mail_profiles: root.mail_profiles;
+            active_mail_profile: root.active_mail_profile;
+            account_count: root.connected_accounts.length;
+            select_mail_profile(id) => { root.select_mail_profile(id); }
+            create_mail_profile => {
+                root.settings_tab = "Accounts";
+                root.settings_open = true;
+                root.new_profile_requested = true;
+            }
             folder_filter_query <=> root.folder_filter_query;
             mail_labels: root.mail_labels;
             mail_label_results: root.mail_label_results;
@@ -2261,6 +2277,19 @@ export component AppWindow inherits Window {
         title-color: root.title-color;
         text-color: root.secondary-text;
         accent-color: root.accent;
+        profiles: root.mail_profiles;
+        active-profile: root.active_mail_profile;
+        account-count: root.connected_accounts.length;
+        choose-profile(id) => { root.select_mail_profile(id); }
+        create-profile => {
+            root.settings_tab = "Accounts";
+            root.settings_open = true;
+            root.new_profile_requested = true;
+        }
+        manage-profiles => {
+            root.settings_tab = "Accounts";
+            root.settings_open = true;
+        }
     }
 
     if WindowChrome.controls-visible : WindowControls {

@@ -2,6 +2,8 @@ import { HorizontalBox, VerticalBox } from "std-widgets.slint";
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics, MotionSettings } from "../design-system.slint";
 import { WindowChrome, WindowDragArea } from "../window-chrome.slint";
+import { MailProfileRow } from "../models.slint";
+import { ProfileSwitcher } from "profile-switcher.slint";
 import { PaneDivider } from "workspace-layout.slint";
 
 
@@ -410,8 +412,9 @@ global TabMetrics {
     // content below.
     out property <length> foot: 12px;
 
-    // The line tab labels and "+" are centred on: a touch above the tab's
-    // middle, as its foot is open, and in line with the window controls.
+    // The line tab labels, the profile pill and "+" are centred on: a touch
+    // above the tab's middle, as its foot is open, and in line with the
+    // window controls.
     public pure function middle(height: length) -> length {
         return (height + root.top) / 2 - 2px;
     }
@@ -825,8 +828,8 @@ component NewTabButton inherits Rectangle {
 }
 
 // Desktop top bar with the tabs. It spans the window above the rail and the
-// sidebar: leading window controls, then the tabs. Trailing controls sit in
-// its right corner.
+// sidebar: leading window controls, the profile pill, then the tabs.
+// Trailing controls sit in its right corner.
 export component WindowTopBar inherits Rectangle {
     // The active tab's live place: "settings" or a workspace, and its title.
     in property <string> live-workspace;
@@ -839,15 +842,23 @@ export component WindowTopBar inherits Rectangle {
     in property <color> title-color;
     in property <color> text-color;
     in property <color> accent-color;
+    in property <[MailProfileRow]> profiles;
+    in property <MailProfileRow> active-profile;
+    in property <int> account-count;
+    callback choose-profile(string);
+    callback create-profile();
+    callback manage-profiles();
 
     background: root.background-color;
     accessible-role: window-title-bar;
     accessible-label: @tr("Flectar Mail");
 
-    // The first tab's foot curves out just after the leading window
-    // controls. Tabs start and end on whole pixels, so their borders stay
-    // sharp.
-    private property <length> tabs-x: WindowChrome.leading-width + TabMetrics.foot + 2px;
+    // The pill follows the leading window controls, and the tabs the pill.
+    private property <length> pill-x: max(8px, WindowChrome.leading-width);
+    // The first tab stands 8px from the pill, about the pill's own inset from
+    // the bar's edges; its foot curves out below the pill's end. Tabs start
+    // and end on whole pixels, so their borders stay sharp.
+    private property <length> tabs-x: ((profile-pill.x + profile-pill.width) / 1px).ceil() * 1px + 8px;
     private property <length> trailing: WindowChrome.trailing-width + 8px;
     private property <int> count: TabsUi.rows.length;
     // Tabs share the room up to the new-tab button. In the integrated frame
@@ -894,6 +905,17 @@ export component WindowTopBar inherits Rectangle {
         y: parent.height - 1px;
         height: 1px;
         background: root.divider-color;
+    }
+
+    profile-pill := ProfileSwitcher {
+        x: root.pill-x;
+        y: TabMetrics.middle(parent.height) - self.height / 2;
+        profiles: root.profiles;
+        active: root.active-profile;
+        account-count: root.account-count;
+        choose(id) => { root.choose-profile(id); }
+        create-profile => { root.create-profile(); }
+        manage-profiles => { root.manage-profiles(); }
     }
 
     strip := TouchArea {

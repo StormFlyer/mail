@@ -299,26 +299,33 @@ pub(super) fn apply_connected_accounts(
         .iter()
         .map(|account| account.id)
         .collect::<HashSet<_>>();
+    let profile_row = |profile: &MailProfile| MailProfileRow {
+        id: profile.id.clone().into(),
+        name: profile.name.clone().into(),
+        color: parse_marker_color(&profile.color)
+            .unwrap_or_else(|| slint::Color::from_rgb_u8(107, 114, 128)),
+        account_count: i32::try_from(
+            profile
+                .account_ids
+                .iter()
+                .filter(|account_id| known_accounts.contains(account_id))
+                .count(),
+        )
+        .unwrap_or(i32::MAX),
+    };
     app.set_mail_profiles(ModelRc::new(VecModel::from(
         presentation
             .profiles
             .iter()
-            .map(|profile| MailProfileRow {
-                id: profile.id.clone().into(),
-                name: profile.name.clone().into(),
-                color: parse_marker_color(&profile.color)
-                    .unwrap_or_else(|| slint::Color::from_rgb_u8(107, 114, 128)),
-                account_count: i32::try_from(
-                    profile
-                        .account_ids
-                        .iter()
-                        .filter(|account_id| known_accounts.contains(account_id))
-                        .count(),
-                )
-                .unwrap_or(i32::MAX),
-            })
+            .map(profile_row)
             .collect::<Vec<_>>(),
     )));
+    app.set_active_mail_profile(
+        presentation
+            .active_profile()
+            .map(profile_row)
+            .unwrap_or_default(),
+    );
     app.set_show_account_markers(presentation.show_markers);
 }
 
@@ -334,6 +341,7 @@ pub(super) fn refresh_connected_accounts(app: &AppWindow, state: &Rc<RefCell<Inb
         &state.profile_avatar_images,
         &state.account_presentation,
     );
+    prefer_shown_compose_account(app, &state);
     drop(state);
     app.global::<AccountMailPreferences>()
         .invoke_context_changed();
@@ -347,6 +355,19 @@ pub(super) fn update_connected_accounts(
     accounts: Vec<Account>,
     configs: Vec<AccountConfig>,
 ) {
+    // A new account is in no profile yet: show every account rather than
+    // hide its mail behind the active one.
+    let shows_new_account = {
+        let state = state.borrow();
+        state.profile_accounts.is_some()
+            && !state.connected_accounts.is_empty()
+            && accounts.iter().any(|account| {
+                !state
+                    .connected_accounts
+                    .iter()
+                    .any(|known| known.id == account.id)
+            })
+    };
     let scope_changed = {
         let mut state = state.borrow_mut();
         let previous_urls = state
@@ -387,6 +408,9 @@ pub(super) fn update_connected_accounts(
     }
     refresh_sidebar(state);
     schedule_profile_avatar_fetches(app, state, runtime);
+    if shows_new_account {
+        app.invoke_select_mail_profile("".into());
+    }
 }
 
 pub(super) fn connected_account_rows(app: &AppWindow) -> Vec<AccountRow> {
@@ -401,7 +425,12 @@ pub(super) fn apply_connected_account_rows(app: &AppWindow, rows: Vec<AccountRow
         .iter()
         .find(|account| account.id == app.get_compose_account_id())
         .or_else(|| rows.first());
-    if let Some(account) = selected {
+    set_compose_account(app, selected);
+    app.set_connected_accounts(ModelRc::new(VecModel::from(rows)));
+}
+
+fn set_compose_account(app: &AppWindow, account: Option<&AccountRow>) {
+    if let Some(account) = account {
         app.set_compose_account_id(account.id);
         app.set_compose_from_label(if account.name == account.email {
             account.email.clone()
@@ -412,7 +441,21 @@ pub(super) fn apply_connected_account_rows(app: &AppWindow, rows: Vec<AccountRow
         app.set_compose_account_id(-1);
         app.set_compose_from_label(app.global::<I18n>().invoke_no_connected_account());
     }
-    app.set_connected_accounts(ModelRc::new(VecModel::from(rows)));
+}
+
+/// New mail starts from an account the mail view shows, so writing from a
+/// profile sends from one of its accounts.
+pub(super) fn prefer_shown_compose_account(app: &AppWindow, state: &InboxState) {
+    if state.shows_account(i64::from(app.get_compose_account_id())) {
+        return;
+    }
+    let rows = connected_account_rows(app);
+    if let Some(account) = rows
+        .iter()
+        .find(|account| state.shows_account(i64::from(account.id)))
+    {
+        set_compose_account(app, Some(account));
+    }
 }
 
 pub(super) fn apply_account_states(

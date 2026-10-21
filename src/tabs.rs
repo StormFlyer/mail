@@ -842,13 +842,13 @@ impl Tabs {
         self.closed(closed);
     }
 
-    /// The inbox as the window names it: by its account when there is only
+    /// The inbox as the window names it: by its account when it shows only
     /// one.
     fn home(&self) -> Place {
         let state = self.context.state.borrow();
         Place {
             location: Location::Mail {
-                scope: Scope::UNIFIED_INBOX.visible_for(&state.connected_accounts),
+                scope: Scope::UNIFIED_INBOX.visible_for(&state.mail_accounts()),
                 query: String::new(),
                 filter: default_filter(),
                 conversation: None,
@@ -1128,18 +1128,21 @@ impl Tabs {
             // loaded list when it already shows the same mailbox and search.
             let rows = rows
                 .map(|mut rows| {
-                    // Mail of an account removed meanwhile is gone.
+                    // Mail of an account removed meanwhile is gone, and tabs
+                    // share every profile: mail of an account the active
+                    // profile leaves out is not shown.
                     if state.using_core {
                         let accounts = &state.connected_accounts;
                         rows.messages.retain(|row| {
                             accounts.iter().any(|account| account.id == row.account_id)
+                                && state.shows_account(row.account_id)
                         });
                     }
                     rows
                 })
                 .or_else(|| {
                     (state.using_core
-                        && state.scope == scope.visible_for(&state.connected_accounts)
+                        && state.scope == scope.visible_for(&state.mail_accounts())
                         && state.query == query)
                         .then(|| cached_rows(&state))
                 })
@@ -1514,7 +1517,8 @@ fn sync_rows(model: &VecModel<TabRow>, rows: impl Iterator<Item = TabRow>) {
 }
 
 /// The mailbox a saved tab reopens, or `None` once it is gone: a deleted
-/// folder or label, or a removed account.
+/// folder or label, or a removed account. A mailbox of an account the active
+/// profile leaves out is not shown either.
 fn available_scope(scope: Scope, state: &InboxState) -> Option<Scope> {
     match scope {
         Scope::Unified(_) | Scope::Important | Scope::Other => Some(scope),
@@ -1523,6 +1527,11 @@ fn available_scope(scope: Scope, state: &InboxState) -> Option<Scope> {
             .labels
             .iter()
             .find(|label| label.id == id)
+            .filter(|label| {
+                label
+                    .owner_account_id
+                    .is_none_or(|owner| state.shows_account(owner))
+            })
             .map(|label| Scope::Label {
                 kind: mail_scope::LabelKind::of(label.is_auto, label.owner_account_id),
                 id,
@@ -1530,13 +1539,14 @@ fn available_scope(scope: Scope, state: &InboxState) -> Option<Scope> {
         Scope::Folder(_) => state
             .mailboxes
             .iter()
-            .any(|mailbox| mailbox.scope == Some(scope))
+            .any(|mailbox| mailbox.scope == Some(scope) && state.shows_account(mailbox.account_id))
             .then_some(scope),
-        Scope::Account { account_id, .. } => state
-            .connected_accounts
-            .iter()
-            .any(|account| account.id == account_id)
-            .then_some(scope),
+        Scope::Account { account_id, .. } => (state.shows_account(account_id)
+            && state
+                .connected_accounts
+                .iter()
+                .any(|account| account.id == account_id))
+        .then_some(scope),
     }
 }
 
@@ -1996,8 +2006,8 @@ mod tests {
             panic!("three tabs");
         };
         assert_eq!(active(), 2);
-        // The tabs leave room before them for the first tab's foot. Three
-        // tabs share the bar at their widest, 240px each.
+        // The tabs start after the profile pill. Three tabs share the bar at
+        // their widest, 240px each.
         let origin = {
             use i_slint_core::items::AccessibleRole;
             let window = i_slint_core::window::WindowInner::from_pub(app.window());
@@ -2012,7 +2022,7 @@ mod tests {
             });
             strip.expect("the tab strip")
         };
-        assert!(origin > 0.0, "the first tab's foot fits in the bar");
+        assert!(origin > 0.0, "the profile pill comes first");
         let at = |x: f32| slint::LogicalPosition::new(origin + x, 22.0);
         let pointer = |event| app.window().dispatch_event(event);
         let left = PointerEventButton::Left;
@@ -2183,6 +2193,65 @@ mod tests {
             mailbox: StandardMailbox::Inbox,
         };
         assert_eq!(available_scope(account, &state), None);
+    }
+
+    fn account(id: i64) -> Account {
+        Account {
+            id,
+            email: format!("person{id}@example.com"),
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Imap,
+            auth_kind: flectar_mail_core::models::AuthKind::Password,
+            mail_protocol: MailProtocol::Imap,
+            sync_state: "idle".into(),
+            sync_error: None,
+            can_create_top_level_mailbox: true,
+        }
+    }
+
+    #[test]
+    fn mailboxes_of_accounts_outside_the_profile_give_way_to_its_own() {
+        let (_app, context, _dir, _) = headless();
+        let mut state = context.state.borrow_mut();
+        state.connected_accounts = vec![account(1), account(2), account(3)];
+        state.mailboxes = vec![folder(1, 7), folder(2, 8)];
+        state.profile_accounts = Some(vec![2, 3]);
+        let sent = |account_id| Scope::Account {
+            account_id,
+            mailbox: StandardMailbox::Sent,
+        };
+
+        // Saved tabs reopen only the profile's mailboxes.
+        assert_eq!(available_scope(Scope::Folder(7), &state), None);
+        assert_eq!(
+            available_scope(Scope::Folder(8), &state),
+            Some(Scope::Folder(8))
+        );
+        assert_eq!(available_scope(sent(1), &state), None);
+        assert_eq!(available_scope(sent(2), &state), Some(sent(2)));
+        assert_eq!(
+            available_scope(Scope::UNIFIED_INBOX, &state),
+            Some(Scope::UNIFIED_INBOX)
+        );
+
+        // The selection moves to the profile's same mailbox.
+        state.set_scope(sent(1));
+        assert_eq!(state.scope, Scope::Unified(StandardMailbox::Sent));
+        state.set_scope(Scope::Folder(7));
+        assert_eq!(state.scope, Scope::UNIFIED_INBOX);
+        state.set_scope(Scope::Folder(8));
+        assert_eq!(state.scope, Scope::Folder(8));
+        // With one account shown, the unified mailboxes are that account's.
+        state.profile_accounts = Some(vec![3]);
+        state.set_scope(sent(1));
+        assert_eq!(state.scope, sent(3));
+        assert!(state.shows_account(3) && !state.shows_account(2));
+
+        state.profile_accounts = None;
+        state.set_scope(sent(1));
+        assert_eq!(state.scope, sent(1));
+        assert_eq!(state.mail_accounts().len(), 3);
     }
 
     #[test]

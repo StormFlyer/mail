@@ -584,6 +584,8 @@ pub(super) fn restore_account_backup(
     let (restore, settings, accounts, configs) = result?;
     apply_language(app, &settings.language);
     state.borrow_mut().account_presentation = AccountPresentationSettings::from_settings(&settings);
+    // Imported profiles can change which accounts the mail view shows.
+    app.invoke_mail_profile_changed();
     update_connected_accounts(app, state, runtime, accounts, configs);
     refresh_rows_only(app, state, runtime);
     app.set_theme_mode(
@@ -1223,6 +1225,7 @@ pub(super) fn register_data_management_callbacks(
                         state.connected_accounts.clear();
                         state.account_configs.clear();
                         state.account_presentation = AccountPresentationSettings::default();
+                        let _ = state.sync_profile_accounts();
                         state.calendar_connections.clear();
                         state.messages.clear();
                         state.mailboxes.clear();

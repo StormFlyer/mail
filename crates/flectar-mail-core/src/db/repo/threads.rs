@@ -254,6 +254,9 @@ pub struct ListArgs {
     pub view: View,
     pub tab: Option<TabFilter>,
     pub account_id: Option<i64>,
+    /// Restrict to a set of accounts, such as a mail profile's; an empty set
+    /// lists nothing. Combines with `account_id`.
+    pub account_ids: Option<Vec<i64>>,
     /// Restrict to threads with a message in this folder (user-folder view).
     pub folder_id: Option<i64>,
     pub cursor: Option<ThreadCursor>,
@@ -341,6 +344,13 @@ fn build_filter(
     if let Some(acc) = args.account_id {
         bind.push(Box::new(acc));
         where_clauses.push(format!("t.account_id = ?{}", bind.len()));
+    }
+    if let Some(account_ids) = &args.account_ids {
+        where_clauses.push(super::search::account_set_clause(
+            "t.account_id",
+            account_ids,
+            &mut bind,
+        ));
     }
     match &args.tab {
         Some(TabFilter::Important) => where_clauses.push(format!(
@@ -541,6 +551,7 @@ mod tests {
             view: View::Inbox,
             tab: None,
             account_id: Some(1),
+            account_ids: None,
             folder_id: Some(1),
             cursor: None,
             limit: 2,
@@ -550,6 +561,63 @@ mod tests {
         assert_eq!(page.threads.len(), 2);
         assert!(page.next_cursor.is_some());
         assert_eq!(count(&conn, &args).unwrap(), 3);
+    }
+
+    #[test]
+    fn account_sets_list_and_count_only_their_accounts() {
+        let conn = crate::db::testutil::conn();
+        crate::db::testutil::seed_account(&conn);
+        let (first, _) = crate::db::testutil::seed_message(&conn, "a@one.dev", "one", false);
+        conn.execute(
+            "INSERT INTO accounts (id, email, provider, auth_kind, username,
+             imap_host, imap_port, smtp_host, smtp_port, created_at)
+             VALUES (2,'me2@test.dev','imap','password','me2','h',993,'h',587,0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (2,2,'INBOX','inbox')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, account_id, subject_norm, unread_count, last_message_at)
+             VALUES (99, 2, 'two', 1, 1000)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date, is_read, is_automated, is_draft, is_outgoing)
+             VALUES (99, 2, 2, 99, 'mid-99', 'two', 'b@two.dev', 1000, 0, 0, 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        let listed = |account_ids: Option<Vec<i64>>| {
+            let args = ListArgs {
+                view: View::Inbox,
+                tab: None,
+                account_id: None,
+                account_ids,
+                folder_id: None,
+                cursor: None,
+                limit: 50,
+            };
+            let mut ids = list(&conn, &args)
+                .unwrap()
+                .threads
+                .iter()
+                .map(|thread| thread.id)
+                .collect::<Vec<_>>();
+            ids.sort();
+            assert_eq!(count(&conn, &args).unwrap(), ids.len());
+            ids
+        };
+        assert_eq!(listed(None), vec![first, 99]);
+        assert_eq!(listed(Some(vec![2])), vec![99]);
+        assert_eq!(listed(Some(vec![1, 2])), vec![first, 99]);
+        assert_eq!(listed(Some(Vec::new())), Vec::<i64>::new());
     }
 
     #[test]
@@ -566,6 +634,7 @@ mod tests {
                 view: View::Inbox,
                 tab: None,
                 account_id: None,
+                account_ids: None,
                 folder_id: None,
                 cursor: None,
                 limit: 2,
@@ -578,6 +647,7 @@ mod tests {
                 view: View::Inbox,
                 tab: None,
                 account_id: None,
+                account_ids: None,
                 folder_id: None,
                 cursor: first.next_cursor,
                 limit: 2,
@@ -606,6 +676,7 @@ mod tests {
             view: View::Inbox,
             tab: None,
             account_id: Some(1),
+            account_ids: None,
             folder_id: None,
             cursor: Some(ThreadCursor {
                 last_message_at: i64::MAX,

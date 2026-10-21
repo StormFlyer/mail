@@ -128,11 +128,16 @@ inbox more room when you need it.
 ### 👥 Profiles and account colors
 
 Group related accounts into named profiles such as Work or Personal, then give
-each profile its own color. In Settings → Accounts → Profiles, you can assign
-accounts, override an individual account's color, and show the effective color
-along the left edge of every message. The markers make accounts easy to tell
-apart while working in the unified inbox; the example below uses purple for Work
-and orange for Support.
+each profile its own color. Create a profile from the profile menu at the start
+of the tab bar, or in Settings → Accounts → Profiles, and check the accounts
+that belong to it. Choose a profile in that menu to focus the mail view on its
+accounts: the unified inbox, search, counts, and sidebar show only their mail,
+while your tabs stay the same. **All accounts** shows everything again.
+
+You can also override an individual account's color and show the effective
+color along the left edge of every message. The markers make accounts easy to
+tell apart while working in the unified inbox; the example below uses purple
+for Work and orange for Support.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">

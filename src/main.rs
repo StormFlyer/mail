@@ -469,6 +469,8 @@ struct UiTaskUpdate {
 #[derive(Clone, Default)]
 struct AccountPresentationSettings {
     profiles: Vec<MailProfile>,
+    /// The profile whose accounts the mail view shows.
+    active_profile: Option<String>,
     show_markers: bool,
     account_colors: HashMap<String, String>,
     account_short_names: HashMap<String, String>,
@@ -478,10 +480,29 @@ impl AccountPresentationSettings {
     fn from_settings(settings: &Settings) -> Self {
         Self {
             profiles: settings.mail_profiles.clone(),
+            active_profile: settings.active_mail_profile.clone(),
             show_markers: settings.show_account_badges,
             account_colors: settings.account_colors.clone(),
             account_short_names: settings.account_short_names.clone(),
         }
+    }
+
+    /// The profile the mail view shows, if it has accounts.
+    fn active_profile(&self) -> Option<&MailProfile> {
+        let active = self.active_profile.as_deref()?;
+        self.profiles
+            .iter()
+            .find(|profile| profile.id == active && !profile.account_ids.is_empty())
+    }
+
+    /// The accounts the mail view shows, sorted, while a profile is active.
+    fn active_profile_accounts(&self) -> Option<Vec<i64>> {
+        self.active_profile().map(|profile| {
+            let mut accounts = profile.account_ids.clone();
+            accounts.sort_unstable();
+            accounts.dedup();
+            accounts
+        })
     }
 
     fn profile(&self, account_id: i64) -> Option<&MailProfile> {
@@ -519,6 +540,10 @@ impl AccountPresentationSettings {
     fn remove_account(&mut self, account_id: i64) {
         for profile in &mut self.profiles {
             profile.account_ids.retain(|id| *id != account_id);
+        }
+        // Like the core, stop showing a profile left without accounts.
+        if self.active_profile().is_none() {
+            self.active_profile = None;
         }
         let key = account_id.to_string();
         self.account_colors.remove(&key);
@@ -612,6 +637,9 @@ struct InboxState {
     connected_accounts: Vec<Account>,
     account_configs: Vec<AccountConfig>,
     account_presentation: AccountPresentationSettings,
+    /// The active profile's accounts, sorted. The mail view shows only these;
+    /// `None` shows every connected account.
+    profile_accounts: Option<Vec<i64>>,
     calendar_connections: Vec<CalendarConnection>,
     carddav_connections: Vec<CardDavConnection>,
     calendar_errors: HashMap<i64, String>,
@@ -1072,6 +1100,7 @@ impl InboxState {
             connected_accounts: Vec::new(),
             account_configs: Vec::new(),
             account_presentation: AccountPresentationSettings::default(),
+            profile_accounts: None,
             calendar_connections: Vec::new(),
             carddav_connections: Vec::new(),
             calendar_errors: HashMap::new(),
@@ -1089,9 +1118,67 @@ impl InboxState {
     }
 
     /// Select `scope`, or the equivalent mailbox the sidebar shows for the
-    /// connected accounts.
+    /// mail view's accounts. A mailbox of an account outside the active
+    /// profile gives way to the profile's own.
     fn set_scope(&mut self, scope: Scope) {
-        self.scope = scope.visible_for(&self.connected_accounts);
+        let scope = if self.shows_scope(scope) {
+            scope
+        } else {
+            scope.unified()
+        };
+        self.scope = scope.visible_for(&self.mail_accounts());
+    }
+
+    /// Whether the mail view shows this account's mail: every account's
+    /// unless a profile is active.
+    fn shows_account(&self, account_id: i64) -> bool {
+        self.profile_accounts
+            .as_ref()
+            .is_none_or(|accounts| accounts.binary_search(&account_id).is_ok())
+    }
+
+    /// The connected accounts the mail view shows.
+    fn mail_accounts(&self) -> Vec<Account> {
+        self.connected_accounts
+            .iter()
+            .filter(|account| self.shows_account(account.id))
+            .cloned()
+            .collect()
+    }
+
+    /// Whether `scope` belongs to a shown account, or to none. Folders and
+    /// labels not loaded yet count as shown; their page falls back to the
+    /// inbox if they are not.
+    fn shows_scope(&self, scope: Scope) -> bool {
+        match scope {
+            Scope::Unified(_) | Scope::Important | Scope::Other => true,
+            Scope::Account { account_id, .. } => self.shows_account(account_id),
+            Scope::Folder(_) => self
+                .mailboxes
+                .iter()
+                .find(|mailbox| mailbox.scope == Some(scope))
+                .is_none_or(|mailbox| self.shows_account(mailbox.account_id)),
+            Scope::Label { id, .. } => self
+                .labels
+                .iter()
+                .find(|label| label.id == id)
+                .and_then(|label| label.owner_account_id)
+                .is_none_or(|owner| self.shows_account(owner)),
+        }
+    }
+
+    /// Show the active profile's accounts, as the presentation settings name
+    /// them. Returns whether the mail view's accounts changed; the caller
+    /// then reloads the list and counts.
+    #[must_use]
+    fn sync_profile_accounts(&mut self) -> bool {
+        let accounts = self.account_presentation.active_profile_accounts();
+        if let Some(core) = &self.core {
+            core.set_profile_accounts(accounts.clone());
+        }
+        let changed = self.profile_accounts != accounts;
+        self.profile_accounts = accounts;
+        changed
     }
 
     /// Replace the account inventory. Returns whether the selection moved to
@@ -1128,6 +1215,7 @@ impl InboxState {
                     MailCursor::Search(_) => None,
                 }),
                 accounts: &self.connected_accounts,
+                profile_accounts: self.profile_accounts.as_deref(),
                 messages: &self.messages,
                 mailboxes: &self.mailboxes,
                 unified_mailboxes: &self.unified_mailboxes,
@@ -3881,6 +3969,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     {
                         let mut state = startup_state.borrow_mut();
                         state.core = Some(core.clone());
+                        // The first page already shows the saved profile's
+                        // accounts; the scope and sidebar follow them too.
+                        if let Some(settings) = settings.as_ref() {
+                            state.account_presentation =
+                                AccountPresentationSettings::from_settings(settings);
+                        }
+                        let _ = state.sync_profile_accounts();
                         // The startup scope was already validated for these
                         // accounts, which also become the source of truth.
                         let _ = state.set_connected_accounts(accounts);
@@ -3890,10 +3985,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         state.mark_read_on_open = settings
                             .as_ref()
                             .is_none_or(|settings| settings.mark_read_on_open);
-                        if let Some(settings) = settings.as_ref() {
-                            state.account_presentation =
-                                AccountPresentationSettings::from_settings(settings);
-                        }
                         state.favicon_loader = if allow_remote_images {
                             match FaviconLoader::new(&startup_paths_for_ui.cache_dir) {
                                 Ok(loader) => Some(loader),
@@ -4517,7 +4608,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         }
         let account_id = i64::from(account_id);
-        let (core, scope, query, limit) = {
+        let (core, scope, query, limit, profile) = {
             let state = state_for_account_delete.borrow();
             let Some(core) = state.core.clone() else {
                 return;
@@ -4537,7 +4628,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             // Keep a surviving selection reachable after browsing past the
             // first page, including when deleting from a unified scope.
             let limit = state.messages.len().max(PAGE_SIZE) as i64;
-            (core, scope, state.query.clone(), limit)
+            (
+                core,
+                scope,
+                state.query.clone(),
+                limit,
+                state.profile_accounts.clone(),
+            )
         };
         let calendar_month = calendar_for_account_delete.borrow().visible_month;
         app.set_account_setup_in_progress(true);
@@ -4550,9 +4647,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             // can occur after the account row was deleted; reflect that fact.
             let removed = account_was_removed(account_id, &result, accounts.as_ref());
             // Match the selection `reconcile_removed_account` will leave.
-            let scope = accounts
-                .as_ref()
-                .map_or(scope, |snapshot| scope.visible_for(&snapshot.accounts));
+            let scope = accounts.as_ref().map_or(scope, |snapshot| {
+                let shown = snapshot
+                    .accounts
+                    .iter()
+                    .filter(|account| {
+                        profile
+                            .as_ref()
+                            .is_none_or(|accounts| accounts.binary_search(&account.id).is_ok())
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                scope.visible_for(&shown)
+            });
             let (metadata, page) = if removed {
                 let (metadata, page) = tokio::join!(
                     core.load_mail_metadata(scope),
@@ -5125,16 +5232,21 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 (_, Scope::Account { account_id, mailbox: StandardMailbox::Trash }) => Some(account_id),
                 _ => return,
             };
-            state.core.clone().map(|core| (core, account_id))
+            // Every account's trash means every shown account's while a
+            // profile is active.
+            let operations = match (account_id, &state.profile_accounts) {
+                (None, Some(accounts)) => accounts
+                    .iter()
+                    .map(|account| (-1, 0, mail_work::Operation::EmptyTrash(Some(*account))))
+                    .collect(),
+                (account_id, _) => vec![(-1, 0, mail_work::Operation::EmptyTrash(account_id))],
+            };
+            state.core.clone().map(|core| (core, operations))
         };
-        let Some((core, account_id)) = request else {
+        let Some((core, operations)) = request else {
             return;
         };
-        if let Err(error) = mail_work::enqueue(
-            &state_for_empty_trash,
-            core,
-            vec![(-1, 0, mail_work::Operation::EmptyTrash(account_id))],
-        ) {
+        if let Err(error) = mail_work::enqueue(&state_for_empty_trash, core, operations) {
             app.set_render_status(UiMessage::detail("Message action failed: {}", error));
         }
     });
@@ -7239,6 +7351,63 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
         }
         mail_metadata_refresh_requested_for_scope.set(true);
+        app.invoke_drain_core_updates();
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_profile = Rc::clone(&state);
+    let runtime_for_profile = Rc::clone(&runtime);
+    let mail_metadata_refresh_requested_for_profile = Rc::clone(&mail_metadata_refresh_requested);
+    let mail_pagination_generation_for_profile = Rc::clone(&mail_pagination_generation);
+    let mail_pagination_in_progress_for_profile = Rc::clone(&mail_pagination_in_progress);
+    // Showing another profile's accounts is like choosing a mailbox: the list
+    // starts over, and the sidebar and counts follow.
+    app.on_mail_profile_changed(move || {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        {
+            let mut state = state_for_profile.borrow_mut();
+            // With one account, the unified mailboxes go by its name.
+            let single_account = state.mail_accounts().len() == 1;
+            if !state.sync_profile_accounts() {
+                return;
+            }
+            let scope = match state.scope {
+                Scope::Account { mailbox, .. } if single_account => Scope::Unified(mailbox),
+                scope => scope,
+            };
+            state.set_scope(scope);
+            state.pending_selection = None;
+            state.pending_selection_opens = false;
+            state.restore_thread_message = None;
+            state.mail_groups.clear();
+            state.page = 1;
+            state.next_cursor = None;
+            state.selected_id = None;
+            state.checked_ids.clear();
+            state.preview_closed = false;
+            // Accounts the profile leaves out leave the sidebar at once; those
+            // it adds arrive with the counts.
+            let shown = state.profile_accounts.clone();
+            state.mailboxes.retain(|mailbox| {
+                shown
+                    .as_ref()
+                    .is_none_or(|accounts| accounts.binary_search(&mailbox.account_id).is_ok())
+            });
+            prefer_shown_compose_account(&app, &state);
+        }
+        mail_pagination_generation_for_profile
+            .set(mail_pagination_generation_for_profile.get().wrapping_add(1));
+        mail_pagination_in_progress_for_profile.set(false);
+        app.set_mail_loading_more(false);
+        if let Err(error) =
+            refresh_from_source(&app, &state_for_profile, &runtime_for_profile, false, &[])
+        {
+            app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
+        }
+        refresh_sidebar(&state_for_profile);
+        mail_metadata_refresh_requested_for_profile.set(true);
         app.invoke_drain_core_updates();
     });
 

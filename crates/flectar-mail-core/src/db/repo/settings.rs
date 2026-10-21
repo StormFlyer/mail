@@ -56,6 +56,7 @@ mod tests {
         );
         assert_eq!(d.custom_theme.light_primary, "#0969DA");
         assert!(d.mail_profiles.is_empty());
+        assert!(d.active_mail_profile.is_none());
         assert!(!d.show_account_badges);
 
         let mut s = d.clone();
@@ -100,6 +101,7 @@ mod tests {
             color: "#3B82F6".into(),
             account_ids: vec![1, 2],
         });
+        s.active_mail_profile = Some("work".into());
         set(&c, &s).unwrap();
 
         let back = get(&c).unwrap();
@@ -121,6 +123,7 @@ mod tests {
         assert_eq!(back.signature_list[0].html, "<b>Dean</b>");
         assert_eq!(back.ai_automation_rules, s.ai_automation_rules);
         assert_eq!(back.mail_profiles, s.mail_profiles);
+        assert_eq!(back.active_mail_profile.as_deref(), Some("work"));
         assert_eq!(
             back.signature_defaults
                 .get("1")
@@ -161,6 +164,7 @@ mod tests {
         assert!(s.auto_labels_enabled);
         assert!(s.ai_automation_rules.is_empty());
         assert!(s.mail_profiles.is_empty());
+        assert!(s.active_mail_profile.is_none());
         assert!(!s.show_account_badges);
         assert!(!s.ai_model_instant.is_empty());
         assert!(!s.ai_model_cheap.is_empty());

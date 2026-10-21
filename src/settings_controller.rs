@@ -17,6 +17,8 @@ fn apply_account_presentation_settings(
     state.borrow_mut().account_presentation = AccountPresentationSettings::from_settings(settings);
     refresh_connected_accounts(app, state);
     refresh_rows_only(app, state, runtime);
+    // A profile change can change which accounts the mail view shows.
+    app.invoke_mail_profile_changed();
 }
 
 pub(super) fn register_settings_preference_callbacks(
@@ -516,6 +518,31 @@ pub(super) fn register_settings_preference_callbacks(
                 "Could not update account color: {}",
                 error,
             )),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_active_profile = Rc::clone(state);
+    let runtime_for_active_profile = Rc::clone(runtime);
+    app.on_select_mail_profile(move |profile_id| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_active_profile.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain("Profile changes require local mail data."));
+            return;
+        };
+        let profile_id = (!profile_id.trim().is_empty()).then(|| profile_id.to_string());
+        match runtime_for_active_profile.block_on(core.set_active_mail_profile(profile_id)) {
+            Ok(settings) => apply_account_presentation_settings(
+                &app,
+                &state_for_active_profile,
+                &runtime_for_active_profile,
+                &settings,
+            ),
+            Err(error) => {
+                app.set_sync_status(UiMessage::detail("Could not switch profile: {}", error))
+            }
         }
     });
 

@@ -1752,6 +1752,7 @@ mod tests {
                 color: "#EA580C".into(),
                 account_ids: vec![1],
             }],
+            active_profile: None,
             show_markers: true,
             account_colors: HashMap::new(),
             account_short_names: HashMap::from([("1".into(), "Client".into())]),

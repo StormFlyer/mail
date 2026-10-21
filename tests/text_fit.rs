@@ -607,6 +607,8 @@ fn reset(app: &AppWindow) {
     app.set_workspace_layout("default".into());
     app.set_mail_list_entries(model(mail_entries(false)));
     app.set_active_view("mail".into());
+    app.set_mail_sidebar_collapsed(false);
+    app.set_active_mail_profile(MailProfileRow::default());
     app.set_settings_open(false);
     app.set_settings_tab("General".into());
     app.set_compose_open(false);
@@ -795,6 +797,8 @@ struct State {
     dismiss: Option<&'static str>,
     /// Reaches controls the phone layout keeps on another page.
     desktop_only: bool,
+    /// Reaches controls only the phone layout has.
+    phone_only: bool,
 }
 
 fn state(name: &str, setup: impl Fn(&AppWindow) + 'static) -> State {
@@ -803,6 +807,7 @@ fn state(name: &str, setup: impl Fn(&AppWindow) + 'static) -> State {
         setup: Box::new(setup),
         dismiss: None,
         desktop_only: false,
+        phone_only: false,
     }
 }
 
@@ -836,6 +841,33 @@ fn states() -> Vec<State> {
         State {
             desktop_only: true,
             ..state("mail labels", |app| press(app, "Manage labels"))
+        },
+        // The tab strip with the sidebar closed, its pill before the tabs.
+        State {
+            desktop_only: true,
+            ..state("mail sidebar collapsed", |app| {
+                app.set_active_mail_profile(work_profile());
+                app.set_mail_sidebar_collapsed(true);
+            })
+        },
+        State {
+            desktop_only: true,
+            ..state("profile menu", |app| press(app, "Profile"))
+        },
+        State {
+            desktop_only: true,
+            ..state("profile menu with a profile", |app| {
+                app.set_active_mail_profile(work_profile());
+                press(app, "Profile");
+            })
+        },
+        State {
+            dismiss: Some("Close folders"),
+            phone_only: true,
+            ..state("mail folders", |app| {
+                app.set_active_mail_profile(work_profile());
+                press(app, "Hide folders");
+            })
         },
         State {
             dismiss: Some("Cancel"),
@@ -1501,7 +1533,9 @@ fn text_fits_at_desktop_font_sizes() {
             app.window()
                 .set_size(slint::PhysicalSize::new(width, height));
             for state in states() {
-                if state.desktop_only && window_name != "desktop" {
+                if state.desktop_only && window_name != "desktop"
+                    || state.phone_only && window_name != "phone"
+                {
                     continue;
                 }
                 reset(&app);

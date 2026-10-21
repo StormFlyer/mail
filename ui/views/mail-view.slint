@@ -1,5 +1,5 @@
 import { HorizontalBox } from "std-widgets.slint";
-import { EmailLink, EmailRow, EmailTile, EmailReader, SidebarRow, MailLabelRow, MailListEntry, ThreadMessageRow } from "../models.slint";
+import { EmailLink, EmailRow, EmailTile, EmailReader, MailProfileRow, SidebarRow, MailLabelRow, MailListEntry, ThreadMessageRow } from "../models.slint";
 import { LayoutMetrics } from "../design-system.slint";
 import { MailSidebar } from "../components/sidebar.slint";
 import { WorkspacePaneResizeHandle } from "../components/workspace-layout.slint";
@@ -28,6 +28,12 @@ export component MailView inherits FocusScope {
     in property <[ThreadMessageRow]> thread_messages: [];
     in property <int> selected_thread_index: 0;
     in property <[SidebarRow]> sidebar_rows: [];
+    // Compact layouts choose the profile from the sidebar.
+    in property <[MailProfileRow]> mail_profiles: [];
+    in property <MailProfileRow> active_mail_profile;
+    in property <int> account_count;
+    callback select_mail_profile(string);
+    callback create_mail_profile();
     in-out property <string> folder_filter_query: "";
     private property <length> sidebar-scroll-y: 0px;
     in property <[MailLabelRow]> mail_labels: [];
@@ -684,6 +690,7 @@ export component MailView inherits FocusScope {
                     enabled: root.folders-open;
                     accessible-role: button;
                     accessible-label: @tr("Close folders");
+                    accessible-action-default => { root.folders-open = false; }
                     clicked => { root.folders-open = false; }
                 }
             }
@@ -702,6 +709,24 @@ export component MailView inherits FocusScope {
                 animate opacity { duration: 180ms; easing: ease-out; }
                 animate drop-shadow-blur { duration: 180ms; easing: ease-out; }
                 touch-mode: true;
+                show-profiles: true;
+                profiles: root.mail_profiles;
+                active-profile: root.active_mail_profile;
+                account-count: root.account_count;
+                choose-profile(id) => {
+                    root.select_mail_profile(id);
+                    root.folders-open = false;
+                    root.compact-page = "list";
+                }
+                create-profile => {
+                    root.folders-open = false;
+                    root.create_mail_profile();
+                }
+                manage-profiles => {
+                    root.folders-open = false;
+                    root.settings_tab = "Accounts";
+                    root.settings_open = true;
+                }
                 rows: root.sidebar_rows;
                 scroll-y <=> root.sidebar-scroll-y;
                 unified-count: root.unified_count;
