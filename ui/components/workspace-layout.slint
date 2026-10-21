@@ -3,7 +3,7 @@ import { AppTheme, LayoutMetrics, MotionSettings } from "../design-system.slint"
 import { TypeScale } from "../typography.slint";
 import { LineEdit, ToolbarIconButton } from "controls.slint";
 import { FocusVisibleScope } from "focus-visible-scope.slint";
-import { WindowControlsClearance } from "../window-chrome.slint";
+import { WindowChrome, WindowControlsClearance } from "../window-chrome.slint";
 
 export struct WorkspaceSearchFilter {
     title: string,
@@ -49,6 +49,33 @@ export component WorkspaceFrame inherits Rectangle {
     @children
 }
 
+// A vertical divider between panes. Under the tab strip it fades in from the
+// strip's border, so it doesn't run into the open foot of the active tab.
+export component PaneDivider inherits Rectangle {
+    in property <color> divider-color: AppTheme.border;
+    // What the fade shows through to, for a divider not drawn over a pane.
+    in property <color> backdrop: transparent;
+    private property <length> fade: WindowChrome.top-bar ? min(24px, root.height) : 0px;
+
+    width: LayoutMetrics.divider-width;
+
+    Rectangle {
+        y: 0px;
+        height: root.fade;
+        background: root.backdrop;
+    }
+    Rectangle {
+        y: 0px;
+        height: root.fade;
+        background: @linear-gradient(180deg, root.divider-color.with-alpha(0) 0%, root.divider-color 100%);
+    }
+    Rectangle {
+        y: root.fade;
+        height: root.height - root.fade;
+        background: root.divider-color;
+    }
+}
+
 // Feature-specific sidebars share their outer geometry and divider while
 // retaining their own mailboxes, calendars, contacts, or settings controls.
 export component WorkspaceSidebarSurface inherits Rectangle {
@@ -60,12 +87,10 @@ export component WorkspaceSidebarSurface inherits Rectangle {
 
     @children
 
-    Rectangle {
-        x: parent.width - LayoutMetrics.divider-width;
-        y: 0px;
-        width: LayoutMetrics.divider-width;
+    PaneDivider {
+        x: parent.width - self.width;
         height: parent.height;
-        background: root.divider-color;
+        divider-color: root.divider-color;
     }
 }
 
@@ -113,12 +138,21 @@ export component WorkspacePaneResizeHandle inherits Rectangle {
         root.resize-finished(root.last-requested-width);
     }
 
+    private property <color> line-color: resize-hit.pressed || resize-hit.has-hover || resize-focus.focus-visible
+        ? root.active-color : root.divider-color;
+    animate line-color { duration: 150ms; easing: ease-out; }
+
     width: LayoutMetrics.divider-width;
     horizontal-stretch: 0;
     z: 2;
-    background: resize-hit.pressed || resize-hit.has-hover || resize-focus.focus-visible
-        ? root.active-color : root.divider-color;
-    animate background { duration: 150ms; easing: ease-out; }
+
+    PaneDivider {
+        height: parent.height;
+        divider-color: root.line-color;
+        // The handle sits over the frame's page color; the panes on both
+        // sides meet the tab strip on the plain surface.
+        backdrop: AppTheme.surface;
+    }
 
     resize-focus := FocusVisibleScope {
         x: -(LayoutMetrics.pane-resize-hit-width - root.width) / 2;

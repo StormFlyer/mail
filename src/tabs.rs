@@ -1996,8 +1996,24 @@ mod tests {
             panic!("three tabs");
         };
         assert_eq!(active(), 2);
-        // Three tabs share the bar at their widest, 240px each.
-        let at = |x: f32| slint::LogicalPosition::new(x, 22.0);
+        // The tabs leave room before them for the first tab's foot. Three
+        // tabs share the bar at their widest, 240px each.
+        let origin = {
+            use i_slint_core::items::AccessibleRole;
+            let window = i_slint_core::window::WindowInner::from_pub(app.window());
+            let root = i_slint_core::item_tree::ItemRc::new_root(window.component());
+            let mut strip = None;
+            root.visit_descendants(|item| {
+                if item.accessible_role() == AccessibleRole::TabList {
+                    strip = Some(item.map_to_window(item.geometry().origin).x);
+                    return std::ops::ControlFlow::Break(());
+                }
+                std::ops::ControlFlow::Continue(())
+            });
+            strip.expect("the tab strip")
+        };
+        assert!(origin > 0.0, "the first tab's foot fits in the bar");
+        let at = |x: f32| slint::LogicalPosition::new(origin + x, 22.0);
         let pointer = |event| app.window().dispatch_event(event);
         let left = PointerEventButton::Left;
 

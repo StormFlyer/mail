@@ -1385,11 +1385,11 @@ msgid "Could not mark message as read: {}"
 msgstr "No se pudo marcar el mensaje como leído: {}"
 
 #: ui/app.slint:493 ui/views/mail-reading-pane.slint:235
-#: ui/views/mail-reading-pane.slint:1261
+#: ui/views/mail-reading-pane.slint:1263
 msgid "Loading message…"
 msgstr "Cargando mensaje…"
 
-#: ui/app.slint:499 ui/components/workspace-navigation.slint:758
+#: ui/app.slint:499 ui/components/workspace-navigation.slint:845
 #: ui/tray.slint:12 ui/tray.slint:13
 msgid "Flectar Mail"
 msgstr "Flectar Mail"
@@ -1398,68 +1398,68 @@ msgstr "Flectar Mail"
 msgid "Global Labels (local only)"
 msgstr "Etiquetas globales (solo locales)"
 
-#: ui/app.slint:1977
+#: ui/app.slint:1980
 msgid "Empty Trash?"
 msgstr "¿Vaciar la papelera?"
 
-#: ui/app.slint:1977 ui/views/files-view.slint:539
+#: ui/app.slint:1980 ui/views/files-view.slint:539
 msgid "Delete permanently?"
 msgstr "¿Eliminar permanentemente?"
 
-#: ui/app.slint:1981
+#: ui/app.slint:1984
 msgid ""
 "Permanently delete all messages in Trash across every connected account?"
 msgstr ""
 "¿Eliminar permanentemente todos los mensajes de la papelera de todas las "
 "cuentas conectadas?"
 
-#: ui/app.slint:1982
+#: ui/app.slint:1985
 msgid "Permanently delete all messages in this account’s Trash?"
 msgstr ""
 "¿Eliminar permanentemente todos los mensajes de la papelera de esta cuenta?"
 
-#: ui/app.slint:1984
+#: ui/app.slint:1987
 msgid "Permanently delete the selected conversations from Trash?"
 msgstr ""
 "¿Eliminar permanentemente las conversaciones seleccionadas de la papelera?"
 
-#: ui/app.slint:1985
+#: ui/app.slint:1988
 msgid "Permanently delete this conversation from Trash?"
 msgstr "¿Eliminar permanentemente esta conversación de la papelera?"
 
-#: ui/app.slint:1986 ui/components/calendar.slint:937
+#: ui/app.slint:1989 ui/components/calendar.slint:937
 msgid "This action cannot be undone."
 msgstr "Esta acción no se puede deshacer."
 
-#: ui/app.slint:1987
+#: ui/app.slint:1990
 msgid "Empty Trash"
 msgstr "Vaciar la papelera"
 
-#: ui/app.slint:1987 ui/views/files-view.slint:621
+#: ui/app.slint:1990 ui/views/files-view.slint:621
 msgid "Delete permanently"
 msgstr "Eliminar permanentemente"
 
-#: ui/app.slint:2157
+#: ui/app.slint:2160
 msgid "Mailbox startup failed"
 msgstr "Error al iniciar el buzón"
 
-#: ui/app.slint:2163
+#: ui/app.slint:2166
 msgid "Flectar Mail could not open local storage"
 msgstr "Flectar Mail no pudo abrir el almacenamiento local"
 
-#: ui/app.slint:2176
+#: ui/app.slint:2179
 msgid "Diagnostic ID: {}"
 msgstr "ID de diagnóstico: {}"
 
-#: ui/app.slint:2179
+#: ui/app.slint:2182
 msgid "Diagnostic ID {}"
 msgstr "ID de diagnóstico {}"
 
-#: ui/app.slint:2184
+#: ui/app.slint:2187
 msgid "Retry"
 msgstr "Reintentar"
 
-#: ui/app.slint:2192 ui/components/copyable-diagnostic.slint:43
+#: ui/app.slint:2195 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "Copiar datos de diagnóstico"
 
@@ -1556,7 +1556,7 @@ msgid "Edit"
 msgstr "Editar"
 
 #: ui/components/account-mail-preferences.slint:158
-#: ui/views/contacts-view.slint:588
+#: ui/views/contacts-view.slint:593
 msgid "Remove"
 msgstr "Eliminar"
 
@@ -1632,7 +1632,7 @@ msgstr "Añadir dirección de remitente"
 #: ui/dialogs/folder-dialog.slint:128 ui/dialogs/oauth-setup-dialog.slint:126
 #: ui/dialogs/settings-dialog.slint:1998 ui/dialogs/settings-dialog.slint:2737
 #: ui/dialogs/settings-dialog.slint:2972 ui/views/files-view.slint:426
-#: ui/views/mail-reading-pane.slint:1998
+#: ui/views/mail-reading-pane.slint:2002
 msgid "Cancel"
 msgstr "Cancelar"
 
@@ -1679,7 +1679,7 @@ msgid "Save signature"
 msgstr "Guardar firma"
 
 #: ui/components/account-mail-preferences.slint:194
-#: ui/views/contacts-view.slint:588
+#: ui/views/contacts-view.slint:593
 msgid "Delete"
 msgstr "Eliminar"
 
@@ -2172,7 +2172,7 @@ msgstr "Añadir enlace"
 msgid "The selected text will open this address."
 msgstr "El texto seleccionado abrirá esta dirección."
 
-#: ui/components/composer-actions.slint:359 ui/views/contacts-view.slint:712
+#: ui/components/composer-actions.slint:359 ui/views/contacts-view.slint:717
 msgid "https://example.com"
 msgstr "https://ejemplo.com"
 
@@ -2197,17 +2197,17 @@ msgid "Keep"
 msgstr "Conservar"
 
 #: ui/components/composer-fields.slint:39 ui/views/mail-reading-pane.slint:372
-#: ui/views/mail-reading-pane.slint:719
+#: ui/views/mail-reading-pane.slint:721
 msgid "Reply"
 msgstr "Responder"
 
 #: ui/components/composer-fields.slint:40 ui/views/mail-reading-pane.slint:373
-#: ui/views/mail-reading-pane.slint:728
+#: ui/views/mail-reading-pane.slint:730
 msgid "Reply all"
 msgstr "Responder a todos"
 
 #: ui/components/composer-fields.slint:41 ui/views/mail-reading-pane.slint:374
-#: ui/views/mail-reading-pane.slint:737
+#: ui/views/mail-reading-pane.slint:739
 msgid "Forward"
 msgstr "Reenviar"
 
@@ -2764,7 +2764,7 @@ msgid "Revert"
 msgstr "Revertir"
 
 #: ui/components/theme-editor.slint:785 ui/dialogs/folder-dialog.slint:135
-#: ui/views/mail-reading-pane.slint:2003
+#: ui/views/mail-reading-pane.slint:2007
 msgid "Save"
 msgstr "Guardar"
 
@@ -2795,27 +2795,27 @@ msgstr "Ajustes"
 msgid "Primary navigation"
 msgstr "Navegación principal"
 
-#: ui/components/workspace-navigation.slint:617
+#: ui/components/workspace-navigation.slint:704
 msgid "Close tab"
 msgstr "Cerrar pestaña"
 
-#: ui/components/workspace-navigation.slint:637
+#: ui/components/workspace-navigation.slint:724
 msgid "New tab"
 msgstr "Nueva pestaña"
 
-#: ui/components/workspace-navigation.slint:641
+#: ui/components/workspace-navigation.slint:728
 msgid "Reopen closed tab"
 msgstr "Reabrir la pestaña cerrada"
 
-#: ui/components/workspace-navigation.slint:651
+#: ui/components/workspace-navigation.slint:738
 msgid "Close other tabs"
 msgstr "Cerrar las demás pestañas"
 
-#: ui/components/workspace-navigation.slint:656
+#: ui/components/workspace-navigation.slint:743
 msgid "Close tabs to the right"
 msgstr "Cerrar las pestañas de la derecha"
 
-#: ui/components/workspace-navigation.slint:813
+#: ui/components/workspace-navigation.slint:904
 msgid "Tabs"
 msgstr "Pestañas"
 
@@ -2955,7 +2955,7 @@ msgstr "FECHA"
 msgid "START TIME"
 msgstr "HORA DE INICIO"
 
-#: ui/dialogs/calendar-event-dialog.slint:54 ui/views/contacts-view.slint:693
+#: ui/dialogs/calendar-event-dialog.slint:54 ui/views/contacts-view.slint:698
 msgid "YYYY-MM-DD"
 msgstr "AAAA-MM-DD"
 
@@ -3038,7 +3038,7 @@ msgstr "Crear en el nivel superior"
 msgid "Inside “{}”"
 msgstr "Dentro de “{}”"
 
-#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1952
+#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1956
 msgid "Create label"
 msgstr "Crear etiqueta"
 
@@ -3547,7 +3547,7 @@ msgid "Save settings"
 msgstr "Guardar ajustes"
 
 #: ui/dialogs/rendering-info-dialog.slint:25
-#: ui/views/mail-reading-pane.slint:380 ui/views/mail-reading-pane.slint:1873
+#: ui/views/mail-reading-pane.slint:380 ui/views/mail-reading-pane.slint:1875
 msgid "About email rendering"
 msgstr "Acerca de la visualización de correos"
 
@@ -3621,7 +3621,7 @@ msgstr "No se pudo calcular el uso del almacenamiento. Inténtalo de nuevo."
 msgid "Open Storage to calculate local usage."
 msgstr "Abre Almacenamiento para calcular el uso local."
 
-#: ui/dialogs/settings-dialog.slint:289 ui/views/mail-reading-pane.slint:1231
+#: ui/dialogs/settings-dialog.slint:289 ui/views/mail-reading-pane.slint:1233
 msgid "Attachments"
 msgstr "Adjuntos"
 
@@ -4880,7 +4880,7 @@ msgstr "Nombre del perfil"
 msgid "Personal or Work"
 msgstr "Personal o Trabajo"
 
-#: ui/dialogs/settings-dialog.slint:2827 ui/views/mail-reading-pane.slint:1967
+#: ui/dialogs/settings-dialog.slint:2827 ui/views/mail-reading-pane.slint:1971
 msgid "Color"
 msgstr "Color"
 
@@ -4998,7 +4998,7 @@ msgid "Quit"
 msgstr "Salir"
 
 #: ui/views/contacts-view.slint:163 ui/views/contacts-view.slint:491
-#: ui/views/contacts-view.slint:636
+#: ui/views/contacts-view.slint:641
 msgid "New contact"
 msgstr "Nuevo contacto"
 
@@ -5077,133 +5077,133 @@ msgstr "Aún no hay contactos. Crea uno o conecta una libreta de direcciones."
 msgid "Contact list width"
 msgstr "Ancho de la lista de contactos"
 
-#: ui/views/contacts-view.slint:549
+#: ui/views/contacts-view.slint:554
 msgid "Back to contacts"
 msgstr "Volver a contactos"
 
-#: ui/views/contacts-view.slint:557
+#: ui/views/contacts-view.slint:562
 msgid "Suggested person"
 msgstr "Persona sugerida"
 
-#: ui/views/contacts-view.slint:558
+#: ui/views/contacts-view.slint:563
 msgid "Contact details"
 msgstr "Detalles del contacto"
 
-#: ui/views/contacts-view.slint:573
+#: ui/views/contacts-view.slint:578
 msgid "Remove from favorites"
 msgstr "Quitar de favoritos"
 
-#: ui/views/contacts-view.slint:573
+#: ui/views/contacts-view.slint:578
 msgid "Add to favorites"
 msgstr "Añadir a favoritos"
 
-#: ui/views/contacts-view.slint:577
+#: ui/views/contacts-view.slint:582
 msgid "Remove this suggestion?"
 msgstr "¿Eliminar esta sugerencia?"
 
-#: ui/views/contacts-view.slint:577
+#: ui/views/contacts-view.slint:582
 msgid "Delete this contact?"
 msgstr "¿Eliminar este contacto?"
 
-#: ui/views/contacts-view.slint:600
+#: ui/views/contacts-view.slint:605
 msgid "Remove suggestion"
 msgstr "Eliminar sugerencia"
 
-#: ui/views/contacts-view.slint:600
+#: ui/views/contacts-view.slint:605
 msgid "Delete contact"
 msgstr "Eliminar contacto"
 
-#: ui/views/contacts-view.slint:670
+#: ui/views/contacts-view.slint:675
 msgid "Learned from mail. Save this person to add them to your address book."
 msgstr ""
 "Recordado a partir del correo. Guarda a esta persona para añadirla a tu "
 "libreta de direcciones."
 
-#: ui/views/contacts-view.slint:678
+#: ui/views/contacts-view.slint:683
 msgid "NAME"
 msgstr "NOMBRE"
 
-#: ui/views/contacts-view.slint:679
+#: ui/views/contacts-view.slint:684
 msgid "Full name"
 msgstr "Nombre completo"
 
-#: ui/views/contacts-view.slint:680
+#: ui/views/contacts-view.slint:685
 msgid "EMAIL"
 msgstr "CORREO"
 
-#: ui/views/contacts-view.slint:687
+#: ui/views/contacts-view.slint:692
 msgid "PHONE"
 msgstr "TELÉFONO"
 
-#: ui/views/contacts-view.slint:688
+#: ui/views/contacts-view.slint:693
 msgid "+1 555 0100"
 msgstr "+34 600 000 000"
 
-#: ui/views/contacts-view.slint:692
+#: ui/views/contacts-view.slint:697
 msgid "BIRTHDAY"
 msgstr "CUMPLEAÑOS"
 
-#: ui/views/contacts-view.slint:701
+#: ui/views/contacts-view.slint:706
 msgid "COMPANY"
 msgstr "EMPRESA"
 
-#: ui/views/contacts-view.slint:702
+#: ui/views/contacts-view.slint:707
 msgid "Company"
 msgstr "Empresa"
 
-#: ui/views/contacts-view.slint:706
+#: ui/views/contacts-view.slint:711
 msgid "JOB TITLE"
 msgstr "CARGO"
 
-#: ui/views/contacts-view.slint:707
+#: ui/views/contacts-view.slint:712
 msgid "Role"
 msgstr "Cargo"
 
-#: ui/views/contacts-view.slint:711
+#: ui/views/contacts-view.slint:716
 msgid "WEBSITE"
 msgstr "SITIO WEB"
 
-#: ui/views/contacts-view.slint:713
+#: ui/views/contacts-view.slint:718
 msgid "ADDRESS"
 msgstr "DIRECCIÓN"
 
-#: ui/views/contacts-view.slint:714
+#: ui/views/contacts-view.slint:719
 msgid "Postal address"
 msgstr "Dirección postal"
 
-#: ui/views/contacts-view.slint:715
+#: ui/views/contacts-view.slint:720
 msgid "TAGS"
 msgstr "ETIQUETAS"
 
-#: ui/views/contacts-view.slint:716
+#: ui/views/contacts-view.slint:721
 msgid "customer, design, london"
 msgstr "cliente, diseño, madrid"
 
-#: ui/views/contacts-view.slint:717
+#: ui/views/contacts-view.slint:722
 msgid "NOTES"
 msgstr "NOTAS"
 
-#: ui/views/contacts-view.slint:718
+#: ui/views/contacts-view.slint:723
 msgid "Notes about this contact"
 msgstr "Notas sobre este contacto"
 
-#: ui/views/contacts-view.slint:732
+#: ui/views/contacts-view.slint:737
 msgid "Send email"
 msgstr "Enviar correo"
 
-#: ui/views/contacts-view.slint:739
+#: ui/views/contacts-view.slint:744
 msgid "Save to contacts"
 msgstr "Guardar en contactos"
 
-#: ui/views/contacts-view.slint:739
+#: ui/views/contacts-view.slint:744
 msgid "Save contact"
 msgstr "Guardar contacto"
 
-#: ui/views/contacts-view.slint:760
+#: ui/views/contacts-view.slint:765
 msgid "Select a contact"
 msgstr "Selecciona un contacto"
 
-#: ui/views/contacts-view.slint:761
+#: ui/views/contacts-view.slint:766
 msgid "View and edit contact details here."
 msgstr "Consulta y edita aquí los detalles del contacto."
 
@@ -5685,7 +5685,7 @@ msgstr "Mover a spam"
 msgid "Delete selected permanently"
 msgstr "Eliminar seleccionados permanentemente"
 
-#: ui/views/mail-list-pane.slint:537 ui/views/mail-reading-pane.slint:1000
+#: ui/views/mail-list-pane.slint:537 ui/views/mail-reading-pane.slint:1002
 msgid "More message actions"
 msgstr "Más acciones del mensaje"
 
@@ -5798,7 +5798,7 @@ msgstr "Dominio del remitente autenticado mediante DMARC y DKIM"
 msgid "to {}"
 msgstr "para {}"
 
-#: ui/views/mail-reading-pane.slint:364 ui/views/mail-reading-pane.slint:1857
+#: ui/views/mail-reading-pane.slint:364 ui/views/mail-reading-pane.slint:1859
 msgid "Continue editing"
 msgstr "Seguir editando"
 
@@ -5816,12 +5816,12 @@ msgid "View plain text"
 msgstr "Ver texto sin formato"
 
 #: ui/views/mail-reading-pane.slint:368 ui/views/mail-reading-pane.slint:383
-#: ui/views/mail-reading-pane.slint:1242
+#: ui/views/mail-reading-pane.slint:1244
 msgid "Use message appearance"
 msgstr "Usar la apariencia de los mensajes"
 
 #: ui/views/mail-reading-pane.slint:368 ui/views/mail-reading-pane.slint:383
-#: ui/views/mail-reading-pane.slint:1242
+#: ui/views/mail-reading-pane.slint:1244
 msgid "Show original colors"
 msgstr "Mostrar los colores originales"
 
@@ -5841,183 +5841,183 @@ msgstr "Imprimir mensaje"
 msgid "Open in browser"
 msgstr "Abrir en el navegador"
 
-#: ui/views/mail-reading-pane.slint:688
+#: ui/views/mail-reading-pane.slint:690
 msgid "Close conversation"
 msgstr "Cerrar conversación"
 
-#: ui/views/mail-reading-pane.slint:698
+#: ui/views/mail-reading-pane.slint:700
 msgid "Previous conversation"
 msgstr "Conversación anterior"
 
-#: ui/views/mail-reading-pane.slint:708
+#: ui/views/mail-reading-pane.slint:710
 msgid "Next conversation"
 msgstr "Conversación siguiente"
 
-#: ui/views/mail-reading-pane.slint:749
+#: ui/views/mail-reading-pane.slint:751
 msgid "Archive message"
 msgstr "Archivar mensaje"
 
-#: ui/views/mail-reading-pane.slint:852
+#: ui/views/mail-reading-pane.slint:854
 msgid "Search labels"
 msgstr "Buscar etiquetas"
 
-#: ui/views/mail-reading-pane.slint:869
+#: ui/views/mail-reading-pane.slint:871
 msgid "Available labels"
 msgstr "Etiquetas disponibles"
 
-#: ui/views/mail-reading-pane.slint:908
+#: ui/views/mail-reading-pane.slint:910
 msgid "Smart category"
 msgstr "Categoría inteligente"
 
-#: ui/views/mail-reading-pane.slint:949 ui/views/mail-reading-pane.slint:1952
+#: ui/views/mail-reading-pane.slint:951 ui/views/mail-reading-pane.slint:1956
 msgid "Edit label"
 msgstr "Editar etiqueta"
 
-#: ui/views/mail-reading-pane.slint:966
+#: ui/views/mail-reading-pane.slint:968
 msgid "No matching labels"
 msgstr "No hay etiquetas que coincidan"
 
-#: ui/views/mail-reading-pane.slint:978
+#: ui/views/mail-reading-pane.slint:980
 msgid "Create label…"
 msgstr "Crear etiqueta…"
 
-#: ui/views/mail-reading-pane.slint:1241 ui/views/mail-reading-pane.slint:1248
+#: ui/views/mail-reading-pane.slint:1243 ui/views/mail-reading-pane.slint:1250
 msgid "Find in message"
 msgstr "Buscar en el mensaje"
 
-#: ui/views/mail-reading-pane.slint:1243
+#: ui/views/mail-reading-pane.slint:1245
 msgid "Show original layout"
 msgstr "Mostrar diseño original"
 
-#: ui/views/mail-reading-pane.slint:1243
+#: ui/views/mail-reading-pane.slint:1245
 msgid "Reader mode"
 msgstr "Modo de lectura"
 
-#: ui/views/mail-reading-pane.slint:1250
+#: ui/views/mail-reading-pane.slint:1252
 msgid "Previous match"
 msgstr "Coincidencia anterior"
 
-#: ui/views/mail-reading-pane.slint:1251
+#: ui/views/mail-reading-pane.slint:1253
 msgid "Next match"
 msgstr "Siguiente coincidencia"
 
-#: ui/views/mail-reading-pane.slint:1252
+#: ui/views/mail-reading-pane.slint:1254
 msgid "Close find"
 msgstr "Cerrar búsqueda"
 
-#: ui/views/mail-reading-pane.slint:1256
+#: ui/views/mail-reading-pane.slint:1258
 msgid "Some images could not be loaded."
 msgstr "No se pudieron cargar algunas imágenes."
 
-#: ui/views/mail-reading-pane.slint:1257 ui/views/mail-reading-pane.slint:1561
+#: ui/views/mail-reading-pane.slint:1259 ui/views/mail-reading-pane.slint:1563
 msgid "Retry images"
 msgstr "Reintentar imágenes"
 
-#: ui/views/mail-reading-pane.slint:1262
+#: ui/views/mail-reading-pane.slint:1264
 msgid "Reload message"
 msgstr "Volver a cargar el mensaje"
 
-#: ui/views/mail-reading-pane.slint:1321
+#: ui/views/mail-reading-pane.slint:1323
 msgid "Remote images were blocked to protect your privacy."
 msgstr "Las imágenes remotas se bloquearon para proteger tu privacidad."
 
-#: ui/views/mail-reading-pane.slint:1330
+#: ui/views/mail-reading-pane.slint:1332
 msgid "Load images"
 msgstr "Cargar imágenes"
 
-#: ui/views/mail-reading-pane.slint:1368
+#: ui/views/mail-reading-pane.slint:1370
 msgid "Loading image…"
 msgstr "Cargando imagen…"
 
-#: ui/views/mail-reading-pane.slint:1368
+#: ui/views/mail-reading-pane.slint:1370
 msgid "Blocked image"
 msgstr "Imagen bloqueada"
 
-#: ui/views/mail-reading-pane.slint:1368
+#: ui/views/mail-reading-pane.slint:1370
 msgid "Image exceeds limits"
 msgstr "La imagen supera los límites"
 
-#: ui/views/mail-reading-pane.slint:1368
+#: ui/views/mail-reading-pane.slint:1370
 msgid "Image unavailable"
 msgstr "Imagen no disponible"
 
-#: ui/views/mail-reading-pane.slint:1510
+#: ui/views/mail-reading-pane.slint:1512
 msgid "Show rendered email"
 msgstr "Mostrar correo renderizado"
 
-#: ui/views/mail-reading-pane.slint:1533
+#: ui/views/mail-reading-pane.slint:1535
 msgid "Copy this HTML into your GitHub rendering issue."
 msgstr "Copia este HTML en tu incidencia de GitHub sobre la visualización."
 
-#: ui/views/mail-reading-pane.slint:1550
+#: ui/views/mail-reading-pane.slint:1552
 msgid "Show email"
 msgstr "Mostrar correo"
 
-#: ui/views/mail-reading-pane.slint:1560
+#: ui/views/mail-reading-pane.slint:1562
 msgid "View original plain text"
 msgstr "Ver texto original sin formato"
 
-#: ui/views/mail-reading-pane.slint:1562
+#: ui/views/mail-reading-pane.slint:1564
 msgid "Copy formatted selection"
 msgstr "Copiar selección con formato"
 
-#: ui/views/mail-reading-pane.slint:1563
+#: ui/views/mail-reading-pane.slint:1565
 msgid "Caret browsing"
 msgstr "Navegación con cursor"
 
-#: ui/views/mail-reading-pane.slint:1566
+#: ui/views/mail-reading-pane.slint:1568
 msgid "Copy selected text"
 msgstr "Copiar texto seleccionado"
 
-#: ui/views/mail-reading-pane.slint:1576
+#: ui/views/mail-reading-pane.slint:1578
 msgid "Copy all email text"
 msgstr "Copiar todo el texto del correo"
 
-#: ui/views/mail-reading-pane.slint:1586
+#: ui/views/mail-reading-pane.slint:1588
 msgid "Select all email text"
 msgstr "Seleccionar todo el texto del correo"
 
-#: ui/views/mail-reading-pane.slint:1604
+#: ui/views/mail-reading-pane.slint:1606
 msgid "Link: {}"
 msgstr "Enlace: {}"
 
-#: ui/views/mail-reading-pane.slint:1796
+#: ui/views/mail-reading-pane.slint:1798
 msgid "Heading: {}"
 msgstr "Encabezado: {}"
 
-#: ui/views/mail-reading-pane.slint:1916
+#: ui/views/mail-reading-pane.slint:1920
 msgid "No message selected"
 msgstr "No hay ningún mensaje seleccionado"
 
-#: ui/views/mail-reading-pane.slint:1917
+#: ui/views/mail-reading-pane.slint:1921
 msgid "Choose an email to read it here."
 msgstr "Elige un correo para leerlo aquí."
 
-#: ui/views/mail-reading-pane.slint:1959
+#: ui/views/mail-reading-pane.slint:1963
 msgid "Label name"
 msgstr "Nombre de la etiqueta"
 
-#: ui/views/mail-reading-pane.slint:1977
+#: ui/views/mail-reading-pane.slint:1981
 msgid "Blue"
 msgstr "Azul"
 
-#: ui/views/mail-reading-pane.slint:1979
+#: ui/views/mail-reading-pane.slint:1983
 msgid "Pink"
 msgstr "Rosa"
 
-#: ui/views/mail-reading-pane.slint:1980
+#: ui/views/mail-reading-pane.slint:1984
 msgid "Red"
 msgstr "Rojo"
 
-#: ui/views/mail-reading-pane.slint:1981
+#: ui/views/mail-reading-pane.slint:1985
 msgid "Amber"
 msgstr "Ámbar"
 
-#: ui/views/mail-reading-pane.slint:1984
+#: ui/views/mail-reading-pane.slint:1988
 msgid "Slate"
 msgstr "Pizarra"
 
-#: ui/views/mail-reading-pane.slint:1989
+#: ui/views/mail-reading-pane.slint:1993
 msgid "Use across all accounts (local only)"
 msgstr "Usar en todas las cuentas (solo local)"
 

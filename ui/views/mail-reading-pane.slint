@@ -14,7 +14,7 @@ import { RenderingInfoDialog } from "../dialogs/rendering-info-dialog.slint";
 import { TypeScale } from "../typography.slint";
 import { AppTheme, LayoutMetrics, MailIconPalette, MotionSettings } from "../design-system.slint";
 import { MessageColors } from "../message-colors.slint";
-import { WindowControlsClearance } from "../window-chrome.slint";
+import { WindowChrome, WindowControlsClearance } from "../window-chrome.slint";
 
 component ReaderControl inherits ToolbarIconButton {
     tooltip-above: true;
@@ -660,7 +660,9 @@ export component MailReadingPane inherits Rectangle {
                         // centerline at y=32. Compact actions use the same
                         // centered 44px touch geometry as the other pages.
                         height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
-                        background: root.surface-raised;
+                        // Under the tab strip the toolbar shares the list's
+                        // surface, so the band below the tabs is one color.
+                        background: WindowChrome.top-bar ? root.surface : root.surface-raised;
                         private property <length> inset: root.compact ? 8px : 14px;
                         // Width left for buttons once integrated window
                         // controls are accounted for. Copied on change so the
@@ -1908,7 +1910,9 @@ export component MailReadingPane inherits Rectangle {
                     y: 0px;
                     width: parent.width;
                     height: parent.height;
-                    background: root.surface-raised;
+                    // The raised canvas frames a message; under the tab strip
+                    // an empty reader shares the list's surface instead.
+                    background: WindowChrome.top-bar ? root.surface : root.surface-raised;
                     DetailEmptyState {
                         width: parent.width;
                         height: parent.height;
