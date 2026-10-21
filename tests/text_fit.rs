@@ -17,8 +17,8 @@ use flectar_mail::{
     CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ContactAccountRow, ContactRow,
     ContactSidebarRow, ContactSidebarRowKind, EmailRow, ImportAccountRow, ImportFailureRow,
     ImportFindingRow, ImportProfileRow, LocalizedMessage, MailAttachment, MailAttachments,
-    MailLabelRow, MailListEntry, MailProfileRow, MailboxRow, MotionSettings, SidebarRow,
-    SidebarRowKind, StorageUsageRow, ThreadMessageRow,
+    MailLabelRow, MailListEntry, MailProfileRow, MailboxRow, MotionSettings, ProfileMemberRow,
+    SidebarRow, SidebarRowKind, StorageUsageRow, ThreadMessageRow,
 };
 use i_slint_core::accessibility::{
     AccessibilityAction, AccessibleStringProperty, SupportedAccessibilityAction,
@@ -321,17 +321,40 @@ fn calendar_event(id: i32, title: &str, day_index: i32, start_minutes: i32) -> C
     }
 }
 
+fn work_profile() -> MailProfileRow {
+    MailProfileRow {
+        id: "work".into(),
+        name: "Work".into(),
+        color: slint::Color::from_rgb_u8(0x8b, 0x5c, 0xf6),
+        account_count: 1,
+    }
+}
+
 fn apply_fixture(app: &AppWindow) {
     app.global::<MotionSettings>().set_enabled(false);
     app.set_startup_ready(true);
     app.set_startup_hydrated(true);
     app.set_connected_accounts(model(accounts()));
-    app.set_mail_profiles(model(vec![MailProfileRow {
-        id: "work".into(),
-        name: "Work".into(),
-        color: slint::Color::from_rgb_u8(0x8b, 0x5c, 0xf6),
-        account_count: 1,
-    }]));
+    app.set_mail_profiles(model(vec![work_profile()]));
+    // The profile editor's checklist; the app fills it as the editor opens.
+    app.set_profile_members(model(
+        accounts()
+            .into_iter()
+            .map(|account| ProfileMemberRow {
+                id: account.id,
+                checked: account.has_profile,
+                other_profile: if account.id == 3 {
+                    "Personal".into()
+                } else {
+                    Default::default()
+                },
+                name: account.name,
+                email: account.email,
+                initials: account.initials,
+                ..Default::default()
+            })
+            .collect(),
+    ));
     app.set_mail_list_entries(model(mail_entries(false)));
     app.set_emails(model(emails()));
     app.set_sidebar_rows(model(sidebar_rows()));

@@ -383,26 +383,76 @@ pub(super) fn register_settings_preference_callbacks(
             return Default::default();
         };
         let profile_id = (!profile_id.trim().is_empty()).then(|| profile_id.to_string());
-        match runtime_for_profiles.block_on(core.save_mail_profile(
+        let (mut settings, profile) = match runtime_for_profiles.block_on(core.save_mail_profile(
             profile_id,
             name.to_string(),
             theme::color_to_hex(color),
         )) {
-            Ok((settings, profile)) => {
-                apply_account_presentation_settings(
-                    &app,
-                    &state_for_profiles,
-                    &runtime_for_profiles,
-                    &settings,
-                );
-                app.set_sync_status(UiMessage::plain("Profile saved."));
-                profile.id.into()
-            }
+            Ok(saved) => saved,
             Err(error) => {
                 app.set_sync_status(UiMessage::detail("Could not save profile: {}", error));
-                Default::default()
+                return Default::default();
+            }
+        };
+        // The editor's checked accounts become the profile's accounts.
+        let members = app.get_profile_members();
+        let mut failure = None;
+        for member in members.iter() {
+            let account_id = i64::from(member.id);
+            let in_profile = profile.account_ids.contains(&account_id);
+            let assignment = match (member.checked, in_profile) {
+                (true, false) => Some(profile.id.clone()),
+                (false, true) => None,
+                _ => continue,
+            };
+            match runtime_for_profiles.block_on(core.assign_account_profile(account_id, assignment))
+            {
+                Ok(updated) => settings = updated,
+                Err(error) => failure = Some(error),
             }
         }
+        apply_account_presentation_settings(
+            &app,
+            &state_for_profiles,
+            &runtime_for_profiles,
+            &settings,
+        );
+        match failure {
+            Some(error) => app.set_sync_status(UiMessage::detail(
+                "Could not update account profile: {}",
+                error,
+            )),
+            None => app.set_sync_status(UiMessage::plain("Profile saved.")),
+        }
+        profile.id.into()
+    });
+
+    let app_weak = app.as_weak();
+    app.on_prepare_profile_members(move |profile_id, checked_account| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let rows = connected_account_rows(&app)
+            .into_iter()
+            .map(|account| {
+                let member = !profile_id.is_empty() && account.profile_id == profile_id;
+                ProfileMemberRow {
+                    id: account.id,
+                    name: account.name,
+                    email: account.email,
+                    initials: account.initials,
+                    avatar: account.avatar_small,
+                    has_avatar: account.has_avatar,
+                    other_profile: if member {
+                        Default::default()
+                    } else {
+                        account.profile_name
+                    },
+                    checked: member || account.id == checked_account,
+                }
+            })
+            .collect::<Vec<_>>();
+        app.set_profile_members(ModelRc::new(VecModel::from(rows)));
     });
 
     let app_weak = app.as_weak();

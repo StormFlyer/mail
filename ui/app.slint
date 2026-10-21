@@ -17,7 +17,7 @@ export { AppTheme, MotionSettings, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
 import { LoadingSkeletonBlock } from "components/loading-skeleton.slint";
-import { AccountRow, CalendarAgendaRow, CalendarAgendaFilterRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, MailListEntry, MailProfileRow, SidebarRow, MailLabelRow, StorageUsageRow, ThreadMessageRow } from "models.slint";
+import { AccountRow, CalendarAgendaRow, CalendarAgendaFilterRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, MailListEntry, MailProfileRow, ProfileMemberRow, SidebarRow, MailLabelRow, StorageUsageRow, ThreadMessageRow } from "models.slint";
 export { EmailReader, ReaderCaret, ReaderImage, ReaderItem, MailDragApi } from "models.slint";
 export { MailListNavigation, MailNavigationTarget } from "models.slint";
 export { ThreadMessageRow, StorageUsageRow } from "models.slint";
@@ -547,7 +547,10 @@ export component AppWindow inherits Window {
     callback save_custom_theme(color, color, color, color, color, color, color, color, color, color) -> bool;
     callback save_avatar_visibility(bool);
     callback save_group_mail_by_date(bool);
+    // Save a profile's name and color, with the checked `profile_members`
+    // as its accounts.
     callback save_mail_profile(string, string, color) -> string;
+    callback prepare_profile_members(string, int);
     callback assign_account_profile(int, string);
     callback save_account_color(int, color, bool);
     callback delete_mail_profile(string);
@@ -671,6 +674,9 @@ export component AppWindow inherits Window {
     in property <bool> selected_account_uses_labels: false;
     in property <[AccountRow]> connected_accounts: [];
     in property <[MailProfileRow]> mail_profiles: [];
+    in property <[ProfileMemberRow]> profile_members: [];
+    // Set to open Settings' profile editor for a new profile.
+    in-out property <bool> new_profile_requested: false;
     // The saved visible page can paint before the core is safe to use. Keep
     // that presentation milestone separate from startup-ready, which guards
     // every callback that can touch local storage.
@@ -1678,6 +1684,8 @@ export component AppWindow inherits Window {
             height: parent.height;
             connected_accounts: root.connected_accounts;
             mail_profiles: root.mail_profiles;
+            profile_members: root.profile_members;
+            new-profile-requested <=> root.new_profile_requested;
             custom_oauth_configured: root.custom_oauth_configured;
             google_oauth_available: root.google_oauth_available;
             microsoft_oauth_available: root.microsoft_oauth_available;
@@ -1796,6 +1804,9 @@ export component AppWindow inherits Window {
                 );
             }
             save_avatar_visibility(enabled) => { root.save_avatar_visibility(enabled); }
+            prepare_profile_members(profile-id, account-id) => {
+                root.prepare_profile_members(profile-id, account-id);
+            }
             save_mail_profile(profile-id, name, color) => {
                 return root.save_mail_profile(profile-id, name, color);
             }
