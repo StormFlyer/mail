@@ -524,6 +524,8 @@ export component ContactsView inherits Rectangle {
             if root.has-selected : VerticalBox {
                 width: parent.width;
                 height: parent.height;
+                // The toolbar spans the pane, on the list's centerline.
+                padding: 0px;
                 spacing: 0px;
 
                     Rectangle {

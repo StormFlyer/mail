@@ -1503,7 +1503,7 @@ msgid "Edit"
 msgstr ""
 
 #: ui/components/account-mail-preferences.slint:158
-#: ui/views/contacts-view.slint:586
+#: ui/views/contacts-view.slint:588
 msgid "Remove"
 msgstr ""
 
@@ -1613,7 +1613,7 @@ msgid "Save signature"
 msgstr ""
 
 #: ui/components/account-mail-preferences.slint:194
-#: ui/views/contacts-view.slint:586
+#: ui/views/contacts-view.slint:588
 msgid "Delete"
 msgstr ""
 
@@ -2083,7 +2083,7 @@ msgstr ""
 msgid "The selected text will open this address."
 msgstr ""
 
-#: ui/components/composer-actions.slint:359 ui/views/contacts-view.slint:710
+#: ui/components/composer-actions.slint:359 ui/views/contacts-view.slint:712
 msgid "https://example.com"
 msgstr ""
 
@@ -2852,7 +2852,7 @@ msgstr ""
 msgid "START TIME"
 msgstr ""
 
-#: ui/dialogs/calendar-event-dialog.slint:54 ui/views/contacts-view.slint:691
+#: ui/dialogs/calendar-event-dialog.slint:54 ui/views/contacts-view.slint:693
 msgid "YYYY-MM-DD"
 msgstr ""
 
@@ -4728,7 +4728,7 @@ msgid "Quit"
 msgstr ""
 
 #: ui/views/contacts-view.slint:163 ui/views/contacts-view.slint:491
-#: ui/views/contacts-view.slint:634
+#: ui/views/contacts-view.slint:636
 msgid "New contact"
 msgstr ""
 
@@ -4803,131 +4803,131 @@ msgstr ""
 msgid "Contact list width"
 msgstr ""
 
-#: ui/views/contacts-view.slint:547
+#: ui/views/contacts-view.slint:549
 msgid "Back to contacts"
 msgstr ""
 
-#: ui/views/contacts-view.slint:555
+#: ui/views/contacts-view.slint:557
 msgid "Suggested person"
 msgstr ""
 
-#: ui/views/contacts-view.slint:556
+#: ui/views/contacts-view.slint:558
 msgid "Contact details"
 msgstr ""
 
-#: ui/views/contacts-view.slint:571
+#: ui/views/contacts-view.slint:573
 msgid "Remove from favorites"
 msgstr ""
 
-#: ui/views/contacts-view.slint:571
+#: ui/views/contacts-view.slint:573
 msgid "Add to favorites"
 msgstr ""
 
-#: ui/views/contacts-view.slint:575
+#: ui/views/contacts-view.slint:577
 msgid "Remove this suggestion?"
 msgstr ""
 
-#: ui/views/contacts-view.slint:575
+#: ui/views/contacts-view.slint:577
 msgid "Delete this contact?"
 msgstr ""
 
-#: ui/views/contacts-view.slint:598
+#: ui/views/contacts-view.slint:600
 msgid "Remove suggestion"
 msgstr ""
 
-#: ui/views/contacts-view.slint:598
+#: ui/views/contacts-view.slint:600
 msgid "Delete contact"
 msgstr ""
 
-#: ui/views/contacts-view.slint:668
+#: ui/views/contacts-view.slint:670
 msgid "Learned from mail. Save this person to add them to your address book."
 msgstr ""
 
-#: ui/views/contacts-view.slint:676
+#: ui/views/contacts-view.slint:678
 msgid "NAME"
 msgstr ""
 
-#: ui/views/contacts-view.slint:677
+#: ui/views/contacts-view.slint:679
 msgid "Full name"
 msgstr ""
 
-#: ui/views/contacts-view.slint:678
+#: ui/views/contacts-view.slint:680
 msgid "EMAIL"
 msgstr ""
 
-#: ui/views/contacts-view.slint:685
+#: ui/views/contacts-view.slint:687
 msgid "PHONE"
 msgstr ""
 
-#: ui/views/contacts-view.slint:686
+#: ui/views/contacts-view.slint:688
 msgid "+1 555 0100"
 msgstr ""
 
-#: ui/views/contacts-view.slint:690
+#: ui/views/contacts-view.slint:692
 msgid "BIRTHDAY"
 msgstr ""
 
-#: ui/views/contacts-view.slint:699
+#: ui/views/contacts-view.slint:701
 msgid "COMPANY"
 msgstr ""
 
-#: ui/views/contacts-view.slint:700
+#: ui/views/contacts-view.slint:702
 msgid "Company"
 msgstr ""
 
-#: ui/views/contacts-view.slint:704
+#: ui/views/contacts-view.slint:706
 msgid "JOB TITLE"
 msgstr ""
 
-#: ui/views/contacts-view.slint:705
+#: ui/views/contacts-view.slint:707
 msgid "Role"
 msgstr ""
 
-#: ui/views/contacts-view.slint:709
+#: ui/views/contacts-view.slint:711
 msgid "WEBSITE"
 msgstr ""
 
-#: ui/views/contacts-view.slint:711
+#: ui/views/contacts-view.slint:713
 msgid "ADDRESS"
 msgstr ""
 
-#: ui/views/contacts-view.slint:712
+#: ui/views/contacts-view.slint:714
 msgid "Postal address"
 msgstr ""
 
-#: ui/views/contacts-view.slint:713
+#: ui/views/contacts-view.slint:715
 msgid "TAGS"
 msgstr ""
 
-#: ui/views/contacts-view.slint:714
+#: ui/views/contacts-view.slint:716
 msgid "customer, design, london"
 msgstr ""
 
-#: ui/views/contacts-view.slint:715
+#: ui/views/contacts-view.slint:717
 msgid "NOTES"
 msgstr ""
 
-#: ui/views/contacts-view.slint:716
+#: ui/views/contacts-view.slint:718
 msgid "Notes about this contact"
 msgstr ""
 
-#: ui/views/contacts-view.slint:730
+#: ui/views/contacts-view.slint:732
 msgid "Send email"
 msgstr ""
 
-#: ui/views/contacts-view.slint:737
+#: ui/views/contacts-view.slint:739
 msgid "Save to contacts"
 msgstr ""
 
-#: ui/views/contacts-view.slint:737
+#: ui/views/contacts-view.slint:739
 msgid "Save contact"
 msgstr ""
 
-#: ui/views/contacts-view.slint:758
+#: ui/views/contacts-view.slint:760
 msgid "Select a contact"
 msgstr ""
 
-#: ui/views/contacts-view.slint:759
+#: ui/views/contacts-view.slint:761
 msgid "View and edit contact details here."
 msgstr ""
 
