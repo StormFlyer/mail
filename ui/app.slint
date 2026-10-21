@@ -2243,7 +2243,12 @@ export component AppWindow inherits Window {
         compact: root.compact-layout;
     }
 
-    OpenPgpReader { width: parent.width; height: parent.height; }
+    // Below the tab strip and inside the safe area, like the dialogs.
+    OpenPgpReader {
+        x: root.content-x; y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
+    }
 
     // Keep the startup shell movable while its input is blocked.
     if WindowChrome.controls-visible && !root.startup_ready : WindowDragArea {
