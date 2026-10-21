@@ -17,8 +17,8 @@ use flectar_mail::{
     CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ContactAccountRow, ContactRow,
     ContactSidebarRow, ContactSidebarRowKind, EmailRow, ImportAccountRow, ImportFailureRow,
     ImportFindingRow, ImportProfileRow, LocalizedMessage, MailAttachment, MailAttachments,
-    MailLabelRow, MailListEntry, MailProfileRow, MailboxRow, MotionSettings, SidebarRow,
-    SidebarRowKind, StorageUsageRow, ThreadMessageRow,
+    MailLabelRow, MailListEntry, MailProfileRow, MailboxRow, MotionSettings, ProfileMemberRow,
+    SidebarRow, SidebarRowKind, StorageUsageRow, ThreadMessageRow,
 };
 use i_slint_core::accessibility::{
     AccessibilityAction, AccessibleStringProperty, SupportedAccessibilityAction,
@@ -321,17 +321,40 @@ fn calendar_event(id: i32, title: &str, day_index: i32, start_minutes: i32) -> C
     }
 }
 
+fn work_profile() -> MailProfileRow {
+    MailProfileRow {
+        id: "work".into(),
+        name: "Work".into(),
+        color: slint::Color::from_rgb_u8(0x8b, 0x5c, 0xf6),
+        account_count: 1,
+    }
+}
+
 fn apply_fixture(app: &AppWindow) {
     app.global::<MotionSettings>().set_enabled(false);
     app.set_startup_ready(true);
     app.set_startup_hydrated(true);
     app.set_connected_accounts(model(accounts()));
-    app.set_mail_profiles(model(vec![MailProfileRow {
-        id: "work".into(),
-        name: "Work".into(),
-        color: slint::Color::from_rgb_u8(0x8b, 0x5c, 0xf6),
-        account_count: 1,
-    }]));
+    app.set_mail_profiles(model(vec![work_profile()]));
+    // The profile editor's checklist; the app fills it as the editor opens.
+    app.set_profile_members(model(
+        accounts()
+            .into_iter()
+            .map(|account| ProfileMemberRow {
+                id: account.id,
+                checked: account.has_profile,
+                other_profile: if account.id == 3 {
+                    "Personal".into()
+                } else {
+                    Default::default()
+                },
+                name: account.name,
+                email: account.email,
+                initials: account.initials,
+                ..Default::default()
+            })
+            .collect(),
+    ));
     app.set_mail_list_entries(model(mail_entries(false)));
     app.set_emails(model(emails()));
     app.set_sidebar_rows(model(sidebar_rows()));
@@ -584,6 +607,8 @@ fn reset(app: &AppWindow) {
     app.set_workspace_layout("default".into());
     app.set_mail_list_entries(model(mail_entries(false)));
     app.set_active_view("mail".into());
+    app.set_mail_sidebar_collapsed(false);
+    app.set_active_mail_profile(MailProfileRow::default());
     app.set_settings_open(false);
     app.set_settings_tab("General".into());
     app.set_compose_open(false);
@@ -772,6 +797,8 @@ struct State {
     dismiss: Option<&'static str>,
     /// Reaches controls the phone layout keeps on another page.
     desktop_only: bool,
+    /// Reaches controls only the phone layout has.
+    phone_only: bool,
 }
 
 fn state(name: &str, setup: impl Fn(&AppWindow) + 'static) -> State {
@@ -780,6 +807,7 @@ fn state(name: &str, setup: impl Fn(&AppWindow) + 'static) -> State {
         setup: Box::new(setup),
         dismiss: None,
         desktop_only: false,
+        phone_only: false,
     }
 }
 
@@ -813,6 +841,33 @@ fn states() -> Vec<State> {
         State {
             desktop_only: true,
             ..state("mail labels", |app| press(app, "Manage labels"))
+        },
+        // The tab strip with the sidebar closed, its pill before the tabs.
+        State {
+            desktop_only: true,
+            ..state("mail sidebar collapsed", |app| {
+                app.set_active_mail_profile(work_profile());
+                app.set_mail_sidebar_collapsed(true);
+            })
+        },
+        State {
+            desktop_only: true,
+            ..state("profile menu", |app| press(app, "Profile"))
+        },
+        State {
+            desktop_only: true,
+            ..state("profile menu with a profile", |app| {
+                app.set_active_mail_profile(work_profile());
+                press(app, "Profile");
+            })
+        },
+        State {
+            dismiss: Some("Close folders"),
+            phone_only: true,
+            ..state("mail folders", |app| {
+                app.set_active_mail_profile(work_profile());
+                press(app, "Hide folders");
+            })
         },
         State {
             dismiss: Some("Cancel"),
@@ -1478,7 +1533,9 @@ fn text_fits_at_desktop_font_sizes() {
             app.window()
                 .set_size(slint::PhysicalSize::new(width, height));
             for state in states() {
-                if state.desktop_only && window_name != "desktop" {
+                if state.desktop_only && window_name != "desktop"
+                    || state.phone_only && window_name != "phone"
+                {
                     continue;
                 }
                 reset(&app);

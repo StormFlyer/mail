@@ -17,7 +17,7 @@ export { AppTheme, MotionSettings, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
 import { LoadingSkeletonBlock } from "components/loading-skeleton.slint";
-import { AccountRow, CalendarAgendaRow, CalendarAgendaFilterRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, MailListEntry, MailProfileRow, SidebarRow, MailLabelRow, StorageUsageRow, ThreadMessageRow } from "models.slint";
+import { AccountRow, CalendarAgendaRow, CalendarAgendaFilterRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, MailListEntry, MailProfileRow, ProfileMemberRow, SidebarRow, MailLabelRow, StorageUsageRow, ThreadMessageRow } from "models.slint";
 export { EmailReader, ReaderCaret, ReaderImage, ReaderItem, MailDragApi } from "models.slint";
 export { MailListNavigation, MailNavigationTarget } from "models.slint";
 export { ThreadMessageRow, StorageUsageRow } from "models.slint";
@@ -34,6 +34,8 @@ import { ConfirmationDialog } from "components/confirmation-dialog.slint";
 import { SettingsDialog } from "dialogs/settings-dialog.slint";
 import { AccountImport, ImportDialog } from "dialogs/import-dialog.slint";
 export { AccountImport, ImportAccountRow, ImportFailureRow, ImportFindingRow, ImportProfileRow } from "dialogs/import-dialog.slint";
+export { ThemeDraft } from "components/theme-editor.slint";
+import { ThemeDraft } from "components/theme-editor.slint";
 import { MailView } from "views/mail-view.slint";
 export { MessageColors } from "message-colors.slint";
 export { FilesUi, FileRow, OperationRow } from "views/files-view.slint";
@@ -218,6 +220,7 @@ export global I18n {
         if (key == "Could not update account profile: {}") { return @tr("Could not update account profile: {}", argument); }
         if (key == "Profile deleted.") { return @tr("Profile deleted."); }
         if (key == "Could not delete profile: {}") { return @tr("Could not delete profile: {}", argument); }
+        if (key == "Could not switch profile: {}") { return @tr("Could not switch profile: {}", argument); }
         if (key == "Marker preference is active for this session.") { return @tr("Marker preference is active for this session."); }
         if (key == "Mail-list marker preference saved.") { return @tr("Mail-list marker preference saved."); }
         if (key == "Could not save mail-list marker preference: {}") { return @tr("Could not save mail-list marker preference: {}", argument); }
@@ -545,10 +548,17 @@ export component AppWindow inherits Window {
     callback save_custom_theme(color, color, color, color, color, color, color, color, color, color) -> bool;
     callback save_avatar_visibility(bool);
     callback save_group_mail_by_date(bool);
+    // Save a profile's name and color, with the checked `profile_members`
+    // as its accounts.
     callback save_mail_profile(string, string, color) -> string;
+    callback prepare_profile_members(string, int);
     callback assign_account_profile(int, string);
     callback save_account_color(int, color, bool);
     callback delete_mail_profile(string);
+    // Show only this profile's accounts in the mail view; empty shows all.
+    callback select_mail_profile(string);
+    // Rust: the active profile or its accounts changed.
+    callback mail_profile_changed();
     callback save_account_markers_visibility(bool);
     callback save_workspace_layout(string);
     callback save_workspace_list_pane_width(length);
@@ -669,6 +679,11 @@ export component AppWindow inherits Window {
     in property <bool> selected_account_uses_labels: false;
     in property <[AccountRow]> connected_accounts: [];
     in property <[MailProfileRow]> mail_profiles: [];
+    in property <[ProfileMemberRow]> profile_members: [];
+    // The profile the mail view shows; an empty id means every account.
+    in property <MailProfileRow> active_mail_profile;
+    // Set to open Settings' profile editor for a new profile.
+    in-out property <bool> new_profile_requested: false;
     // The saved visible page can paint before the core is safe to use. Keep
     // that presentation milestone separate from startup-ready, which guards
     // every callback that can touch local storage.
@@ -791,7 +806,15 @@ export component AppWindow inherits Window {
     in-out property <length> email-scroll-document-height: 0px;
     in-out property <length> email-scroll-y: 0px;
     in-out property <bool> settings_open: false;
-    changed settings_open => { root.product-changed(root.active_view); }
+    changed settings_open => {
+        root.product-changed(root.active_view);
+        // Hiding Settings destroys the dialog before its own change handlers
+        // run, so an unsaved palette is discarded here.
+        if root.settings_open { root.settings-shown(); } else { ThemeDraft.revert(); }
+        TabsUi.navigated();
+    }
+    // Settings appeared, whichever way it was opened.
+    callback settings-shown();
     in-out property <string> active_view: "mail";
     callback product-changed(string);
     private property <string> mail-compact-page: "list";
@@ -800,8 +823,18 @@ export component AppWindow inherits Window {
     changed active_view => {
         if root.active_view != "mail" { MailAttachments.command("close", ""); }
         root.product-changed(root.active_view);
+        TabsUi.navigated();
     }
     in-out property <string> settings_tab: "General";
+    changed settings_tab => { TabsUi.navigated(); }
+    // The active tab saves where the mail view is once it settles.
+    changed selected_scope => { TabsUi.navigated(); }
+    changed search_query => { TabsUi.navigated(); }
+    changed search_filter => { TabsUi.navigated(); }
+    changed has_selected => { TabsUi.navigated(); }
+    changed selected_subject => { TabsUi.navigated(); }
+    changed calendar_selected_date => { TabsUi.navigated(); }
+    changed calendar_view_mode => { TabsUi.navigated(); }
     // Own scan lifetime here: the conditional SettingsDialog is destroyed on
     // close, so its own change handlers cannot reliably cancel a running scan.
     private property <bool> storage-page-open: root.settings_open && root.settings_tab == "Data";
@@ -973,6 +1006,8 @@ export component AppWindow inherits Window {
     // product rail; in the integrated frame it also holds the window
     // controls. Compact layouts navigate from the bottom bar.
     private property <bool> top-bar: !root.compact-layout && root.connected_accounts.length > 0;
+    // A tone apart from the workspace, so the active tab can open into it.
+    private property <color> tab-strip-bg: AppTheme.sidebar-tint.mix(AppTheme.title, 0.94);
     changed top-bar => { root.sync-window-chrome(); }
     private property <length> content-x: root.safe-area-insets.left;
     private property <length> content-y: root.safe-area-insets.top + (root.top-bar ? WindowChrome.band-height : 0px);
@@ -1168,6 +1203,7 @@ export component AppWindow inherits Window {
         WindowChrome.full-screen = root.full-screen;
         WindowChrome.compact = root.compact-layout;
         WindowChrome.top-bar = root.top-bar;
+        AppTheme.top-bar = root.top-bar;
         TabsUi.enabled = root.top-bar;
     }
 
@@ -1288,6 +1324,15 @@ export component AppWindow inherits Window {
             thread_messages: root.thread_messages;
             selected_thread_index: root.selected_thread_index;
             sidebar_rows: root.sidebar_rows;
+            mail_profiles: root.mail_profiles;
+            active_mail_profile: root.active_mail_profile;
+            account_count: root.connected_accounts.length;
+            select_mail_profile(id) => { root.select_mail_profile(id); }
+            create_mail_profile => {
+                root.settings_tab = "Accounts";
+                root.settings_open = true;
+                root.new_profile_requested = true;
+            }
             folder_filter_query <=> root.folder_filter_query;
             mail_labels: root.mail_labels;
             mail_label_results: root.mail_label_results;
@@ -1655,6 +1700,8 @@ export component AppWindow inherits Window {
             height: parent.height;
             connected_accounts: root.connected_accounts;
             mail_profiles: root.mail_profiles;
+            profile_members: root.profile_members;
+            new-profile-requested <=> root.new_profile_requested;
             custom_oauth_configured: root.custom_oauth_configured;
             google_oauth_available: root.google_oauth_available;
             microsoft_oauth_available: root.microsoft_oauth_available;
@@ -1683,7 +1730,9 @@ export component AppWindow inherits Window {
             muted-text: root.muted-text;
             page-bg: root.page-bg;
             secondary-text: root.secondary-text;
-            sidebar-bg: root.sidebar-bg;
+            // Under the tab strip, the sidebar shares the pages' raised
+            // surface, so the Settings tab opens into one color.
+            sidebar-bg: root.top-bar ? root.surface-raised : root.sidebar-bg;
             surface: root.surface;
             surface-raised: root.surface-raised;
             title-color: root.title-color;
@@ -1771,6 +1820,9 @@ export component AppWindow inherits Window {
                 );
             }
             save_avatar_visibility(enabled) => { root.save_avatar_visibility(enabled); }
+            prepare_profile_members(profile-id, account-id) => {
+                root.prepare_profile_members(profile-id, account-id);
+            }
             save_mail_profile(profile-id, name, color) => {
                 return root.save_mail_profile(profile-id, name, color);
             }
@@ -2191,7 +2243,12 @@ export component AppWindow inherits Window {
         compact: root.compact-layout;
     }
 
-    OpenPgpReader { width: parent.width; height: parent.height; }
+    // Below the tab strip and inside the safe area, like the dialogs.
+    OpenPgpReader {
+        x: root.content-x; y: root.content-y;
+        width: root.content-width;
+        height: root.content-height;
+    }
 
     // Keep the startup shell movable while its input is blocked.
     if WindowChrome.controls-visible && !root.startup_ready : WindowDragArea {
@@ -2210,17 +2267,34 @@ export component AppWindow inherits Window {
         width: root.content-width;
         height: WindowChrome.band-height;
         z: 40000;
-        // The active tab follows the open conversation or mailbox.
-        live-title: root.active_view != "mail" ? ""
+        // The active tab follows Settings, the workspace, and in Mail the
+        // open conversation or mailbox.
+        live-workspace: root.settings_open ? "settings" : root.active_view;
+        live-title: root.settings_open || root.active_view != "mail" ? ""
             : root.has_selected && root.selected_subject != "" ? root.selected_subject
             : root.selected_scope_title;
-        background-color: root.sidebar-bg;
+        background-color: root.tab-strip-bg;
+        // The active tab opens into what lies under the strip: the raised
+        // surface across Settings, the plain one across every workspace.
+        active-tab-background: root.settings_open ? root.surface-raised : root.surface;
+        hover-background: AppTheme.sidebar-tint.mix(AppTheme.title, 0.90);
         divider-color: root.border;
         title-color: root.title-color;
+        text-color: root.secondary-text;
         accent-color: root.accent;
-        active-tab-background: AppTheme.surface;
-        hover-background: AppTheme.muted-control-bg;
-        muted-color: root.muted-text;
+        profiles: root.mail_profiles;
+        active-profile: root.active_mail_profile;
+        account-count: root.connected_accounts.length;
+        choose-profile(id) => { root.select_mail_profile(id); }
+        create-profile => {
+            root.settings_tab = "Accounts";
+            root.settings_open = true;
+            root.new_profile_requested = true;
+        }
+        manage-profiles => {
+            root.settings_tab = "Accounts";
+            root.settings_open = true;
+        }
     }
 
     if WindowChrome.controls-visible : WindowControls {
@@ -2231,7 +2305,7 @@ export component AppWindow inherits Window {
         z: 50000;
         maximized: root.maximized;
         foreground: root.title-color;
-        background-color: AppTheme.surface;
+        background-color: root.top-bar ? root.tab-strip-bg : AppTheme.surface;
     }
 
     if root.client-frame : Rectangle {

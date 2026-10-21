@@ -213,8 +213,38 @@ struct PageLoadContext<'a> {
     cursor: Option<MailCursor>,
     limit: i64,
     include_counts: bool,
+    /// The accounts and folders the mail view shows.
     accounts: &'a [Account],
     folders: &'a [FolderInfo],
+    /// The active profile's accounts, if one is set.
+    profile: Option<&'a [i64]>,
+    /// Every connected account, shown or not.
+    account_count: usize,
+}
+
+/// Whether the mail view shows `account_id`: every account does unless a
+/// profile, given by its sorted accounts, is active.
+fn profile_shows(profile: Option<&[i64]>, account_id: i64) -> bool {
+    profile.is_none_or(|accounts| accounts.binary_search(&account_id).is_ok())
+}
+
+/// Keep the accounts and folders the mail view shows with `profile`.
+fn retain_profile_accounts(
+    profile: Option<&[i64]>,
+    accounts: &mut Vec<Account>,
+    folders: &mut Vec<FolderInfo>,
+) {
+    accounts.retain(|account| profile_shows(profile, account.id));
+    folders.retain(|folder| profile_shows(profile, folder.account_id));
+}
+
+/// Keep shared labels and the labels of accounts shown with `profile`.
+fn retain_profile_labels(profile: Option<&[i64]>, labels: &mut Vec<Label>) {
+    labels.retain(|label| {
+        label
+            .owner_account_id
+            .is_none_or(|owner| profile_shows(profile, owner))
+    });
 }
 
 /// Keep empty snippets explicit in both the mailbox row and the temporary
@@ -236,6 +266,9 @@ pub fn display_preview(preview: &str) -> String {
 pub struct CoreMailSource {
     core: Arc<Core>,
     account_revision: Arc<std::sync::atomic::AtomicU64>,
+    /// The active profile's accounts, sorted; the mail view shows only these.
+    /// `None` shows every account.
+    profile_accounts: Arc<std::sync::Mutex<Option<Arc<[i64]>>>>,
 }
 
 pub struct AccountSnapshot {
@@ -248,6 +281,39 @@ impl CoreMailSource {
     pub fn account_revision(&self) -> u64 {
         self.account_revision
             .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Show only these accounts in the mail view, or every account with
+    /// `None`. Returns whether that changed; pages and counts loaded for the
+    /// previous accounts are then out of date.
+    pub fn set_profile_accounts(&self, accounts: Option<Vec<i64>>) -> bool {
+        let accounts = accounts.map(|mut accounts| {
+            accounts.sort_unstable();
+            accounts.dedup();
+            Arc::<[i64]>::from(accounts)
+        });
+        {
+            let mut current = self
+                .profile_accounts
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if *current == accounts {
+                return false;
+            }
+            *current = accounts;
+        }
+        // After the new accounts are in place: a load that reads the new
+        // revision also reads them.
+        self.account_revision
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        true
+    }
+
+    fn profile_accounts(&self) -> Option<Arc<[i64]>> {
+        self.profile_accounts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub async fn load_account_snapshot(&self) -> Result<AccountSnapshot, String> {
@@ -279,6 +345,7 @@ impl CoreMailSource {
         Ok(Self {
             core: Arc::new(core),
             account_revision: Arc::default(),
+            profile_accounts: Arc::default(),
         })
     }
 
@@ -298,16 +365,19 @@ impl CoreMailSource {
         include_counts: bool,
     ) -> Result<MailPage, String> {
         let revision = self.account_revision();
-        let accounts = self
+        let profile = self.profile_accounts();
+        let mut accounts = self
             .core
             .list_accounts()
             .await
             .map_err(|error| error.to_string())?;
-        let folders = self
+        let mut folders = self
             .core
             .list_folders(None)
             .await
             .map_err(|error| error.to_string())?;
+        let account_count = accounts.len();
+        retain_profile_accounts(profile.as_deref(), &mut accounts, &mut folders);
         self.load_page_with_context(PageLoadContext {
             scope,
             query,
@@ -316,6 +386,8 @@ impl CoreMailSource {
             include_counts,
             accounts: &accounts,
             folders: &folders,
+            profile: profile.as_deref(),
+            account_count,
         })
         .await
         .map(|mut page| {
@@ -332,15 +404,19 @@ impl CoreMailSource {
         preferred_scope: Scope,
         limit: i64,
     ) -> Result<(Vec<Account>, Scope, Option<MailPage>), String> {
+        let profile = self.profile_accounts();
         let accounts = self
             .core
             .list_accounts()
             .await
             .map_err(|error| error.to_string())?;
+        let mut shown = accounts.clone();
         let (scope, page) = match self.core.list_folders(None).await {
-            Ok(folders) => {
-                let labels = self.core.list_labels().await.unwrap_or_default();
-                let scope = validated_startup_scope(preferred_scope, &accounts, &folders, &labels);
+            Ok(mut folders) => {
+                retain_profile_accounts(profile.as_deref(), &mut shown, &mut folders);
+                let mut labels = self.core.list_labels().await.unwrap_or_default();
+                retain_profile_labels(profile.as_deref(), &mut labels);
+                let scope = validated_startup_scope(preferred_scope, &shown, &folders, &labels);
                 let page = self
                     .load_page_with_context(PageLoadContext {
                         scope,
@@ -348,14 +424,19 @@ impl CoreMailSource {
                         cursor: None,
                         limit,
                         include_counts: false,
-                        accounts: &accounts,
+                        accounts: &shown,
                         folders: &folders,
+                        profile: profile.as_deref(),
+                        account_count: accounts.len(),
                     })
                     .await
                     .ok();
                 (scope, page)
             }
-            Err(_) => (Scope::UNIFIED_INBOX.visible_for(&accounts), None),
+            Err(_) => {
+                shown.retain(|account| profile_shows(profile.as_deref(), account.id));
+                (Scope::UNIFIED_INBOX.visible_for(&shown), None)
+            }
         };
         Ok((accounts, scope, page))
     }
@@ -365,17 +446,19 @@ impl CoreMailSource {
     /// list rendering.
     pub async fn load_mail_metadata(&self, scope: Scope) -> Result<MailMetadata, String> {
         let revision = self.account_revision();
-        let accounts = self
+        let profile = self.profile_accounts();
+        let mut accounts = self
             .core
             .list_accounts()
             .await
             .map_err(|error| error.to_string())?;
-        let folders = self
+        let mut folders = self
             .core
             .list_folders(None)
             .await
             .map_err(|error| error.to_string())?;
-        self.load_mail_metadata_with_context(scope, &accounts, &folders)
+        retain_profile_accounts(profile.as_deref(), &mut accounts, &mut folders);
+        self.load_mail_metadata_with_context(scope, &accounts, &folders, profile.as_deref())
             .await
             .map(|mut metadata| {
                 metadata.account_revision = revision;
@@ -388,12 +471,15 @@ impl CoreMailSource {
         scope: Scope,
         accounts: &[Account],
         folders: &[FolderInfo],
+        profile: Option<&[i64]>,
     ) -> Result<MailMetadata, String> {
-        let badges = self
+        let mut badges = self
             .core
             .mailbox_badge_counts()
             .await
             .map_err(|error| error.to_string())?;
+        // Unified totals add up the shown accounts only.
+        badges.retain(|counts| profile_shows(profile, counts.account_id));
         Ok(MailMetadata {
             account_revision: self.account_revision(),
             scope,
@@ -418,15 +504,18 @@ impl CoreMailSource {
             include_counts,
             accounts,
             folders,
+            profile,
+            account_count,
         } = context;
-        let labels = self
+        let mut labels = self
             .core
             .list_labels()
             .await
             .map_err(|error| error.to_string())?;
+        retain_profile_labels(profile, &mut labels);
         let metadata = if include_counts {
             Some(
-                self.load_mail_metadata_with_context(scope, accounts, folders)
+                self.load_mail_metadata_with_context(scope, accounts, folders, profile)
                     .await?,
             )
         } else {
@@ -436,7 +525,18 @@ impl CoreMailSource {
             .as_ref()
             .map(|metadata| metadata.mailboxes.clone())
             .unwrap_or_else(|| mailbox_entries(accounts, folders));
-        let resolved = resolve_scope(scope, folders, &labels);
+        let mut resolved = resolve_scope(scope, folders, &labels);
+        // The mailbox of an account the profile leaves out shows the
+        // profile's inbox instead.
+        if resolved
+            .account_id
+            .is_some_and(|account_id| !profile_shows(profile, account_id))
+        {
+            resolved = resolve_scope(Scope::UNIFIED_INBOX, folders, &labels);
+        }
+        // Unified mailboxes, categories and shared labels cover the profile's
+        // accounts; an account's own mailboxes need no more than its id.
+        let profile_accounts = profile.filter(|_| resolved.account_id.is_none());
 
         let (threads, next_cursor) = if query.trim().is_empty() {
             let cursor = match cursor {
@@ -446,18 +546,33 @@ impl CoreMailSource {
                     return Err("search cursor used for a mailbox".into());
                 }
             };
-            let page = self
-                .core
-                .list_threads(
-                    resolved.view,
-                    resolved.split_id,
-                    resolved.account_id,
-                    resolved.label_id,
-                    resolved.folder_id,
-                    (cursor, limit),
-                )
-                .await
-                .map_err(|error| error.to_string())?;
+            let page = match profile_accounts {
+                Some(accounts) => {
+                    self.core
+                        .list_threads_for_accounts(
+                            resolved.view,
+                            resolved.split_id,
+                            accounts.to_vec(),
+                            resolved.label_id,
+                            resolved.folder_id,
+                            (cursor, limit),
+                        )
+                        .await
+                }
+                None => {
+                    self.core
+                        .list_threads(
+                            resolved.view,
+                            resolved.split_id,
+                            resolved.account_id,
+                            resolved.label_id,
+                            resolved.folder_id,
+                            (cursor, limit),
+                        )
+                        .await
+                }
+            }
+            .map_err(|error| error.to_string())?;
             (page.threads, page.next_cursor.map(MailCursor::Thread))
         } else {
             // The mail list is a timeline: search narrows it, then presents
@@ -468,16 +583,25 @@ impl CoreMailSource {
                 Some(MailCursor::Search(cursor)) => Some(cursor),
                 Some(MailCursor::Thread(_)) => return Err("mailbox cursor used for search".into()),
             };
-            let page = self
-                .core
-                .search_chronological_page(
-                    query.trim().to_owned(),
-                    resolved.account_id,
-                    cursor,
-                    limit,
-                )
-                .await
-                .map_err(|error| error.to_string())?;
+            let query = query.trim().to_owned();
+            let page = match profile_accounts {
+                Some(accounts) => {
+                    self.core
+                        .search_chronological_page_for_accounts(
+                            query,
+                            accounts.to_vec(),
+                            cursor,
+                            limit,
+                        )
+                        .await
+                }
+                None => {
+                    self.core
+                        .search_chronological_page(query, resolved.account_id, cursor, limit)
+                        .await
+                }
+            }
+            .map_err(|error| error.to_string())?;
             (page.threads, page.next_cursor.map(MailCursor::Search))
         };
 
@@ -492,7 +616,7 @@ impl CoreMailSource {
             labels,
             mailboxes,
             next_cursor,
-            account_count: accounts.len(),
+            account_count,
             unified_mailboxes: metadata
                 .map(|metadata| metadata.unified_mailboxes)
                 .unwrap_or_default(),
@@ -947,6 +1071,16 @@ impl CoreMailSource {
     pub async fn delete_mail_profile(&self, profile_id: String) -> Result<Settings, String> {
         self.core
             .delete_mail_profile(profile_id)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_active_mail_profile(
+        &self,
+        profile_id: Option<String>,
+    ) -> Result<Settings, String> {
+        self.core
+            .set_active_mail_profile(profile_id)
             .await
             .map_err(|error| error.to_string())
     }
@@ -3061,6 +3195,154 @@ mod search_pagination_adapter_tests {
                 .collect::<Vec<_>>();
             assert_eq!(ids, (1..=27).rev().collect::<Vec<_>>());
         }
+    }
+
+    #[tokio::test]
+    async fn profile_accounts_limit_pages_search_counts_and_scopes() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = CoreMailSource::start(
+            Paths::for_tests(dir.path()),
+            Arc::new(DevelopmentFileCredentialStore::new(
+                dir.path().join("credentials.json"),
+            )),
+            Arc::new(flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
+        )
+        .await
+        .unwrap();
+        // Account 1 has threads 1-3 and account 2 threads 11-12, all unread
+        // in their inboxes and matching "needle".
+        source
+            .core
+            .db
+            .write(|conn| {
+                for account in [1_i64, 2] {
+                    conn.execute(
+                        "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
+                         VALUES (?1,'fixture'||?1||'@example.test','imap','password','fixture','imap.example.test',993,'smtp.example.test',465,0)",
+                        [account],
+                    )?;
+                    conn.execute(
+                        "INSERT INTO folders (id,account_id,imap_name,role) VALUES (?1,?1,'INBOX','inbox')",
+                        [account],
+                    )?;
+                }
+                for (account, id) in [(1_i64, 1_i64), (1, 2), (1, 3), (2, 11), (2, 12)] {
+                    conn.execute(
+                        "INSERT INTO threads (id,account_id,subject_norm,last_message_at,message_count,unread_count)
+                         VALUES (?2,?1,'needle',?2,1,1)",
+                        [account, id],
+                    )?;
+                    conn.execute(
+                        "INSERT INTO messages (id,account_id,thread_id,folder_id,uid,subject,from_addr,date,is_read,body_state)
+                         VALUES (?2,?1,?2,?1,?2,'Needle','sender@example.test',?2,0,'cached')",
+                        [account, id],
+                    )?;
+                    flectar_mail_core::db::repo::search::index_message(conn, id)?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let listed = |page: &MailPage| {
+            page.messages
+                .iter()
+                .map(|message| message.id)
+                .collect::<Vec<_>>()
+        };
+        let shown_accounts = |mailboxes: &[MailboxEntry]| {
+            let mut accounts = mailboxes
+                .iter()
+                .map(|mailbox| mailbox.account_id)
+                .collect::<Vec<_>>();
+            accounts.dedup();
+            accounts
+        };
+
+        let all = source
+            .load_page(Scope::UNIFIED_INBOX, "", None, 25, false)
+            .await
+            .unwrap();
+        assert_eq!(listed(&all), vec![12, 11, 3, 2, 1]);
+        assert_eq!(
+            source
+                .load_mail_metadata(Scope::UNIFIED_INBOX)
+                .await
+                .unwrap()
+                .inbox_count,
+            5
+        );
+
+        let revision = source.account_revision();
+        assert!(source.set_profile_accounts(Some(vec![2])));
+        assert!(!source.set_profile_accounts(Some(vec![2, 2])));
+        assert_ne!(
+            source.account_revision(),
+            revision,
+            "older pages are retired"
+        );
+
+        let inbox = source
+            .load_page(Scope::UNIFIED_INBOX, "", None, 25, false)
+            .await
+            .unwrap();
+        assert_eq!(listed(&inbox), vec![12, 11]);
+        assert_eq!(shown_accounts(&inbox.mailboxes), vec![2]);
+        assert_eq!(inbox.account_count, 2, "startup still sees every account");
+        let search = source
+            .load_page(Scope::UNIFIED_INBOX, "needle", None, 25, false)
+            .await
+            .unwrap();
+        assert_eq!(listed(&search), vec![12, 11]);
+        // An account the profile leaves out shows the profile's inbox.
+        let hidden = source
+            .load_page(
+                Scope::Account {
+                    account_id: 1,
+                    mailbox: StandardMailbox::Inbox,
+                },
+                "",
+                None,
+                25,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(listed(&hidden), vec![12, 11]);
+        let metadata = source
+            .load_mail_metadata(Scope::UNIFIED_INBOX)
+            .await
+            .unwrap();
+        assert_eq!(metadata.inbox_count, 2);
+        assert_eq!(shown_accounts(&metadata.mailboxes), vec![2]);
+
+        // Startup opens a saved mailbox of a hidden account at the shown
+        // account's inbox, but still reports every account.
+        let (accounts, scope, page) = source
+            .load_startup_page(
+                Scope::Account {
+                    account_id: 1,
+                    mailbox: StandardMailbox::Inbox,
+                },
+                25,
+            )
+            .await
+            .unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(
+            scope,
+            Scope::Account {
+                account_id: 2,
+                mailbox: StandardMailbox::Inbox,
+            }
+        );
+        assert_eq!(listed(&page.unwrap()), vec![12, 11]);
+
+        assert!(source.set_profile_accounts(None));
+        let all = source
+            .load_page(Scope::UNIFIED_INBOX, "needle", None, 25, false)
+            .await
+            .unwrap();
+        assert_eq!(listed(&all), vec![12, 11, 3, 2, 1]);
     }
 }
 

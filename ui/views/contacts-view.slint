@@ -12,7 +12,7 @@ import { LayoutMetrics } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
 import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspacePaneResizeHandle, WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 import { WorkspaceListLoadingRow, WorkspaceListTransition } from "../components/workspace-list.slint";
-import { WindowControlsClearance } from "../window-chrome.slint";
+import { WindowChrome, WindowControlsClearance } from "../window-chrome.slint";
 
 component FieldLabel inherits Text {
     in property <string> label;
@@ -519,15 +519,22 @@ export component ContactsView inherits Rectangle {
             preferred-width: 0px;
             max-width: root.detail-visible ? root.available-width : 0px;
             horizontal-stretch: root.detail-visible ? 1 : 0;
-            background: root.surface-raised;
+            // The raised canvas frames a contact; under the tab strip an empty
+            // detail shares the list's surface instead.
+            background: WindowChrome.top-bar && !root.has-selected ? root.surface : root.surface-raised;
 
             if root.has-selected : VerticalBox {
                 width: parent.width;
                 height: parent.height;
+                // The toolbar spans the pane, on the list's centerline.
+                padding: 0px;
                 spacing: 0px;
 
                     Rectangle {
                     height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
+                    // Under the tab strip the toolbar shares the list's
+                    // surface, so the band below the tabs is one color.
+                    background: WindowChrome.top-bar ? root.surface : transparent;
                     detail-clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
                     HorizontalBox {
                         padding-top: 0px;

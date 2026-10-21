@@ -31,6 +31,7 @@ fn list_ids(conn: &Connection, label_id: Option<i64>) -> Vec<i64> {
             view: View::All,
             tab: label_id.map(repo::threads::TabFilter::ManualLabel),
             account_id: None,
+            account_ids: None,
             folder_id: None,
             cursor: None,
             limit: 50,

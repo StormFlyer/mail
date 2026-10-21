@@ -290,7 +290,7 @@ pub(super) fn refresh_sidebar_with_motion(state: &Rc<RefCell<InboxState>>, anima
         make_filtered_sidebar_rows(mailboxes, labels, query, &gmail_account_ids)
     } else {
         make_sidebar_rows(
-            SidebarLayout::for_account_count(state.connected_accounts.len()),
+            SidebarLayout::for_account_count(state.mail_accounts().len()),
             mailboxes,
             make_mailbox_rows(
                 &state.unified_mailboxes,

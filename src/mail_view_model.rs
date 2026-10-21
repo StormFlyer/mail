@@ -27,33 +27,37 @@ pub(super) fn refresh_from_source(
 /// while scrolling, selection, and the retained Blitz renderer stay on the UI
 /// thread and avoid repeated body preparation.
 ///
-/// The retained tail (everything beyond the refreshed head) is kept as-is
-/// without re-querying it, so it can go stale relative to the backend.
-/// `drop_ids` names messages known to no longer belong in the current view
-/// (e.g. messages the user just archived/spammed/trashed) — the only staleness
-/// this function actively corrects rather than a general tail re-sync, which a
-/// background refresh has no cheap way to verify. Pass an empty slice when the
-/// refresh does not follow a message-moving action.
+/// Refreshes re-read every loaded row up to a bound (`mail_work::refresh_limit`),
+/// so the retained tail (everything beyond the refreshed head) is only rows
+/// past that bound and the oldest rows that new mail pushed out of it. It is
+/// kept as-is without re-querying it, so it can go stale relative to the
+/// backend. `drop_ids` names messages known to no longer belong in the current
+/// view (e.g. messages the user just archived/spammed/trashed) — the only
+/// staleness this function actively corrects in that tail. Pass an empty
+/// slice when the refresh does not follow a message-moving action.
 fn merge_refreshed_mail_head(
     current: Vec<MailMessage>,
     refreshed: Vec<MailMessage>,
     next_cursor: Option<MailCursor>,
     drop_ids: &[i32],
 ) -> (Vec<MailMessage>, bool) {
-    if next_cursor.is_none() || current.len() <= PAGE_SIZE {
+    if next_cursor.is_none() {
         return (refreshed, false);
     }
 
-    // The oldest refreshed row is normally present in the retained model.
-    // Everything after it is the already-loaded tail and can stay untouched.
-    // Looking for the oldest shared row also handles new messages inserted at
-    // the head without requiring a growing refresh query.
-    let tail_start = refreshed
-        .iter()
-        .rev()
-        .find_map(|fresh| current.iter().position(|old| old.id == fresh.id))
+    // The loaded rows after the oldest refreshed row come next in the
+    // mailbox too, so they stay as they are, including rows new mail pushed
+    // out of the refresh. When the oldest refreshed row was never loaded, the
+    // refresh reached past rows that have left, which the loaded rows below
+    // it would bring back, or new mail filled it, which would leave a gap
+    // above them; the refreshed rows replace the list.
+    let Some(tail_start) = refreshed
+        .last()
+        .and_then(|oldest| current.iter().position(|old| old.id == oldest.id))
         .map(|index| index + 1)
-        .unwrap_or_else(|| PAGE_SIZE.min(current.len()));
+    else {
+        return (refreshed, false);
+    };
     let refreshed_len = refreshed.len();
     let mut merged = refreshed;
     let mut known = merged
@@ -105,6 +109,16 @@ pub(super) fn apply_background_mail_page(
     if !snapshot_is_current(state, page.account_revision) {
         return;
     }
+    let deeper = deeper_refresh(&state.borrow(), &page);
+    if let Some(rows) = deeper {
+        if let Err(error) = mail_work::refresh_rows(app, state, runtime, rows, acted_on_ids) {
+            app.set_render_status(UiMessage::detail(
+                "Background mail refresh failed: {}",
+                error,
+            ));
+        }
+        return;
+    }
     let mail::MailPage {
         mut messages,
         labels,
@@ -121,6 +135,7 @@ pub(super) fn apply_background_mail_page(
             state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
+            open_conversation(&state),
         )
         .into_iter()
         .map(|message| message.id)
@@ -165,12 +180,15 @@ pub(super) fn apply_background_mail_page(
                 state.scope,
                 if state.using_core { "" } else { &state.query },
                 &state.search_filter,
+                open_conversation(&state),
             )
             .into_iter()
             .map(|message| message.id)
             .collect::<HashSet<_>>();
             state.selected_id = successor_selection(&old_order, removed_id, &visible);
-            state.preview_closed = false;
+            // With nothing left to move to, the reader closes rather than
+            // jumping to another conversation.
+            state.preview_closed = state.selected_id.is_none();
         }
         removed.is_some()
     };
@@ -195,6 +213,25 @@ pub(super) fn apply_background_mail_page(
     // A live refresh may change both the list height and its continuation
     // cursor. Let the one-shot viewport check prefetch again when necessary.
     app.set_mail_list_revision(app.get_mail_list_revision().wrapping_add(1));
+}
+
+/// Rows to read instead when a refresh shares no row with the list while the
+/// reader shows one of them: new mail filled the refresh and pushed the open
+/// conversation below it. Each read is twice as long, up to one store read.
+fn deeper_refresh(state: &InboxState, page: &mail::MailPage) -> Option<usize> {
+    let open = state.rendered_id?;
+    let read = page.messages.len();
+    let most = usize::try_from(mail_work::refresh_limit(usize::MAX, &state.query)).ok()?;
+    let loaded = state
+        .messages
+        .iter()
+        .map(|row| row.id)
+        .collect::<HashSet<_>>();
+    (page.next_cursor.is_some()
+        && read < most
+        && loaded.contains(&open)
+        && !page.messages.iter().any(|row| loaded.contains(&row.id)))
+    .then_some(read * 2)
 }
 
 pub(super) fn append_mail_page(
@@ -249,6 +286,13 @@ pub(super) fn select_message(
         };
         if state.query.trim().is_empty() && app.get_group_mail_by_date() {
             state.mail_groups.reveal(&mail_group_key(date_ms, Local::now()));
+        }
+        // A restored tab's open message belongs to its own conversation.
+        if state
+            .restore_thread_message
+            .is_some_and(|(conversation, _)| conversation != id)
+        {
+            state.restore_thread_message = None;
         }
         state.selected_id = Some(id);
         state.preview_closed = false;
@@ -317,9 +361,14 @@ pub(super) fn render_current(
             release_unselected_bodies(&mut state.messages, selected);
         }
     }
-    let (email_renderer, use_wgpu) = {
+    let (email_renderer, use_wgpu, open) = {
         let state = state.borrow();
-        (Rc::clone(&state.email_renderer), state.use_wgpu)
+        (
+            Rc::clone(&state.email_renderer),
+            state.use_wgpu,
+            // Both projections below list the same rows.
+            open_conversation(&state),
+        )
     };
     let (
         scope,
@@ -343,6 +392,7 @@ pub(super) fn render_current(
             state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
+            open,
         );
         let visible_count = if state.using_core {
             messages.len()
@@ -419,6 +469,7 @@ pub(super) fn render_current(
             state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
+            open,
         );
         let visible = &messages[..visible_count];
         let selected_email = selected_id
@@ -796,21 +847,29 @@ pub(super) fn release_unselected_bodies(messages: &mut [MailMessage], selected: 
     }
 }
 
+/// The rows the list shows. `open`, the conversation in the reader, stays
+/// listed when it stops matching the quick filter, as when opening an unread
+/// message marks it read; a refresh then cannot move the selection, which
+/// reader actions apply to, onto another row.
 pub(super) fn filtered_messages<'a>(
     messages: &'a [MailMessage],
     scope: Scope,
     query: &str,
     search_filter: &str,
+    open: Option<i32>,
 ) -> Vec<&'a MailMessage> {
     let query = query.trim().to_lowercase();
     messages
         .iter()
         .filter(|email| scope_matches(email, scope))
-        .filter(|email| match search_filter {
-            "Unread" => email.unread,
-            "Starred" => email.starred,
-            "Has attachments" => email.has_attachments,
-            _ => true,
+        .filter(|email| {
+            Some(email.id) == open
+                || match search_filter {
+                    "Unread" => email.unread,
+                    "Starred" => email.starred,
+                    "Has attachments" => email.has_attachments,
+                    _ => true,
+                }
         })
         .filter(|email| {
             if query.is_empty() {
@@ -828,6 +887,12 @@ pub(super) fn filtered_messages<'a>(
             .any(|field| field.to_lowercase().contains(&query))
         })
         .collect()
+}
+
+/// The conversation the reader shows, which the list keeps showing; see
+/// `filtered_messages`.
+pub(super) fn open_conversation(state: &InboxState) -> Option<i32> {
+    state.selected_id.filter(|_| !state.preview_closed)
 }
 
 pub(super) fn scope_matches(email: &MailMessage, scope: Scope) -> bool {
@@ -1044,6 +1109,7 @@ pub(super) fn refresh_rows_only(
             state.scope,
             if state.using_core { "" } else { &state.query },
             &state.search_filter,
+            open_conversation(&state),
         );
         let visible_count = if state.using_core {
             messages.len()
@@ -1186,6 +1252,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
                 state.scope,
                 &state.query,
                 &state.search_filter,
+                open_conversation(&state),
             )
             .len();
             paged_visible_count(state.page, total) < total
@@ -1685,6 +1752,7 @@ mod tests {
                 color: "#EA580C".into(),
                 account_ids: vec![1],
             }],
+            active_profile: None,
             show_markers: true,
             account_colors: HashMap::new(),
             account_short_names: HashMap::from([("1".into(), "Client".into())]),
@@ -1755,7 +1823,7 @@ mod tests {
         messages[0].folder = "Inbox".into();
         messages[1].folder = "Archive".into();
         messages[0].html = Some("large selected body".repeat(1_000));
-        let filtered = filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "All mail");
+        let filtered = filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "All mail", None);
         assert_eq!(filtered.len(), 1);
         assert!(std::ptr::eq(filtered[0], &messages[0]));
         assert_eq!(filtered[0].html.as_ref().unwrap().as_ptr(), messages[0].html.as_ref().unwrap().as_ptr());
@@ -1811,6 +1879,70 @@ mod tests {
         carry_selected_detail(&mut old, &mut fresh, Some(2));
         assert!(fresh[0].html.is_none());
         assert!(old[1].html.is_some());
+    }
+
+    #[test]
+    fn refresh_without_a_shared_row_drops_the_old_rows() {
+        let current = (1..=50).map(message).collect::<Vec<_>>();
+        let refreshed = (101..=150).map(message).collect::<Vec<_>>();
+        let (merged, retained_tail) = merge_refreshed_mail_head(
+            current,
+            refreshed,
+            Some(MailCursor::Thread(ThreadCursor {
+                last_message_at: 0,
+                thread_id: 150,
+            })),
+            &[],
+        );
+        assert!(!retained_tail);
+        assert_eq!(
+            merged.iter().map(|row| row.id).collect::<Vec<_>>(),
+            (101..=150).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_row_removed_from_the_end_does_not_return_below_older_mail() {
+        // Row 50 left the mailbox, so the refresh of 50 rows reaches row 51.
+        let current = (1..=50).map(message).collect::<Vec<_>>();
+        let refreshed = (1..=49).chain([51]).map(message).collect::<Vec<_>>();
+        let (merged, retained_tail) = merge_refreshed_mail_head(
+            current,
+            refreshed,
+            Some(MailCursor::Thread(ThreadCursor {
+                last_message_at: 0,
+                thread_id: 51,
+            })),
+            &[],
+        );
+        assert!(!retained_tail);
+        assert_eq!(
+            merged.iter().map(|row| row.id).collect::<Vec<_>>(),
+            (1..=49).chain([51]).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_short_list_keeps_the_rows_new_mail_pushes_down() {
+        let current = (1..=PAGE_SIZE as i32).map(message).collect::<Vec<_>>();
+        let refreshed = (101..=106)
+            .chain(1..=PAGE_SIZE as i32 - 6)
+            .map(message)
+            .collect::<Vec<_>>();
+        let (merged, retained_tail) = merge_refreshed_mail_head(
+            current,
+            refreshed,
+            Some(MailCursor::Thread(ThreadCursor {
+                last_message_at: 0,
+                thread_id: PAGE_SIZE as i64 - 6,
+            })),
+            &[],
+        );
+        assert!(retained_tail);
+        assert_eq!(
+            merged.iter().map(|row| row.id).collect::<Vec<_>>(),
+            (101..=106).chain(1..=PAGE_SIZE as i32).collect::<Vec<_>>()
+        );
     }
 
     #[test]

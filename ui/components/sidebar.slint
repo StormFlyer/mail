@@ -1,10 +1,11 @@
 import { ScrollFade } from "scroll-fade.slint";
 import { ListView, VerticalBox } from "std-widgets.slint";
-import { SidebarRow, SidebarRowKind } from "../models.slint";
+import { MailProfileRow, SidebarRow, SidebarRowKind } from "../models.slint";
 import { SidebarItem, SidebarSectionHeader } from "sidebar-controls.slint";
 import { SidebarStyle } from "sidebar-row.slint";
 import { Button } from "button.slint";
 import { IconButton, LineEdit } from "controls.slint";
+import { ProfileSwitcher } from "profile-switcher.slint";
 import {
     CollapsibleWorkspaceSidebar,
     WorkspaceMiniHeading,
@@ -28,9 +29,18 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     in property <color> title-color;
     in property <color> body-color;
     in property <color> muted-color;
+    // Without the tab bar, the profile pill heads the sidebar once there
+    // are profiles to choose from.
+    in property <bool> show-profiles: false;
+    in property <[MailProfileRow]> profiles: [];
+    in property <MailProfileRow> active-profile;
+    in property <int> account-count;
     callback select-scope(string);
     callback compose;
     callback manage-accounts;
+    callback choose-profile(string);
+    callback create-profile();
+    callback manage-profiles();
     callback toggle-folder(int, bool);
     callback toggle-section(string, bool);
     callback filter-folders(string);
@@ -60,6 +70,20 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
         height: parent.height - LayoutMetrics.sidebar-action-top;
         padding: 0px;
         spacing: 8px;
+
+        if root.show-profiles && root.profiles.length > 0 : HorizontalLayout {
+            alignment: start;
+            ProfileSwitcher {
+                height: 36px;
+                widest: root.width - 2 * LayoutMetrics.sidebar-inset;
+                profiles: root.profiles;
+                active: root.active-profile;
+                account-count: root.account-count;
+                choose(id) => { root.choose-profile(id); }
+                create-profile => { root.create-profile(); }
+                manage-profiles => { root.manage-profiles(); }
+            }
+        }
 
         Button {
             height: LayoutMetrics.sidebar-action-height;

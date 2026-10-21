@@ -1,7 +1,8 @@
 //! Background startup snapshot and coalesced core-event ingestion.
 
 use crate::{
-    AccountRow, AppTheme, AppWindow, InboxState, MessageColors, PAGE_SIZE,
+    AccountPresentationSettings, AccountRow, AppTheme, AppWindow, InboxState, MessageColors,
+    PAGE_SIZE,
     account_controller::apply_connected_account_rows,
     avatar_initials,
     calendar::{
@@ -233,6 +234,9 @@ pub(crate) struct WarmStartSnapshot {
     pub(crate) inbox_count: usize,
     pub(crate) next_cursor: Option<ThreadCursor>,
     pub(crate) accounts: Vec<Account>,
+    /// The active profile's accounts, which the saved rows show.
+    #[serde(default)]
+    pub(crate) profile_accounts: Option<Vec<i64>>,
     pub(crate) messages: Vec<WarmStartMessage>,
     pub(crate) mailboxes: Vec<WarmStartMailbox>,
     pub(crate) unified_mailboxes: Vec<WarmStartMailbox>,
@@ -243,6 +247,7 @@ pub(crate) struct WarmStartProjection<'a> {
     pub(crate) inbox_count: usize,
     pub(crate) next_cursor: Option<ThreadCursor>,
     pub(crate) accounts: &'a [Account],
+    pub(crate) profile_accounts: Option<&'a [i64]>,
     pub(crate) messages: &'a [mail::MailMessage],
     pub(crate) mailboxes: &'a [mail::MailboxEntry],
     pub(crate) unified_mailboxes: &'a [mail::MailboxEntry],
@@ -262,6 +267,7 @@ impl WarmStartSnapshot {
                 .take(MAX_WARM_START_ACCOUNTS)
                 .cloned()
                 .collect(),
+            profile_accounts: projection.profile_accounts.map(<[i64]>::to_vec),
             messages: projection
                 .messages
                 .iter()
@@ -330,6 +336,9 @@ pub(crate) fn apply_warm_start_snapshot(
         // Core remains unset: cached rows are only a presentation until local
         // storage is ready, and the startup guard keeps actions inert.
         state.using_core = true;
+        // The saved rows show the profile's accounts; so do the sidebar and
+        // scope until settings load.
+        state.profile_accounts = snapshot.profile_accounts;
         let _ = state.set_connected_accounts(snapshot.accounts);
         state.set_scope(snapshot.scope);
         state.inbox_count = snapshot.inbox_count;
@@ -549,18 +558,21 @@ pub(crate) async fn load_startup_snapshot(
 ) -> Result<StartupSnapshot, String> {
     let core = CoreMailSource::start(paths, credentials, oauth_redirects).await?;
     metrics.emit("core_opened", serde_json::Value::Null);
-    let (mail, configs, settings) = tokio::join!(
+    // The first page shows only the active profile's accounts.
+    let settings = core.load_settings().await.ok();
+    let _ = core.set_profile_accounts(settings.as_ref().and_then(|settings| {
+        AccountPresentationSettings::from_settings(settings).active_profile_accounts()
+    }));
+    let (mail, configs) = tokio::join!(
         // Counts walk every mailbox and can dominate startup on a large local
         // store. The first useful frame only needs one bounded page; sidebar
         // totals arrive as a separate progressive update.
         core.load_startup_page(preferred_scope, PAGE_SIZE as i64),
         core.load_account_configs(),
-        core.load_settings(),
     );
 
     let (accounts, scope, page) =
         mail.unwrap_or_else(|_| (Vec::new(), Scope::UNIFIED_INBOX, None));
-    let settings = settings.ok();
     metrics.emit(
         "startup_queries_loaded",
         serde_json::json!({
@@ -944,6 +956,7 @@ mod warm_start_tests {
             inbox_count: 3,
             next_cursor: None,
             accounts: &[account()],
+            profile_accounts: None,
             messages: &[message()],
             mailboxes: &mailboxes,
             unified_mailboxes: &[],
@@ -1160,6 +1173,7 @@ mod warm_start_tests {
                 thread_id: 7,
             }),
             accounts: &accounts,
+            profile_accounts: Some(&[7]),
             messages: &messages,
             mailboxes: &mailboxes,
             unified_mailboxes: &[],
@@ -1173,6 +1187,7 @@ mod warm_start_tests {
 
         let restored = load_warm_start_snapshot(&path).await.unwrap();
         assert_eq!(restored.scope, PERSON_INBOX);
+        assert_eq!(restored.profile_accounts, Some(vec![7]));
         assert_eq!(restored.messages.len(), 1);
         let restored_message = mail::MailMessage::from(restored.messages[0].clone());
         assert_eq!(restored_message.subject, "Cached subject");
@@ -1224,6 +1239,7 @@ mod warm_start_tests {
             inbox_count: messages.len(),
             next_cursor: None,
             accounts: &accounts,
+            profile_accounts: None,
             messages: &messages,
             mailboxes: &mailboxes,
             unified_mailboxes: &[],
@@ -1241,5 +1257,7 @@ mod warm_start_tests {
 
         assert!(snapshot.is_valid());
         assert_eq!(snapshot.messages.len(), 3);
+        // Caches written before profiles filtered mail show every account.
+        assert_eq!(snapshot.profile_accounts, None);
     }
 }

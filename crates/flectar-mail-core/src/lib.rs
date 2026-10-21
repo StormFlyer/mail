@@ -108,6 +108,23 @@ fn normalize_mail_profile_name(value: &str) -> Result<String> {
     Ok(value.to_owned())
 }
 
+/// The mail view only shows a profile that exists and has accounts. Drop it
+/// once a deletion or membership change leaves neither.
+fn retire_active_mail_profile(settings: &mut Settings) {
+    let showable = settings
+        .active_mail_profile
+        .as_deref()
+        .is_some_and(|active| {
+            settings
+                .mail_profiles
+                .iter()
+                .any(|profile| profile.id == active && !profile.account_ids.is_empty())
+        });
+    if !showable {
+        settings.active_mail_profile = None;
+    }
+}
+
 fn normalize_mail_profile_color(value: &str) -> Result<String> {
     let value = value.trim();
     let valid = value.len() == 7
@@ -1772,6 +1789,7 @@ impl Core {
                 for profile in &mut settings.mail_profiles {
                     profile.account_ids.retain(|id| *id != account_id);
                 }
+                retire_active_mail_profile(&mut settings);
                 let account_key = account_id.to_string();
                 settings.account_colors.remove(&account_key);
                 settings.account_short_names.remove(&account_key);
@@ -2116,8 +2134,54 @@ impl Core {
         folder_id: Option<i64>,
         page: impl Into<ThreadPageRequest>,
     ) -> Result<ThreadPage> {
+        self.list_threads_where(
+            view,
+            split_id,
+            account_id,
+            None,
+            label_id,
+            folder_id,
+            page.into(),
+        )
+        .await
+    }
+
+    /// `list_threads` across a set of accounts, such as a mail profile's,
+    /// instead of one account or all of them. An empty set lists nothing.
+    pub async fn list_threads_for_accounts(
+        &self,
+        view: View,
+        split_id: Option<i64>,
+        account_ids: Vec<i64>,
+        label_id: Option<i64>,
+        folder_id: Option<i64>,
+        page: impl Into<ThreadPageRequest>,
+    ) -> Result<ThreadPage> {
+        self.list_threads_where(
+            view,
+            split_id,
+            None,
+            Some(account_ids),
+            label_id,
+            folder_id,
+            page.into(),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn list_threads_where(
+        &self,
+        view: View,
+        split_id: Option<i64>,
+        account_id: Option<i64>,
+        account_ids: Option<Vec<i64>>,
+        label_id: Option<i64>,
+        folder_id: Option<i64>,
+        page: ThreadPageRequest,
+    ) -> Result<ThreadPage> {
         use repo::threads::TabFilter;
-        let ThreadPageRequest { cursor, limit } = page.into();
+        let ThreadPageRequest { cursor, limit } = page;
         // A category label filters to its single resolved tab; a manual label is
         // a cross-cutting filter. Split conventions: -1 = Important, -2 = Other,
         // positive ids = custom split tabs.
@@ -2148,6 +2212,7 @@ impl Core {
                         view,
                         tab,
                         account_id,
+                        account_ids,
                         folder_id,
                         cursor,
                         limit: limit.clamp(1, 200),
@@ -2208,6 +2273,7 @@ impl Core {
                         view,
                         tab,
                         account_id,
+                        account_ids: None,
                         folder_id,
                         cursor: None,
                         limit: 1,
@@ -5960,6 +6026,31 @@ impl Core {
     ) -> Result<models::SearchPage> {
         let mut parsed = search::parse(&query);
         parsed.account_id = account_id;
+        self.search_chronological_parsed(parsed, cursor, limit)
+            .await
+    }
+
+    /// `search_chronological_page` across a set of accounts, such as a mail
+    /// profile's. An empty set matches nothing.
+    pub async fn search_chronological_page_for_accounts(
+        &self,
+        query: String,
+        account_ids: Vec<i64>,
+        cursor: Option<models::SearchCursor>,
+        limit: i64,
+    ) -> Result<models::SearchPage> {
+        let mut parsed = search::parse(&query);
+        parsed.account_ids = Some(account_ids);
+        self.search_chronological_parsed(parsed, cursor, limit)
+            .await
+    }
+
+    async fn search_chronological_parsed(
+        &self,
+        parsed: search::ParsedQuery,
+        cursor: Option<models::SearchCursor>,
+        limit: i64,
+    ) -> Result<models::SearchPage> {
         let limit = limit.clamp(1, 100);
         self.db
             .read(move |conn| repo::search::chronological_page(conn, &parsed, cursor, limit))
@@ -7110,6 +7201,7 @@ impl Core {
                     profile.account_ids.push(account_id);
                     profile.account_ids.sort_unstable();
                 }
+                retire_active_mail_profile(&mut settings);
                 repo::settings::set(conn, &settings)?;
                 Ok(settings)
             })
@@ -7136,6 +7228,7 @@ impl Core {
                 for profile in &mut settings.mail_profiles {
                     profile.account_ids.retain(|id| *id != account_id);
                 }
+                retire_active_mail_profile(&mut settings);
                 let key = account_id.to_string();
                 if let Some(color) = color {
                     settings.account_colors.insert(key, color);
@@ -7161,6 +7254,36 @@ impl Core {
                 if settings.mail_profiles.len() == before {
                     return Err(CoreError::NotFound(format!("mail profile {profile_id}")));
                 }
+                retire_active_mail_profile(&mut settings);
+                repo::settings::set(conn, &settings)?;
+                Ok(settings)
+            })
+            .await
+    }
+
+    /// Show only one profile's accounts in the mail view, or every account
+    /// with `None`. The profile must have at least one account.
+    pub async fn set_active_mail_profile(&self, profile_id: Option<String>) -> Result<Settings> {
+        let profile_id = profile_id
+            .map(|id| id.trim().to_owned())
+            .filter(|id| !id.is_empty());
+        self.db
+            .write(move |conn| {
+                let mut settings = repo::settings::get(conn)?;
+                if let Some(id) = &profile_id {
+                    let profile = settings
+                        .mail_profiles
+                        .iter()
+                        .find(|profile| &profile.id == id)
+                        .ok_or_else(|| CoreError::NotFound(format!("mail profile {id}")))?;
+                    if profile.account_ids.is_empty() {
+                        return Err(CoreError::Other(format!(
+                            "mail profile {:?} has no accounts",
+                            profile.name
+                        )));
+                    }
+                }
+                settings.active_mail_profile = profile_id;
                 repo::settings::set(conn, &settings)?;
                 Ok(settings)
             })

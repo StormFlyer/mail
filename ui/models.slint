@@ -159,6 +159,20 @@ export struct MailProfileRow {
     account_count: int,
 }
 
+// An account in the profile editor's checklist; checked accounts belong to
+// the profile being edited.
+export struct ProfileMemberRow {
+    id: int,
+    name: string,
+    email: string,
+    initials: string,
+    avatar: image,
+    has_avatar: bool,
+    // The other profile the account is in now; empty when none.
+    other_profile: string,
+    checked: bool,
+}
+
 // Messages remain separate inside a conversation. The native side keeps the
 // bodies and renderer state; this lightweight model is safe to virtualize even
 // for long threads.

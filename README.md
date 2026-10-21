@@ -128,11 +128,16 @@ inbox more room when you need it.
 ### 👥 Profiles and account colors
 
 Group related accounts into named profiles such as Work or Personal, then give
-each profile its own color. In Settings → Accounts → Profiles, you can assign
-accounts, override an individual account's color, and show the effective color
-along the left edge of every message. The markers make accounts easy to tell
-apart while working in the unified inbox; the example below uses purple for Work
-and orange for Support.
+each profile its own color. Create a profile from the profile menu at the start
+of the tab bar, or in Settings → Accounts → Profiles, and check the accounts
+that belong to it. Choose a profile in that menu to focus the mail view on its
+accounts: the unified inbox, search, counts, and sidebar show only their mail,
+while your tabs stay the same. **All accounts** shows everything again.
+
+You can also override an individual account's color and show the effective
+color along the left edge of every message. The markers make accounts easy to
+tell apart while working in the unified inbox; the example below uses purple
+for Work and orange for Support.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
@@ -162,15 +167,18 @@ layout, arrow keys highlight messages and **Enter** opens them; **Escape** or
 ### 🗂️ Tabs
 
 Keep several places open at once with browser-style tabs. Each tab remembers
-its own location: a mailbox, search, or open conversation, or the calendar,
-contacts, or files. Middle-click or Ctrl/⌘-click a message to open it in a
-background tab (add Shift to switch to it), or choose **Open in new tab** from
-its menu. Drag tabs to reorder them, middle-click a tab to close it, and pick
-up where you left off the next time you open Flectar Mail.
+its own place: a mailbox, search, or open conversation, the calendar,
+contacts, files, or Settings, along with how far you scrolled the list and the
+message you were reading. Middle-click or Ctrl/⌘-click a message to open it in
+a background tab (add Shift to switch to it), or choose **Open in new tab**
+from its menu. Drag tabs to reorder them, middle-click a tab to close it,
+right-click a tab to close the others or those to its right, and pick up where
+you left off the next time you open Flectar Mail.
 
-**Ctrl/⌘+T** opens a new tab and **Ctrl/⌘+W** closes the current one.
-**Ctrl+Tab** and **Ctrl+Shift+Tab** cycle through tabs, **Ctrl/⌘+1–8** jump to
-a tab, and **Ctrl/⌘+9** jumps to the last.
+**Ctrl/⌘+T** opens a new tab, **Ctrl/⌘+W** closes the current one, and
+**Ctrl/⌘+Shift+T** reopens the last tab you closed. **Ctrl+Tab** and
+**Ctrl+Shift+Tab** cycle through tabs, **Ctrl/⌘+1–8** jump to a tab, and
+**Ctrl/⌘+9** jumps to the last.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">

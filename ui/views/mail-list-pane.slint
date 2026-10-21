@@ -180,6 +180,8 @@ export component MailListPane inherits Rectangle {
     in property <bool> sync_in_progress: false;
     in property <bool> can_load_more: false;
     in property <bool> loading_more: false;
+    // Only the pane on screen scrolls back for a shown tab; both exist.
+    in property <bool> restores-scroll: true;
     in property <int> content_revision: 0;
     in property <int> selection-count: 0;
     private property <bool> selection-mode: root.selection-count > 0;
@@ -249,6 +251,8 @@ export component MailListPane inherits Rectangle {
     }
 
     function move-cursor(movement: string, step: int, preview: bool) {
+        // Moving by keyboard ends a shown tab's scroll restore.
+        if movement != "current" { TabsUi.list-restore = -1px; }
         let target = MailListNavigation.target(root.list_entries, root.keyboard-email-id, movement, step);
         if target.id < 0 || root.list_entries.length == 0 {
             root.keyboard-email-id = -1;
@@ -297,6 +301,69 @@ export component MailListPane inherits Rectangle {
         root.keyboard-entry-index = -1;
         mail-list-scroll.content-y = 0px;
         pagination.reset();
+        // Going to another mailbox drops a position meant for the last one.
+        if !root.restore-view-shown() { TabsUi.list-restore = -1px; }
+        root.restore-scroll();
+    }
+    // A shown tab's list position. It is applied once the rows are laid out
+    // and again while more rows arrive, until the user scrolls or the list
+    // settles.
+    function restore-scroll() {
+        if !root.scroll-restorable() {
+            return;
+        }
+        root.apply-restored-scroll();
+        // A far jump starts the list at the top of a row; the rest of the
+        // offset is applied once that row is laid out. `restart` alone only
+        // re-arms a timer that has run before.
+        restore-refine.start();
+        restore-refine.restart();
+        restore-settle.start();
+        restore-settle.restart();
+        // A position past the loaded rows asks for the next page.
+        if TabsUi.list-restore > mail-list-scroll.content-height - mail-list-scroll.visible-height {
+            pagination.user-scrolled();
+        }
+    }
+    function restore-view-shown() -> bool {
+        return TabsUi.list-restore-view == root.selected_scope + "\n" + root.search_query + "\n" + root.search_filter;
+    }
+    function scroll-restorable() -> bool {
+        return root.restores-scroll && TabsUi.list-restore >= 0px && root.restore-view-shown()
+            && root.list_entries.length > 0 && mail-list-scroll.visible-height > 0px
+            && mail-list-scroll.content-height > 0px;
+    }
+    function apply-restored-scroll() {
+        let bottom = max(0px, mail-list-scroll.content-height - mail-list-scroll.visible-height);
+        mail-list-scroll.content-y = -min(TabsUi.list-restore, bottom);
+    }
+    private property <int> restore-request: TabsUi.list-restore-request;
+    private property <length> list-content-height: mail-list-scroll.content-height;
+    // The last tab's wait for its rows does not end this one's.
+    changed restore-request => {
+        restore-settle.stop();
+        root.restore-scroll();
+    }
+    changed list-content-height => { root.restore-scroll(); }
+    init => { root.restore-scroll(); }
+    restore-refine := Timer {
+        interval: 1ms;
+        running: false;
+        triggered => {
+            self.stop();
+            if root.scroll-restorable() { root.apply-restored-scroll(); }
+        }
+    }
+    restore-settle := Timer {
+        interval: 600ms;
+        running: false;
+        // The list, or a page the restore asked for, may still be on its way.
+        triggered => {
+            if !root.loading && !root.loading_more {
+                self.stop();
+                TabsUi.list-restore = -1px;
+            }
+        }
     }
     changed selected_scope => { root.reset-pagination(); }
     changed search_query => { root.reset-pagination(); }
@@ -538,6 +605,7 @@ export component MailListPane inherits Rectangle {
                             accessible-item-count: root.emails.length;
                             accessible-delegate-focus: list-keyboard.has-focus ? root.keyboard-entry-index : -1;
                             scrolled => {
+                                TabsUi.list-restore = -1px;
                                 pagination.user-scrolled();
                             }
 
