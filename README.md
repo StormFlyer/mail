@@ -361,8 +361,8 @@ you to sign in again.
 The same import also brings accounts over from Thunderbird (a profile folder,
 its Tools › Export archive, or `prefs.js`) and from Thunderbird for Android or
 K-9 Mail (`.k9s` settings exports). You review each account before anything is
-added: settings Flectar Mail can't reproduce, such as POP3 or unencrypted
-servers, are explained instead of changed silently. Existing accounts are never
+added: settings Flectar Mail can't reproduce, such as POP3 servers, are
+explained instead of changed silently. Existing accounts are never
 modified, and passwords are never imported.
 
 <picture>

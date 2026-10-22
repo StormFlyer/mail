@@ -25,6 +25,7 @@ pub mod mail_security;
 pub mod migration;
 pub mod mime;
 pub mod models;
+pub mod net;
 pub mod oauth;
 pub mod queue;
 pub mod route;
@@ -188,7 +189,7 @@ fn normalize_account_email(value: &str) -> Option<String> {
 /// Rules every account created from portable or migrated settings must
 /// satisfy. Interactive setup checks the same fields as the user types them.
 pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Result<()> {
-    imap::trusted_certificates(&config.settings.connection.trusted_certificate_pem)?;
+    net::tls::trusted_certificates(&config.settings.connection.trusted_certificate_pem)?;
     let email = config.email.trim();
     if email.len() > 320 || !email.contains('@') {
         return Err(CoreError::Other(format!(
@@ -215,6 +216,14 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
     if !supported {
         return Err(CoreError::Other(format!(
             "unsupported sign-in type for {email}"
+        )));
+    }
+    let connection = &config.settings.connection;
+    if config.auth_kind == AuthKind::Oauth2
+        && !(connection.incoming_security.is_encrypted() && connection.smtp_security.is_encrypted())
+    {
+        return Err(CoreError::Other(format!(
+            "{email} signs in with OAuth, which needs encrypted connections"
         )));
     }
     let complete = match config.mail_protocol {
@@ -1082,7 +1091,7 @@ impl Core {
     }
 
     pub async fn add_account_password(&self, args: AddPasswordAccountArgs) -> Result<Account> {
-        imap::trusted_certificates(&args.connection.trusted_certificate_pem)?;
+        net::tls::trusted_certificates(&args.connection.trusted_certificate_pem)?;
         let email = normalize_account_email(&args.email)
             .ok_or_else(|| CoreError::Auth("enter a valid email address".into()))?;
         let mut args = AddPasswordAccountArgs {
@@ -9194,6 +9203,21 @@ mod account_backup_import_tests {
             smtp_port: 465,
             settings: crate::db::testutil::account_settings(),
         }
+    }
+
+    #[test]
+    fn only_password_accounts_may_connect_without_encryption() {
+        let mut plain = portable_imap("plain@example.com");
+        plain.settings.connection.incoming_security = ConnectionSecurity::None;
+        plain.settings.connection.smtp_security = ConnectionSecurity::None;
+        validate_portable_account(&plain).unwrap();
+
+        let mut microsoft = portable_imap("oauth@example.com");
+        microsoft.provider = Provider::Microsoft;
+        microsoft.auth_kind = AuthKind::Oauth2;
+        validate_portable_account(&microsoft).unwrap();
+        microsoft.settings.connection.smtp_security = ConnectionSecurity::None;
+        assert!(validate_portable_account(&microsoft).is_err());
     }
 
     #[tokio::test]

@@ -1701,6 +1701,7 @@ export component SettingsDialog inherits Rectangle {
                             for account[account-index] in root.connected_accounts : drop-target := DropArea {
                                 private property <length> divider-y: account.sync_error != "" ? sync-error.y + sync-error.height + 4px : account-header.height;
                                 private property <bool> has-sent-copy: account.provider != "gmail" && account.mail_protocol == "imap";
+                                private property <bool> unencrypted: account.incoming_security == "none" || account.smtp_security == "none";
                                 // Preference rows keep their designed gaps below the last select row.
                                 private property <length> profile-y: self.has-sent-copy
                                     ? sent-copy-row.y + sent-copy-row.height + (root.compact ? 10px : 8px)
@@ -1766,7 +1767,7 @@ export component SettingsDialog inherits Rectangle {
                                             spacing: 2px;
                                             account-name := Text { height: max(19px, self.preferred-height); text: account.name; color: root.heading; font-size: TypeScale.body-large; font-weight: 700; overflow: elide; }
                                             account-email := Text { height: max(16px, self.preferred-height); text: account.email; color: root.secondary-text; font-size: TypeScale.caption; overflow: elide; }
-                                            account-state := Text { height: max(16px, self.preferred-height); text: account.status == "offline" ? @tr("Offline · retrying automatically") : account.status == "needs_reauth" ? @tr("Sign-in required") : account.status == "syncing" ? @tr("Syncing…") : account.status == "idle" ? (account.mail_protocol == "gmail" ? @tr("Connected · Gmail") : account.mail_protocol == "jmap" ? @tr("Connected · JMAP") : @tr("Connected · IMAP + SMTP")) : @tr("Account status: {}", account.status); color: account.status == "needs_reauth" ? #c0392b : root.faint-text; font-size: TypeScale.caption; overflow: elide; }
+                                            account-state := Text { height: max(16px, self.preferred-height); text: account.status == "offline" ? @tr("Offline · retrying automatically") : account.status == "needs_reauth" ? @tr("Sign-in required") : account.status == "syncing" ? @tr("Syncing…") : account.status == "idle" ? (account.mail_protocol == "gmail" ? @tr("Connected · Gmail") : account.mail_protocol == "jmap" ? @tr("Connected · JMAP") : drop-target.unencrypted ? @tr("Connected without encryption · IMAP + SMTP") : @tr("Connected · IMAP + SMTP")) : @tr("Account status: {}", account.status); color: account.status == "needs_reauth" ? #c0392b : account.status == "idle" && drop-target.unencrypted ? AppTheme.destructive : root.faint-text; font-size: TypeScale.caption; overflow: elide; }
                                         }
                                         AccountActions {
                                             edit-label: account.provider == "generic" ? @tr("Edit") : @tr("Reconnect");

@@ -275,7 +275,7 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
 
 「设置 → 存储」会显示邮件、附件、离线文件和数据库在本机占用的空间。在同一页面中，你可以导出经过校验的数据库快照，也可以通过备份迁移已连接账户的配置与偏好设置。密码和 OAuth 令牌保存在系统密钥环中，因此恢复后的设备会要求你重新登录。
 
-同一导入功能还可以从 Thunderbird（配置文件夹、「工具 › 导出」生成的归档或 `prefs.js`）以及 Android 版 Thunderbird 或 K-9 Mail（`.k9s` 设置导出）迁移账户。添加之前你会逐一检查每个账户：Flectar Mail 无法沿用的设置（例如 POP3 或未加密的服务器）会说明原因，而不会被悄悄更改。现有账户不会被修改，密码也永远不会被导入。
+同一导入功能还可以从 Thunderbird（配置文件夹、「工具 › 导出」生成的归档或 `prefs.js`）以及 Android 版 Thunderbird 或 K-9 Mail（`.k9s` 设置导出）迁移账户。添加之前你会逐一检查每个账户：Flectar Mail 无法沿用的设置（例如 POP3 服务器）会说明原因，而不会被悄悄更改。现有账户不会被修改，密码也永远不会被导入。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">

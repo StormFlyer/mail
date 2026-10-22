@@ -15,16 +15,25 @@ export component MailSecurityFields inherits VerticalBox {
     in property <bool> enabled: true;
     callback import-certificate();
     private property <bool> certificate-expanded: false;
+    private property <bool> uses-tls: root.incoming-security != "none" || root.smtp-security != "none";
     spacing: 8px;
     padding: 0px;
     vertical-stretch: 0;
 
     pure function standard-incoming-port(security: string) -> string {
-        return security == "starttls" ? "143" : "993";
+        return security == "tls" ? "993" : "143";
     }
 
     pure function standard-smtp-port(security: string) -> string {
-        return security == "starttls" ? "587" : "465";
+        return security == "tls" ? "465" : "587";
+    }
+
+    pure function security-index(security: string) -> int {
+        return security == "starttls" ? 1 : security == "none" ? 2 : 0;
+    }
+
+    pure function security-at(index: int) -> string {
+        return index == 1 ? "starttls" : index == 2 ? "none" : "tls";
     }
 
     function choose-incoming-security(security: string) {
@@ -47,8 +56,11 @@ export component MailSecurityFields inherits VerticalBox {
         min-width: 0px;
         padding: 0px;
         spacing: 8px;
+        // Equal columns whatever each selection's label length.
         VerticalBox {
             min-width: 0px;
+            preferred-width: 0px;
+            horizontal-stretch: 1;
             padding: 0px;
             spacing: 4px;
             Text { text: @tr("IMAP encryption"); color: AppTheme.secondary; font-size: TypeScale.caption; }
@@ -56,13 +68,15 @@ export component MailSecurityFields inherits VerticalBox {
                 height: 36px;
                 min-width: 0px;
                 enabled: root.enabled;
-                model: ["SSL/TLS", "STARTTLS"];
-                current-index: root.incoming-security == "starttls" ? 1 : 0;
-                selected(value) => { root.choose-incoming-security(self.current-index == 1 ? "starttls" : "tls"); }
+                model: ["SSL/TLS", "STARTTLS", @tr("None (unencrypted)")];
+                current-index: root.security-index(root.incoming-security);
+                selected(value) => { root.choose-incoming-security(root.security-at(self.current-index)); }
             }
         }
         VerticalBox {
             min-width: 0px;
+            preferred-width: 0px;
+            horizontal-stretch: 1;
             padding: 0px;
             spacing: 4px;
             Text { text: @tr("SMTP encryption"); color: AppTheme.secondary; font-size: TypeScale.caption; }
@@ -70,20 +84,24 @@ export component MailSecurityFields inherits VerticalBox {
                 height: 36px;
                 min-width: 0px;
                 enabled: root.enabled;
-                model: ["SSL/TLS", "STARTTLS"];
-                current-index: root.smtp-security == "starttls" ? 1 : 0;
-                selected(value) => { root.choose-smtp-security(self.current-index == 1 ? "starttls" : "tls"); }
+                model: ["SSL/TLS", "STARTTLS", @tr("None (unencrypted)")];
+                current-index: root.security-index(root.smtp-security);
+                selected(value) => { root.choose-smtp-security(root.security-at(self.current-index)); }
             }
         }
     }
-    Button {
+    if root.incoming-security == "none" || root.smtp-security == "none" : Text {
+        text: @tr("Without encryption, anyone on the network can read your password and mail. Use this only with a server on a network you trust.");
+        color: AppTheme.destructive; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height;
+    }
+    if root.uses-tls : Button {
         height: 36px;
         text: root.certificate-pem != "" ? @tr("Manage trusted certificate") : @tr("Custom server certificate…");
         label-overflow: elide;
         enabled: root.enabled;
         clicked => { root.certificate-expanded = !root.certificate-expanded; }
     }
-    if root.certificate-expanded : VerticalBox {
+    if root.uses-tls && root.certificate-expanded : VerticalBox {
         padding: 0px;
         spacing: 8px;
         Text {
@@ -95,7 +113,7 @@ export component MailSecurityFields inherits VerticalBox {
         Text { text: @tr("PEM certificate only. Do not paste a private key."); color: AppTheme.secondary; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height; }
         if root.certificate-pem != "" : Button { height: 36px; text: @tr("Remove certificate"); label-overflow: elide; enabled: root.enabled; clicked => { root.certificate-pem = ""; } }
     }
-    if root.certificate-pem != "" && !root.certificate-expanded : Text {
+    if root.uses-tls && root.certificate-pem != "" && !root.certificate-expanded : Text {
         text: @tr("Custom certificate added for this account."); color: AppTheme.secondary; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height;
     }
 }

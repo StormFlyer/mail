@@ -79,8 +79,9 @@ global ImportText {
         if code == "incoming-protocol-unsupported" { return @tr("The incoming server {} uses a protocol Flectar Mail does not support.", detail); }
         if code == "missing-outgoing-server" { return @tr("No outgoing mail server is configured."); }
         if code == "outgoing-protocol-unsupported" { return @tr("The outgoing server {} uses a protocol Flectar Mail does not support.", detail); }
-        if code == "unencrypted-incoming" { return @tr("The incoming server {} is not encrypted. Flectar Mail only connects with SSL/TLS or STARTTLS.", detail); }
-        if code == "unencrypted-outgoing" { return @tr("The outgoing server {} is not encrypted. Flectar Mail only connects with SSL/TLS or STARTTLS.", detail); }
+        if code == "unencrypted-incoming" { return @tr("The incoming server {} is not encrypted, so your password and mail cross the network unprotected.", detail); }
+        if code == "unencrypted-outgoing" { return @tr("The outgoing server {} is not encrypted, so your password and mail cross the network unprotected.", detail); }
+        if code == "unprotected-password" { return @tr("{} keeps your password off its unencrypted connection, but Flectar Mail would send it in the clear. Turn on SSL/TLS or STARTTLS for this server first.", detail); }
         // Methods with a product name share one sentence; the others are worded.
         if code == "incoming-sign-in-unsupported" && detail == "none" { return @tr("The incoming server connects without signing in, which Flectar Mail does not support."); }
         if code == "incoming-sign-in-unsupported" && detail == "client certificate" { return @tr("The incoming server signs in with a client certificate, which Flectar Mail does not support."); }

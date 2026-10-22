@@ -130,9 +130,14 @@ pub enum FindingCode {
     IncomingProtocolUnsupported,
     MissingOutgoingServer,
     OutgoingProtocolUnsupported,
-    /// Flectar only connects with TLS or required STARTTLS; detail is the host.
+    /// The server is not encrypted and Flectar connects to it the same way;
+    /// detail is the host.
     UnencryptedIncoming,
     UnencryptedOutgoing,
+    /// The source keeps the password off an unencrypted connection (CRAM-MD5
+    /// or OAuth), but Flectar would send it there in the clear; detail is
+    /// the host.
+    UnprotectedPassword,
     /// Client certificates, Kerberos, NTLM, or no authentication.
     IncomingSignInUnsupported,
     OutgoingSignInUnsupported,
@@ -180,8 +185,7 @@ impl FindingCode {
             | Self::IncomingProtocolUnsupported
             | Self::MissingOutgoingServer
             | Self::OutgoingProtocolUnsupported
-            | Self::UnencryptedIncoming
-            | Self::UnencryptedOutgoing
+            | Self::UnprotectedPassword
             | Self::IncomingSignInUnsupported
             | Self::OutgoingSignInUnsupported
             | Self::SeparateOutgoingLogin
@@ -189,7 +193,9 @@ impl FindingCode {
             | Self::InvalidServer
             | Self::DuplicateInSource
             | Self::OAuthLoginUnsupported => Severity::Blocking,
-            Self::PasswordMechanismChanged
+            Self::UnencryptedIncoming
+            | Self::UnencryptedOutgoing
+            | Self::PasswordMechanismChanged
             | Self::MicrosoftSignInReplacesPassword
             | Self::GoogleSignInReplacesPassword
             | Self::OAuthReplacedByPassword
@@ -211,6 +217,7 @@ impl FindingCode {
             Self::OutgoingProtocolUnsupported => "outgoing-protocol-unsupported",
             Self::UnencryptedIncoming => "unencrypted-incoming",
             Self::UnencryptedOutgoing => "unencrypted-outgoing",
+            Self::UnprotectedPassword => "unprotected-password",
             Self::IncomingSignInUnsupported => "incoming-sign-in-unsupported",
             Self::OutgoingSignInUnsupported => "outgoing-sign-in-unsupported",
             Self::SeparateOutgoingLogin => "separate-outgoing-login",
@@ -495,7 +502,9 @@ fn password_mapping(
             &incoming.host,
         ));
     }
-    if [incoming.auth, outgoing.auth].contains(&SourceAuth::EncryptedPassword) {
+    if [incoming, outgoing].iter().any(|server| {
+        server.auth == SourceAuth::EncryptedPassword && server.security != SourceSecurity::None
+    }) {
         findings.push(Finding::new(FindingCode::PasswordMechanismChanged, ""));
     }
     if blocking_count(findings) > blocked_before {
@@ -531,9 +540,20 @@ fn check_security(
     match server.security {
         SourceSecurity::Tls => Some(ConnectionSecurity::Tls),
         SourceSecurity::Starttls => Some(ConnectionSecurity::Starttls),
+        // Flectar signs in with the password itself. A source that kept it
+        // off this connection must not be downgraded to sending it in clear.
+        SourceSecurity::None
+            if matches!(
+                server.auth,
+                SourceAuth::EncryptedPassword | SourceAuth::OAuth2
+            ) =>
+        {
+            findings.push(Finding::new(FindingCode::UnprotectedPassword, &server.host));
+            None
+        }
         SourceSecurity::None => {
             findings.push(Finding::new(unencrypted, &server.host));
-            None
+            Some(ConnectionSecurity::None)
         }
         SourceSecurity::Unknown => {
             findings.push(Finding::new(FindingCode::InvalidServer, &server.host));
@@ -839,12 +859,13 @@ mod tests {
     }
 
     #[test]
-    fn unencrypted_connections_are_never_upgraded_silently() {
+    fn unencrypted_servers_import_unencrypted_with_a_notice() {
         let mut account = candidate("me@example.com");
         account.incoming.as_mut().unwrap().security = SourceSecurity::None;
+        account.incoming.as_mut().unwrap().port = Some(143);
         account.outgoing.as_mut().unwrap().security = SourceSecurity::None;
         let plan = plan_one(account);
-        assert_eq!(plan.status, PlanStatus::Unsupported);
+        assert_eq!(plan.status, PlanStatus::Ready);
         assert_eq!(
             codes(&plan),
             [
@@ -852,7 +873,30 @@ mod tests {
                 FindingCode::UnencryptedOutgoing
             ]
         );
-        assert!(plan.draft.is_none());
+        let connection = &plan.draft.unwrap().config.settings.connection;
+        assert_eq!(connection.incoming_security, ConnectionSecurity::None);
+        assert_eq!(connection.smtp_security, ConnectionSecurity::None);
+    }
+
+    #[test]
+    fn a_password_the_source_kept_off_an_unencrypted_connection_stays_off() {
+        for auth in [SourceAuth::EncryptedPassword, SourceAuth::OAuth2] {
+            let mut account = candidate("me@example.com");
+            let incoming = account.incoming.as_mut().unwrap();
+            incoming.security = SourceSecurity::None;
+            incoming.auth = auth;
+            let plan = plan_one(account);
+            assert_eq!(plan.status, PlanStatus::Unsupported, "{auth:?}");
+            assert!(codes(&plan).contains(&FindingCode::UnprotectedPassword));
+            assert!(!codes(&plan).contains(&FindingCode::PasswordMechanismChanged));
+        }
+
+        // Over TLS the same password is still protected.
+        let mut account = candidate("me@example.com");
+        account.incoming.as_mut().unwrap().auth = SourceAuth::EncryptedPassword;
+        let plan = plan_one(account);
+        assert_eq!(plan.status, PlanStatus::Ready);
+        assert_eq!(codes(&plan), [FindingCode::PasswordMechanismChanged]);
     }
 
     #[test]
