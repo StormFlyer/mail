@@ -172,9 +172,9 @@ mod tests {
         let conn = testutil::conn();
         conn.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
              VALUES (1, 'me@gmail.com', 'gmail', 'oauth2', 'me@gmail.com',
-                     'unused', 993, 'unused', 465, 0)",
+                     'unused', 993, 'unused', 465, 0, 'gmail', '{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();

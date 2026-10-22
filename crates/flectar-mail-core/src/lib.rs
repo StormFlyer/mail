@@ -198,43 +198,62 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
     }
     if config.username.len() > 512
         || config.jmap_url.len() > 2048
-        || config.imap_host.len() > 253
+        || config.incoming_host.len() > 253
         || config.smtp_host.len() > 253
     {
         return Err(CoreError::Other("an account field is too long".into()));
     }
-    let valid_pair = matches!(
-        (config.provider, config.auth_kind),
-        (Provider::Imap, AuthKind::Password)
-            | (Provider::Gmail, AuthKind::Oauth2)
-            | (Provider::Microsoft, AuthKind::Oauth2)
-    );
-    if !valid_pair {
+    let account_kind = (config.provider, config.auth_kind);
+    let supported = match config.mail_protocol {
+        MailProtocol::Gmail => account_kind == (Provider::Gmail, AuthKind::Oauth2),
+        MailProtocol::Imap => matches!(
+            account_kind,
+            (Provider::Generic, AuthKind::Password) | (Provider::Microsoft, AuthKind::Oauth2)
+        ),
+        MailProtocol::Jmap => account_kind == (Provider::Generic, AuthKind::Password),
+    };
+    if !supported {
         return Err(CoreError::Other(format!(
             "unsupported sign-in type for {email}"
         )));
     }
-    if config.provider == Provider::Imap
-        && config.mail_protocol == MailProtocol::Imap
-        && (config.username.trim().is_empty()
-            || config.imap_host.trim().is_empty()
-            || config.smtp_host.trim().is_empty()
-            || config.imap_port == 0
-            || config.smtp_port == 0)
-    {
+    let complete = match config.mail_protocol {
+        // Provider presets own the server settings of OAuth accounts.
+        MailProtocol::Gmail => true,
+        MailProtocol::Imap if config.provider == Provider::Microsoft => true,
+        MailProtocol::Imap => {
+            !config.username.trim().is_empty()
+                && !config.incoming_host.trim().is_empty()
+                && !config.smtp_host.trim().is_empty()
+                && config.incoming_port != 0
+                && config.smtp_port != 0
+        }
+        MailProtocol::Jmap => !config.username.trim().is_empty(),
+    };
+    if !complete {
         return Err(CoreError::Other(format!(
-            "incomplete IMAP settings for {email}"
-        )));
-    }
-    if config.provider == Provider::Imap
-        && config.mail_protocol == MailProtocol::Jmap
-        && config.username.trim().is_empty()
-    {
-        return Err(CoreError::Other(format!(
-            "incomplete JMAP settings for {email}"
+            "incomplete {} settings for {email}",
+            config.mail_protocol.as_str().to_ascii_uppercase()
         )));
     }
     Ok(())
+}
+
+/// Separator between the levels of a stored folder path. JMAP paths are
+/// composed by Flectar from mailbox names; IMAP servers and Gmail labels
+/// report their own.
+fn folder_path_delimiter(protocol: MailProtocol, folder: &repo::folders::Folder) -> String {
+    match protocol {
+        MailProtocol::Jmap => " / ".to_owned(),
+        MailProtocol::Gmail | MailProtocol::Imap => {
+            folder.delimiter.clone().unwrap_or_else(|| "/".into())
+        }
+    }
+}
+
+/// Gmail mail is only reachable through Google sign-in.
+fn gmail_needs_google_sign_in() -> CoreError {
+    CoreError::Auth("Gmail accounts sign in with Google, not with a password".into())
 }
 
 fn normalize_account_password(value: String) -> String {
@@ -334,7 +353,7 @@ fn oauth_calendar_scopes(provider: Provider, enabled: bool) -> &'static [&'stati
             oauth::providers::MS_ONLINE_MEETINGS_SCOPE,
             oauth::providers::MS_CALENDARS_SCOPE,
         ],
-        Provider::Imap => &[],
+        Provider::Generic => &[],
     }
 }
 
@@ -885,7 +904,7 @@ impl Core {
                     if repo::accounts::find_by_email(&transaction, config.email.trim())?.is_some() {
                         continue;
                     }
-                    let account_id = repo::accounts::insert(
+                    repo::accounts::insert_with_sync_state(
                         &transaction,
                         &repo::accounts::NewAccount {
                             email: config.email.trim(),
@@ -897,14 +916,14 @@ impl Core {
                             username: config.username.trim(),
                             jmap_url: config.jmap_url.trim(),
                             jmap_account_id: None,
-                            imap_host: config.imap_host.trim(),
-                            imap_port: config.imap_port,
+                            incoming_host: config.incoming_host.trim(),
+                            incoming_port: config.incoming_port,
                             smtp_host: config.smtp_host.trim(),
                             smtp_port: config.smtp_port,
                         },
+                        &config.settings,
+                        "needs_reauth",
                     )?;
-                    repo::accounts::set_settings(&transaction, account_id, &config.settings)?;
-                    repo::accounts::set_sync_state(&transaction, account_id, "needs_reauth")?;
                     imported += 1;
                 }
                 transaction.commit()?;
@@ -944,15 +963,15 @@ impl Core {
 
                 config.settings.mail_history = mail_history;
                 repo::accounts::set_settings(&transaction, account_id, &config.settings)?;
-                match (config.provider, config.mail_protocol) {
-                    (Provider::Gmail, _) => repo::gmail::expire_history(&transaction, account_id)?,
-                    (_, MailProtocol::Jmap) => {
+                match config.mail_protocol {
+                    MailProtocol::Gmail => repo::gmail::expire_history(&transaction, account_id)?,
+                    MailProtocol::Jmap => {
                         transaction.execute(
                             "UPDATE jmap_sync_state SET email_state = NULL WHERE account_id = ?1",
                             rusqlite::params![account_id],
                         )?;
                     }
-                    (Provider::Imap | Provider::Microsoft, MailProtocol::Imap) => {
+                    MailProtocol::Imap => {
                         repo::folders::reopen_backfill_for_account(&transaction, account_id)?;
                     }
                 }
@@ -998,8 +1017,8 @@ impl Core {
     pub async fn test_connection(&self, args: &AddPasswordAccountArgs) -> ConnectionTestResult {
         let mut args = args.clone();
         args.password = normalize_account_password(args.password);
-        if args.mail_protocol == MailProtocol::Jmap {
-            return match crate::jmap::client::connect_with(
+        let result = match args.mail_protocol {
+            MailProtocol::Jmap => crate::jmap::client::connect_with(
                 &args.email,
                 &args.username,
                 &args.password,
@@ -1007,25 +1026,22 @@ impl Core {
                 None,
             )
             .await
-            {
-                Ok(_) => ConnectionTestResult {
-                    ok: true,
-                    error: None,
-                },
-                Err(error) => ConnectionTestResult {
-                    ok: false,
-                    error: Some(error.to_client_json()),
-                },
-            };
-        }
-        match self.check_imap_smtp(&args).await {
+            .map(|_| ())
+            .map_err(|error| error.to_client_json()),
+            MailProtocol::Imap => self
+                .check_imap_smtp(&args)
+                .await
+                .map_err(|error| error.to_string()),
+            MailProtocol::Gmail => Err(gmail_needs_google_sign_in().to_string()),
+        };
+        match result {
             Ok(()) => ConnectionTestResult {
                 ok: true,
                 error: None,
             },
-            Err(e) => ConnectionTestResult {
+            Err(error) => ConnectionTestResult {
                 ok: false,
-                error: Some(e.to_string()),
+                error: Some(error),
             },
         }
     }
@@ -1035,9 +1051,13 @@ impl Core {
             user: args.username.clone(),
             password: args.password.clone(),
         };
-        let mut session =
-            imap::connect_with_settings(&args.imap_host, args.imap_port, creds, &args.connection)
-                .await?;
+        let mut session = imap::connect_with_settings(
+            &args.incoming_host,
+            args.incoming_port,
+            creds,
+            &args.connection,
+        )
+        .await?;
         let mailbox_result = imap::select(&mut session, "INBOX").await.map(|_| ());
         imap::logout(session).await;
         mailbox_result?;
@@ -1046,20 +1066,17 @@ impl Core {
             email: args.email.clone(),
             display_name: None,
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: args.username.clone(),
             jmap_url: String::new(),
             jmap_account_id: None,
-            imap_host: args.imap_host.clone(),
-            imap_port: args.imap_port,
+            incoming_host: args.incoming_host.clone(),
+            incoming_port: args.incoming_port,
             smtp_host: args.smtp_host.clone(),
             smtp_port: args.smtp_port,
-            settings: AccountSettings {
-                connection: args.connection.clone(),
-                ..Default::default()
-            },
+            settings: AccountSettings::new(args.connection.clone()),
         };
         smtp::test_connection(&config, &smtp::SmtpAuth::Password(args.password.clone())).await
     }
@@ -1078,8 +1095,8 @@ impl Core {
             password: normalize_account_password(args.password),
             mail_protocol: args.mail_protocol,
             jmap_url: args.jmap_url.trim().to_owned(),
-            imap_host: args.imap_host.trim().to_owned(),
-            imap_port: args.imap_port,
+            incoming_host: args.incoming_host.trim().to_owned(),
+            incoming_port: args.incoming_port,
             smtp_host: args.smtp_host.trim().to_owned(),
             smtp_port: args.smtp_port,
             connection: args.connection,
@@ -1092,29 +1109,29 @@ impl Core {
         }
         if args.username.len() > 512
             || args.jmap_url.len() > 2048
-            || args.imap_host.len() > 253
+            || args.incoming_host.len() > 253
             || args.smtp_host.len() > 253
         {
             return Err(CoreError::Auth("an account field is too long".into()));
         }
-        if args.mail_protocol == MailProtocol::Imap
-            && (args.imap_host.is_empty()
-                || args.smtp_host.is_empty()
-                || args.imap_port == 0
-                || args.smtp_port == 0)
-        {
-            return Err(CoreError::Auth(
-                "IMAP and SMTP server hosts and ports are required".into(),
-            ));
-        }
-        let args = if args.mail_protocol == MailProtocol::Jmap {
-            AddPasswordAccountArgs {
-                jmap_url: crate::jmap::client::normalize_base_url(&args.jmap_url, &args.email)?,
-                ..args
+        match args.mail_protocol {
+            MailProtocol::Imap => {
+                if args.incoming_host.is_empty()
+                    || args.smtp_host.is_empty()
+                    || args.incoming_port == 0
+                    || args.smtp_port == 0
+                {
+                    return Err(CoreError::Auth(
+                        "IMAP and SMTP server hosts and ports are required".into(),
+                    ));
+                }
             }
-        } else {
-            args
-        };
+            MailProtocol::Jmap => {
+                args.jmap_url =
+                    crate::jmap::client::normalize_base_url(&args.jmap_url, &args.email)?;
+            }
+            MailProtocol::Gmail => return Err(gmail_needs_google_sign_in()),
+        }
 
         credentials::check_available_async(self.credentials.clone()).await?;
         self.recover_incomplete_account_credentials().await?;
@@ -1122,8 +1139,8 @@ impl Core {
         // Verify credentials before storing anything. For JMAP, also pin the
         // exact Mail account selected from the authenticated Session so a
         // later reconnect can never drift to a different shared account.
-        let jmap_account_id = if args.mail_protocol == MailProtocol::Jmap {
-            Some(
+        let jmap_account_id = match args.mail_protocol {
+            MailProtocol::Jmap => Some(
                 crate::jmap::client::connect_with(
                     &args.email,
                     &args.username,
@@ -1133,10 +1150,12 @@ impl Core {
                 )
                 .await?
                 .account_id,
-            )
-        } else {
-            self.check_imap_smtp(&args).await?;
-            None
+            ),
+            MailProtocol::Imap => {
+                self.check_imap_smtp(&args).await?;
+                None
+            }
+            MailProtocol::Gmail => return Err(gmail_needs_google_sign_in()),
         };
 
         let existing = self
@@ -1149,7 +1168,7 @@ impl Core {
         let is_new_account = existing.is_none();
 
         let id = if let Some(existing) = existing {
-            if existing.provider != Provider::Imap || existing.auth_kind != AuthKind::Password {
+            if existing.provider != Provider::Generic || existing.auth_kind != AuthKind::Password {
                 return Err(CoreError::Auth(format!(
                     "{} is already connected through {}; reconnect it through that provider",
                     existing.email,
@@ -1178,14 +1197,14 @@ impl Core {
                             email: &a.email,
                             display_name: a.display_name.as_deref(),
                             avatar_url: None,
-                            provider: Provider::Imap,
+                            provider: Provider::Generic,
                             auth_kind: AuthKind::Password,
                             mail_protocol: a.mail_protocol,
                             username: &a.username,
                             jmap_url: &a.jmap_url,
                             jmap_account_id: remote_account.as_deref(),
-                            imap_host: &a.imap_host,
-                            imap_port: a.imap_port,
+                            incoming_host: &a.incoming_host,
+                            incoming_port: a.incoming_port,
                             smtp_host: &a.smtp_host,
                             smtp_port: a.smtp_port,
                         },
@@ -1223,24 +1242,20 @@ impl Core {
                             email: &a.email,
                             display_name: a.display_name.as_deref(),
                             avatar_url: None,
-                            provider: Provider::Imap,
+                            provider: Provider::Generic,
                             auth_kind: AuthKind::Password,
                             mail_protocol: a.mail_protocol,
                             username: &a.username,
                             jmap_url: &a.jmap_url,
                             jmap_account_id: remote_account.as_deref(),
-                            imap_host: &a.imap_host,
-                            imap_port: a.imap_port,
+                            incoming_host: &a.incoming_host,
+                            incoming_port: a.incoming_port,
                             smtp_host: &a.smtp_host,
                             smtp_port: a.smtp_port,
                         },
+                        &AccountSettings::new(a.connection.clone()),
                         repo::accounts::CREDENTIAL_SETUP_STATE,
                     )?;
-                    let settings = AccountSettings {
-                        connection: a.connection.clone(),
-                        ..Default::default()
-                    };
-                    repo::accounts::set_settings(&transaction, id, &settings)?;
                     transaction.commit()?;
                     Ok(id)
                 })
@@ -1407,7 +1422,7 @@ impl Core {
                     self.connect_microsoft_calendar(account.id, open_url)
                         .await?;
                 }
-                Provider::Imap => {}
+                Provider::Generic => {}
             }
         }
         Ok(account)
@@ -1422,7 +1437,7 @@ impl Core {
         let servers = match provider {
             Provider::Gmail => &accounts::providers::GMAIL,
             Provider::Microsoft => &accounts::providers::MICROSOFT,
-            Provider::Imap => return Err(CoreError::Auth("not an oauth provider".into())),
+            Provider::Generic => return Err(CoreError::Auth("not an oauth provider".into())),
         };
         credentials::check_available_async(self.credentials.clone()).await?;
         self.recover_incomplete_account_credentials().await?;
@@ -1514,15 +1529,16 @@ impl Core {
                         avatar_url: avatar_url.as_deref(),
                         provider,
                         auth_kind: AuthKind::Oauth2,
-                        mail_protocol: MailProtocol::Imap,
+                        mail_protocol: servers.mail_protocol,
                         username: &email,
                         jmap_url: "",
                         jmap_account_id: None,
-                        imap_host: servers.imap_host,
-                        imap_port: servers.imap_port,
+                        incoming_host: servers.incoming_host,
+                        incoming_port: servers.incoming_port,
                         smtp_host: servers.smtp_host,
                         smtp_port: servers.smtp_port,
                     },
+                    &AccountSettings::new(servers.connection()),
                     repo::accounts::CREDENTIAL_SETUP_STATE,
                 )
             })
@@ -1588,7 +1604,7 @@ impl Core {
                 oauth::providers::MS_CALENDARS_SCOPE,
             ],
             Provider::Gmail => &[],
-            Provider::Imap => return Err(CoreError::Auth("not an oauth provider".into())),
+            Provider::Generic => return Err(CoreError::Auth("not an oauth provider".into())),
         };
         credentials::check_available_async(self.credentials.clone()).await?;
         let outcome = tokio::select! {
@@ -2880,104 +2896,108 @@ impl Core {
             Some(folder_id) => Some(self.folder_for_child(account_id, folder_id).await?),
             None => None,
         };
-        if config.provider == Provider::Gmail {
-            if name.contains('/') {
-                return Err(CoreError::Other(
-                    "folder names cannot contain the hierarchy separator \"/\"".into(),
-                ));
-            }
-            let full_name = parent
-                .as_ref()
-                .map(|parent| format!("{}/{}", parent.path, name))
-                .unwrap_or(name);
-            sync::gmail::create_user_folder(&self.sync_ctx(), &config, &full_name).await?;
-        } else if config.mail_protocol == MailProtocol::Jmap {
-            let secret =
-                credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
-                    .await?;
-            let connected = jmap::client::connect(&config, &secret).await?;
-            if parent.is_none() && !connected.may_create_top_level_mailbox {
-                return Err(CoreError::Other(
-                    "the server does not allow creating top-level mailboxes".into(),
-                ));
-            }
-            let parent_remote = parent.as_ref().and_then(|folder| folder.jmap_id.clone());
-            let parent_local_id = parent.as_ref().map(|folder| folder.id);
-            let mailbox = connected
-                .mailbox_create(&name, parent_remote, jmap_client::mailbox::Role::None)
-                .await
-                .map_err(jmap::client::map_error)?;
-            let rights = mailbox.my_rights();
-            let permissions = repo::folders::FolderPermissions {
-                can_create_children: rights.is_some_and(|rights| rights.may_create_child()),
-                can_rename: rights.is_some_and(|rights| rights.may_rename()),
-                can_delete: rights.is_some_and(|rights| rights.may_delete()),
-            };
-            let remote_id = mailbox
-                .id()
-                .ok_or_else(|| CoreError::Jmap("Mailbox/set returned no id".into()))?
-                .to_owned();
-            let display_path = parent
-                .as_ref()
-                .map(|parent| format!("{} / {name}", parent.path))
-                .unwrap_or(name);
-            self.db
-                .write(move |conn| {
-                    let folder_id = repo::folders::upsert_jmap(
-                        conn,
-                        account_id,
-                        &remote_id,
-                        &display_path,
-                        None,
-                    )?;
-                    repo::folders::set_parent(conn, folder_id, parent_local_id)?;
-                    repo::folders::set_permissions(conn, folder_id, permissions)?;
-                    Ok(())
-                })
-                .await?;
-        } else {
-            let delimiter = match parent.as_ref().and_then(|folder| folder.delimiter.clone()) {
-                Some(delimiter) if !delimiter.is_empty() => delimiter,
-                _ => {
-                    self.db
-                        .read(move |conn| {
-                            Ok(repo::folders::list(conn, Some(account_id))?
-                                .into_iter()
-                                .find_map(|folder| {
-                                    folder.delimiter.filter(|value| !value.is_empty())
-                                })
-                                .unwrap_or_else(|| "/".into()))
-                        })
-                        .await?
+        match config.mail_protocol {
+            MailProtocol::Gmail => {
+                if name.contains('/') {
+                    return Err(CoreError::Other(
+                        "folder names cannot contain the hierarchy separator \"/\"".into(),
+                    ));
                 }
-            };
-            if name.contains(&delimiter) {
-                return Err(CoreError::Other(format!(
-                    "folder names cannot contain the hierarchy separator {delimiter:?}"
-                )));
+                let full_name = parent
+                    .as_ref()
+                    .map(|parent| format!("{}/{}", parent.path, name))
+                    .unwrap_or(name);
+                sync::gmail::create_user_folder(&self.sync_ctx(), &config, &full_name).await?;
             }
-            let encoded_leaf = imap::encode_mailbox_name(&name);
-            let parent_local_id = parent.as_ref().map(|folder| folder.id);
-            let remote_name = parent
-                .as_ref()
-                .map(|parent| format!("{}{delimiter}{encoded_leaf}", parent.path))
-                .unwrap_or(encoded_leaf);
-            let mut session = self.connect_folder_imap(&config).await?;
-            imap::create_folder(&mut session, &remote_name).await?;
-            imap::logout(session).await;
-            self.db
-                .write(move |conn| {
-                    let folder_id = repo::folders::upsert(
-                        conn,
-                        account_id,
-                        &remote_name,
-                        Some(&delimiter),
-                        None,
-                    )?;
-                    repo::folders::set_parent(conn, folder_id, parent_local_id)?;
-                    Ok(())
-                })
-                .await?;
+            MailProtocol::Jmap => {
+                let secret =
+                    credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+                        .await?;
+                let connected = jmap::client::connect(&config, &secret).await?;
+                if parent.is_none() && !connected.may_create_top_level_mailbox {
+                    return Err(CoreError::Other(
+                        "the server does not allow creating top-level mailboxes".into(),
+                    ));
+                }
+                let parent_remote = parent.as_ref().and_then(|folder| folder.jmap_id.clone());
+                let parent_local_id = parent.as_ref().map(|folder| folder.id);
+                let mailbox = connected
+                    .mailbox_create(&name, parent_remote, jmap_client::mailbox::Role::None)
+                    .await
+                    .map_err(jmap::client::map_error)?;
+                let rights = mailbox.my_rights();
+                let permissions = repo::folders::FolderPermissions {
+                    can_create_children: rights.is_some_and(|rights| rights.may_create_child()),
+                    can_rename: rights.is_some_and(|rights| rights.may_rename()),
+                    can_delete: rights.is_some_and(|rights| rights.may_delete()),
+                };
+                let remote_id = mailbox
+                    .id()
+                    .ok_or_else(|| CoreError::Jmap("Mailbox/set returned no id".into()))?
+                    .to_owned();
+                let display_path = parent
+                    .as_ref()
+                    .map(|parent| format!("{} / {name}", parent.path))
+                    .unwrap_or(name);
+                self.db
+                    .write(move |conn| {
+                        let folder_id = repo::folders::upsert_jmap(
+                            conn,
+                            account_id,
+                            &remote_id,
+                            &display_path,
+                            None,
+                        )?;
+                        repo::folders::set_parent(conn, folder_id, parent_local_id)?;
+                        repo::folders::set_permissions(conn, folder_id, permissions)?;
+                        Ok(())
+                    })
+                    .await?;
+            }
+            MailProtocol::Imap => {
+                let delimiter = match parent.as_ref().and_then(|folder| folder.delimiter.clone()) {
+                    Some(delimiter) if !delimiter.is_empty() => delimiter,
+                    _ => {
+                        self.db
+                            .read(move |conn| {
+                                Ok(repo::folders::list(conn, Some(account_id))?
+                                    .into_iter()
+                                    .find_map(|folder| {
+                                        folder.delimiter.filter(|value| !value.is_empty())
+                                    })
+                                    .unwrap_or_else(|| "/".into()))
+                            })
+                            .await?
+                    }
+                };
+                if name.contains(&delimiter) {
+                    return Err(CoreError::Other(format!(
+                        "folder names cannot contain the hierarchy separator {delimiter:?}"
+                    )));
+                }
+                let encoded_leaf = imap::encode_mailbox_name(&name);
+                let parent_local_id = parent.as_ref().map(|folder| folder.id);
+                let remote_name = parent
+                    .as_ref()
+                    .map(|parent| format!("{}{delimiter}{encoded_leaf}", parent.path))
+                    .unwrap_or(encoded_leaf);
+                let mut session = self.connect_folder_imap(&config).await?;
+                imap::create_folder(&mut session, &remote_name).await?;
+                imap::logout(session).await;
+                self.db
+                    .write(move |conn| {
+                        let folder_id = repo::folders::upsert(
+                            conn,
+                            account_id,
+                            &remote_name,
+                            Some(&delimiter),
+                            None,
+                        )?;
+                        repo::folders::set_parent(conn, folder_id, parent_local_id)?;
+                        Ok(())
+                    })
+                    .await?;
+            }
         }
         self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
         Ok(())
@@ -3000,11 +3020,7 @@ impl Core {
         }
         let account_id = folder.account_id;
         let config = self.folder_account_config(account_id).await?;
-        let delimiter = if config.mail_protocol == MailProtocol::Jmap {
-            " / ".to_owned()
-        } else {
-            folder.delimiter.clone().unwrap_or_else(|| "/".into())
-        };
+        let delimiter = folder_path_delimiter(config.mail_protocol, &folder);
         if name.contains(&delimiter) {
             return Err(CoreError::Other(format!(
                 "folder names cannot contain the hierarchy separator {delimiter:?}"
@@ -3012,46 +3028,54 @@ impl Core {
         }
         let old_name = folder.path.clone();
         let parent_prefix = old_name.rsplit_once(&delimiter).map(|(parent, _)| parent);
-        if config.provider == Provider::Gmail {
-            let full_name = parent_prefix
-                .map(|parent| format!("{parent}{delimiter}{name}"))
-                .unwrap_or(name);
-            sync::gmail::rename_user_folder(&self.sync_ctx(), &config, folder_id, &full_name)
-                .await?;
-        } else if config.mail_protocol == MailProtocol::Jmap {
-            let secret =
-                credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+        match config.mail_protocol {
+            MailProtocol::Gmail => {
+                let full_name = parent_prefix
+                    .map(|parent| format!("{parent}{delimiter}{name}"))
+                    .unwrap_or(name);
+                sync::gmail::rename_user_folder(&self.sync_ctx(), &config, folder_id, &full_name)
                     .await?;
-            let connected = jmap::client::connect(&config, &secret).await?;
-            let remote_id = folder
-                .jmap_id
-                .as_deref()
-                .ok_or_else(|| CoreError::NotFound(format!("remote folder {folder_id}")))?;
-            connected
-                .mailbox_rename(remote_id, &name)
-                .await
-                .map_err(jmap::client::map_error)?;
-            let new_name = parent_prefix
-                .map(|parent| format!("{parent}{delimiter}{name}"))
-                .unwrap_or(name);
-            self.db
-                .write(move |conn| {
-                    repo::folders::rename_tree(conn, account_id, &old_name, &new_name, &delimiter)
-                })
-                .await?;
-        } else {
-            let encoded = imap::encode_mailbox_name(&name);
-            let new_name = parent_prefix
-                .map(|parent| format!("{parent}{delimiter}{encoded}"))
-                .unwrap_or(encoded);
-            let mut session = self.connect_folder_imap(&config).await?;
-            imap::rename_folder(&mut session, &old_name, &new_name).await?;
-            imap::logout(session).await;
-            self.db
-                .write(move |conn| {
-                    repo::folders::rename_tree(conn, account_id, &old_name, &new_name, &delimiter)
-                })
-                .await?;
+            }
+            MailProtocol::Jmap => {
+                let secret =
+                    credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+                        .await?;
+                let connected = jmap::client::connect(&config, &secret).await?;
+                let remote_id = folder
+                    .jmap_id
+                    .as_deref()
+                    .ok_or_else(|| CoreError::NotFound(format!("remote folder {folder_id}")))?;
+                connected
+                    .mailbox_rename(remote_id, &name)
+                    .await
+                    .map_err(jmap::client::map_error)?;
+                let new_name = parent_prefix
+                    .map(|parent| format!("{parent}{delimiter}{name}"))
+                    .unwrap_or(name);
+                self.db
+                    .write(move |conn| {
+                        repo::folders::rename_tree(
+                            conn, account_id, &old_name, &new_name, &delimiter,
+                        )
+                    })
+                    .await?;
+            }
+            MailProtocol::Imap => {
+                let encoded = imap::encode_mailbox_name(&name);
+                let new_name = parent_prefix
+                    .map(|parent| format!("{parent}{delimiter}{encoded}"))
+                    .unwrap_or(encoded);
+                let mut session = self.connect_folder_imap(&config).await?;
+                imap::rename_folder(&mut session, &old_name, &new_name).await?;
+                imap::logout(session).await;
+                self.db
+                    .write(move |conn| {
+                        repo::folders::rename_tree(
+                            conn, account_id, &old_name, &new_name, &delimiter,
+                        )
+                    })
+                    .await?;
+            }
         }
         self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
         Ok(())
@@ -3073,11 +3097,7 @@ impl Core {
         }
         let account_id = folder.account_id;
         let config = self.folder_account_config(account_id).await?;
-        let delimiter = if config.mail_protocol == MailProtocol::Jmap {
-            " / ".to_owned()
-        } else {
-            folder.delimiter.clone().unwrap_or_else(|| "/".into())
-        };
+        let delimiter = folder_path_delimiter(config.mail_protocol, &folder);
         let prefix = format!("{}{delimiter}", folder.path);
         let mut tree = self
             .db
@@ -3091,42 +3111,47 @@ impl Core {
             })
             .await?;
         tree.sort_by_key(|candidate| std::cmp::Reverse(candidate.path.len()));
-        if config.provider == Provider::Gmail {
-            for candidate in &tree {
-                sync::gmail::delete_user_folder(&self.sync_ctx(), &config, candidate.id).await?;
+        match config.mail_protocol {
+            MailProtocol::Gmail => {
+                for candidate in &tree {
+                    sync::gmail::delete_user_folder(&self.sync_ctx(), &config, candidate.id)
+                        .await?;
+                }
             }
-        } else if config.mail_protocol == MailProtocol::Jmap {
-            let secret =
-                credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+            MailProtocol::Jmap => {
+                let secret =
+                    credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+                        .await?;
+                let connected = jmap::client::connect(&config, &secret).await?;
+                for candidate in &tree {
+                    let remote_id = candidate.jmap_id.as_deref().ok_or_else(|| {
+                        CoreError::NotFound(format!("remote folder {}", candidate.id))
+                    })?;
+                    connected
+                        .mailbox_destroy(remote_id, true)
+                        .await
+                        .map_err(jmap::client::map_error)?;
+                }
+                let root_name = folder.path;
+                self.db
+                    .write(move |conn| {
+                        repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
+                    })
                     .await?;
-            let connected = jmap::client::connect(&config, &secret).await?;
-            for candidate in &tree {
-                let remote_id = candidate.jmap_id.as_deref().ok_or_else(|| {
-                    CoreError::NotFound(format!("remote folder {}", candidate.id))
-                })?;
-                connected
-                    .mailbox_destroy(remote_id, true)
-                    .await
-                    .map_err(jmap::client::map_error)?;
             }
-            let root_name = folder.path;
-            self.db
-                .write(move |conn| {
-                    repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
-                })
-                .await?;
-        } else {
-            let mut session = self.connect_folder_imap(&config).await?;
-            for candidate in &tree {
-                imap::delete_folder(&mut session, &candidate.path).await?;
+            MailProtocol::Imap => {
+                let mut session = self.connect_folder_imap(&config).await?;
+                for candidate in &tree {
+                    imap::delete_folder(&mut session, &candidate.path).await?;
+                }
+                imap::logout(session).await;
+                let root_name = folder.path;
+                self.db
+                    .write(move |conn| {
+                        repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
+                    })
+                    .await?;
             }
-            imap::logout(session).await;
-            let root_name = folder.path;
-            self.db
-                .write(move |conn| {
-                    repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
-                })
-                .await?;
         }
         self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
         Ok(())
@@ -3179,8 +3204,8 @@ impl Core {
             },
         };
         imap::connect_with_settings(
-            &config.imap_host,
-            config.imap_port,
+            &config.incoming_host,
+            config.incoming_port,
             credentials,
             &config.settings.connection,
         )
@@ -3509,11 +3534,12 @@ impl Core {
             .write(move |conn| {
                 let tx = conn.transaction()?;
 
-                let (provider, mail_protocol): (String, String) = tx.query_row(
-                    "SELECT provider,mail_protocol FROM accounts WHERE id = ?1",
+                let mail_protocol: MailProtocol = tx.query_row(
+                    "SELECT mail_protocol FROM accounts WHERE id = ?1",
                     rusqlite::params![args.account_id],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| row.get(0),
                 )?;
+                let gmail = mail_protocol == MailProtocol::Gmail;
                 // A user can compose immediately after OAuth, before the first
                 // provider page has created folders. Give drafts a valid local
                 // home up front; Gmail's names match the native label/synthetic
@@ -3527,12 +3553,12 @@ impl Core {
                     None => repo::folders::upsert(
                         &tx,
                         args.account_id,
-                        if provider == "gmail" { "DRAFT" } else { "Drafts" },
+                        if gmail { "DRAFT" } else { "Drafts" },
                         Some("/"),
                         Some(roles::DRAFTS),
                     )?,
                 };
-                let gmail_all_folder = if provider == "gmail" {
+                let gmail_all_folder = if gmail {
                     Some(match repo::folders::by_role(&tx, args.account_id, roles::ALL)? {
                         Some(folder) => folder.id,
                         None => repo::folders::upsert(
@@ -3674,7 +3700,11 @@ impl Core {
                 let security = repo::accounts::get_config(&tx, args.account_id)?.ok_or_else(|| CoreError::NotFound("account".into()))?.settings.security;
                 // Protected drafts stay local until explicit Send. Even incomplete
                 // recipient lists must never cause a plaintext server upload.
-                let sync_remote_account = if !security.enabled() && (provider == "gmail" || mail_protocol == "jmap") {
+                let uploads_drafts = match mail_protocol {
+                    MailProtocol::Gmail | MailProtocol::Jmap => true,
+                    MailProtocol::Imap => false,
+                };
+                let sync_remote_account = if !security.enabled() && uploads_drafts {
                     tx.execute(
                         "UPDATE pending_actions SET state='cancelled',finished_at=?2
                          WHERE message_id=?1 AND kind='save_draft' AND state='pending'",
@@ -3828,8 +3858,8 @@ impl Core {
                 let row = conn
                     .query_row(
                         "SELECT m.account_id, m.thread_id, m.folder_id, m.uid, m.is_draft,
-                                COALESCE(f.role, ''), a.provider,
-                                m.gm_msgid, m.gmail_draft_id, a.mail_protocol, m.jmap_id
+                                COALESCE(f.role, ''), m.gm_msgid, m.gmail_draft_id,
+                                a.mail_protocol, m.jmap_id
                          FROM messages m LEFT JOIN folders f ON f.id = m.folder_id
                          JOIN accounts a ON a.id = m.account_id
                          WHERE m.id = ?1",
@@ -3842,11 +3872,10 @@ impl Core {
                                 row.get::<_, Option<i64>>(3)?,
                                 row.get::<_, i64>(4)? != 0,
                                 row.get::<_, String>(5)?,
-                                row.get::<_, String>(6)?,
+                                row.get::<_, Option<String>>(6)?,
                                 row.get::<_, Option<String>>(7)?,
-                                row.get::<_, Option<String>>(8)?,
-                                row.get::<_, String>(9)?,
-                                row.get::<_, Option<String>>(10)?,
+                                row.get::<_, MailProtocol>(8)?,
+                                row.get::<_, Option<String>>(9)?,
                             ))
                         },
                     )
@@ -3877,80 +3906,85 @@ impl Core {
 
                 let mut nudge_account = None;
                 let mut staged_paths = Vec::new();
-                if row.9 == "jmap" {
-                    conn.execute(
-                        "UPDATE pending_actions SET state='cancelled',finished_at=?2
-                         WHERE message_id=?1 AND kind='save_draft'
-                           AND state IN ('pending','inflight')",
-                        rusqlite::params![draft_id, now_ms()],
-                    )?;
-                    if let Some(remote_id) = row.10.as_deref() {
+                match row.8 {
+                    MailProtocol::Jmap => {
+                        conn.execute(
+                            "UPDATE pending_actions SET state='cancelled',finished_at=?2
+                             WHERE message_id=?1 AND kind='save_draft'
+                               AND state IN ('pending','inflight')",
+                            rusqlite::params![draft_id, now_ms()],
+                        )?;
+                        if let Some(remote_id) = row.9.as_deref() {
+                            repo::actions::enqueue(
+                                conn,
+                                row.0,
+                                "delete_draft",
+                                None,
+                                row.1,
+                                &serde_json::json!({ "jmapEmailId": remote_id }),
+                                None,
+                            )?;
+                            nudge_account = Some(row.0);
+                        }
+                        staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
+                        repo::messages::delete(conn, draft_id)?;
+                    }
+                    MailProtocol::Gmail => {
+                        // Cancel any queued autosaves before deleting the local
+                        // row. If a remote resource already exists, retain its
+                        // opaque ids in a message-independent delete action.
+                        conn.execute(
+                            "UPDATE pending_actions SET state = 'cancelled', finished_at = ?2
+                             WHERE message_id = ?1 AND kind = 'save_draft'
+                               AND state = 'pending'",
+                            rusqlite::params![draft_id, now_ms()],
+                        )?;
+                        if row.6.is_some() || row.7.is_some() {
+                            repo::actions::enqueue(
+                                conn,
+                                row.0,
+                                "delete_draft",
+                                None,
+                                row.1,
+                                &serde_json::json!({
+                                    "gmailMessageId": row.6,
+                                    "gmailDraftId": row.7,
+                                }),
+                                None,
+                            )?;
+                            nudge_account = Some(row.0);
+                        }
+                        staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
+                        repo::messages::delete(conn, draft_id)?;
+                    }
+                    MailProtocol::Imap if row.3.is_some() && row.5 != roles::TRASH => {
+                        // This draft exists on IMAP. Move it optimistically and
+                        // queue the matching remote move so the next sync cannot
+                        // resurrect the local row in Drafts.
+                        let trash = repo::folders::by_role(conn, row.0, roles::TRASH)?
+                            .ok_or_else(|| CoreError::NotFound("no trash folder".into()))?;
+                        let payload = serde_json::json!({
+                            "srcFolderId": row.2,
+                            "srcUid": row.3,
+                            "targetFolderId": trash.id,
+                        });
+                        repo::messages::set_uid_and_folder(conn, draft_id, trash.id, None)?;
                         repo::actions::enqueue(
                             conn,
                             row.0,
-                            "delete_draft",
-                            None,
+                            "trash",
+                            Some(draft_id),
                             row.1,
-                            &serde_json::json!({ "jmapEmailId": remote_id }),
+                            &payload,
                             None,
                         )?;
                         nudge_account = Some(row.0);
                     }
-                    staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
-                    repo::messages::delete(conn, draft_id)?;
-                } else if row.6 == "gmail" {
-                    // Cancel any queued autosaves before deleting the local
-                    // row. If a remote resource already exists, retain its
-                    // opaque ids in a message-independent delete action.
-                    conn.execute(
-                        "UPDATE pending_actions SET state = 'cancelled', finished_at = ?2
-                         WHERE message_id = ?1 AND kind = 'save_draft'
-                           AND state = 'pending'",
-                        rusqlite::params![draft_id, now_ms()],
-                    )?;
-                    if row.7.is_some() || row.8.is_some() {
-                        repo::actions::enqueue(
-                            conn,
-                            row.0,
-                            "delete_draft",
-                            None,
-                            row.1,
-                            &serde_json::json!({
-                                "gmailMessageId": row.7,
-                                "gmailDraftId": row.8,
-                            }),
-                            None,
-                        )?;
-                        nudge_account = Some(row.0);
+                    MailProtocol::Imap => {
+                        // Purely local drafts have no remote copy to preserve.
+                        staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
+                        repo::messages::delete(conn, draft_id)?;
                     }
-                    staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
-                    repo::messages::delete(conn, draft_id)?;
-                } else if row.3.is_some() && row.5 != roles::TRASH {
-                    // This draft exists on IMAP. Move it optimistically and
-                    // queue the matching remote move so the next sync cannot
-                    // resurrect the local row in Drafts.
-                    let trash = repo::folders::by_role(conn, row.0, roles::TRASH)?
-                        .ok_or_else(|| CoreError::NotFound("no trash folder".into()))?;
-                    let payload = serde_json::json!({
-                        "srcFolderId": row.2,
-                        "srcUid": row.3,
-                        "targetFolderId": trash.id,
-                    });
-                    repo::messages::set_uid_and_folder(conn, draft_id, trash.id, None)?;
-                    repo::actions::enqueue(
-                        conn,
-                        row.0,
-                        "trash",
-                        Some(draft_id),
-                        row.1,
-                        &payload,
-                        None,
-                    )?;
-                    nudge_account = Some(row.0);
-                } else {
-                    // Purely local drafts have no remote copy to preserve.
-                    staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
-                    repo::messages::delete(conn, draft_id)?;
                 }
                 if let Some(tid) = row.1 {
                     repo::threads::recompute(conn, tid)?;
@@ -7781,15 +7815,14 @@ fn apply_thread_action(
     let tx = conn.transaction()?;
     let mut out: Vec<(i64, i64)> = Vec::new();
 
-    let (account_id, account_provider, mail_protocol): (i64, String, String) = tx.query_row(
-        "SELECT t.account_id, a.provider, a.mail_protocol
+    let (account_id, mail_protocol): (i64, MailProtocol) = tx.query_row(
+        "SELECT t.account_id, a.mail_protocol
          FROM threads t JOIN accounts a ON a.id = t.account_id
          WHERE t.id = ?1",
         rusqlite::params![thread_id],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    let gmail = account_provider == "gmail";
-    let multi_mailbox = gmail || mail_protocol == "jmap";
+    let multi_mailbox = mail_protocol.has_multi_mailbox_messages();
 
     // Most thread actions intentionally ignore drafts. Archive and Trash are
     // exceptions: users can file or discard a draft from the Drafts view, and
@@ -8313,8 +8346,8 @@ mod move_action_validation_tests {
         db::testutil::seed_account(&conn);
         conn.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
-             VALUES (2,'other@test.dev','imap','password','other','h',993,'h',587,0)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+             VALUES (2,'other@test.dev','generic','password','other','h',993,'h',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
@@ -8358,8 +8391,8 @@ mod move_action_validation_tests {
         db::testutil::seed_account(&conn);
         conn.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
-             VALUES (2,'other@test.dev','imap','password','other','h',993,'h',587,0)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+             VALUES (2,'other@test.dev','generic','password','other','h',993,'h',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
@@ -8497,8 +8530,8 @@ fn revert_action(
                 let src_uid = action.payload["srcUid"].as_i64();
                 let cur_folder = action.payload["targetFolderId"].as_i64();
                 if let Some(src) = src_folder {
-                    let gmail: bool = tx.query_row(
-                        "SELECT a.provider = 'gmail'
+                    let protocol: MailProtocol = tx.query_row(
+                        "SELECT a.mail_protocol
                          FROM messages m JOIN accounts a ON a.id = m.account_id
                          WHERE m.id = ?1",
                         rusqlite::params![mid],
@@ -8525,7 +8558,7 @@ fn revert_action(
                             None,
                         )?;
                     }
-                    if gmail {
+                    if protocol == MailProtocol::Gmail {
                         if let Some(current) = cur_folder {
                             tx.execute(
                                 "DELETE FROM message_folders
@@ -9150,16 +9183,16 @@ mod account_backup_import_tests {
         PortableAccountConfig {
             email: email.into(),
             display_name: Some("Portable account".into()),
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: email.into(),
             jmap_url: String::new(),
-            imap_host: "imap.example.com".into(),
-            imap_port: 993,
+            incoming_host: "imap.example.com".into(),
+            incoming_port: 993,
             smtp_host: "smtp.example.com".into(),
             smtp_port: 465,
-            settings: AccountSettings::default(),
+            settings: crate::db::testutil::account_settings(),
         }
     }
 
@@ -9196,7 +9229,7 @@ mod account_backup_import_tests {
         let configs = core.list_account_configs().await.unwrap();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].sync_state, "needs_reauth");
-        assert_eq!(configs[0].imap_host, "imap.example.com");
+        assert_eq!(configs[0].incoming_host, "imap.example.com");
     }
 }
 

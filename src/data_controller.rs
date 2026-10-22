@@ -7,6 +7,7 @@
 
 use super::*;
 use chrono::Utc;
+use flectar_mail_core::accounts::backup as account_backup;
 use flectar_mail_core::models::{
     MIN_WORKSPACE_LIST_PANE_WIDTH, PortableAccountConfig, Settings,
     normalized_workspace_list_pane_width,
@@ -352,14 +353,12 @@ pub(super) fn restore_account_backup(
     let result = (|| -> Result<Restored, String> {
         let backup: serde_json::Value =
             serde_json::from_slice(bytes).map_err(|error| format!("invalid JSON: {error}"))?;
-        if backup.get("format").and_then(|value| value.as_str())
-            != Some("flectar-mail-account-backup")
-        {
+        if backup.get("format").and_then(|value| value.as_str()) != Some(account_backup::FORMAT) {
             return Err("this is not a Flectar Mail account backup".into());
         }
-        if backup.get("version").and_then(|value| value.as_u64()) != Some(1) {
+        let Some(version) = backup.get("version").and_then(|value| value.as_u64()) else {
             return Err("this backup version is not supported".into());
-        }
+        };
         if backup
             .get("includesCredentials")
             .and_then(|value| value.as_bool())
@@ -367,13 +366,13 @@ pub(super) fn restore_account_backup(
         {
             return Err("backups containing credentials are not accepted".into());
         }
-        let configs = serde_json::from_value::<Vec<PortableAccountConfig>>(
+        let configs = account_backup::parse_accounts(
+            version,
             backup
                 .get("accounts")
                 .cloned()
                 .ok_or_else(|| "backup has no accounts list".to_owned())?,
-        )
-        .map_err(|error| format!("invalid account data: {error}"))?;
+        )?;
         if configs.len() > 100 {
             return Err("backup contains more than 100 accounts".into());
         }
@@ -1001,26 +1000,11 @@ pub(super) fn register_data_management_callbacks(
             .unwrap_or_else(|| serde_json::json!({}));
         let accounts = configs
             .iter()
-            .map(|account| {
-                serde_json::json!({
-                    "email": account.email,
-                    "displayName": account.display_name,
-                    "provider": account.provider.as_str(),
-                    "authKind": account.auth_kind.as_str(),
-                    "mailProtocol": account.mail_protocol.as_str(),
-                    "username": account.username,
-                    "jmapUrl": account.jmap_url,
-                    "imapHost": account.imap_host,
-                    "imapPort": account.imap_port,
-                    "smtpHost": account.smtp_host,
-                    "smtpPort": account.smtp_port,
-                    "settings": account.settings
-                })
-            })
+            .map(PortableAccountConfig::from)
             .collect::<Vec<_>>();
         let backup = serde_json::json!({
-            "format": "flectar-mail-account-backup",
-            "version": 1,
+            "format": account_backup::FORMAT,
+            "version": account_backup::VERSION,
             "createdAt": Utc::now().to_rfc3339(),
             "includesCredentials": false,
             "accounts": accounts,

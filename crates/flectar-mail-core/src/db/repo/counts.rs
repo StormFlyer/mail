@@ -312,8 +312,8 @@ mod tests {
         crate::db::migrations::run(&mut conn).unwrap();
         conn.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
-             VALUES (1,'t@x.com','imap','password','t','h',993,'h',587,0)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+             VALUES (1,'t@x.com','generic','password','t','h',993,'h',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
@@ -388,8 +388,8 @@ mod tests {
         let conn = test_db();
         conn.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at, sort_order)
-             VALUES (2,'two@x.com','imap','password','two','h',993,'h',587,0,1)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, sort_order, mail_protocol, settings_json)
+             VALUES (2,'two@x.com','generic','password','two','h',993,'h',587,0,1,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
@@ -448,8 +448,8 @@ mod tests {
         let conn = test_db();
         conn.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at, sort_order)
-             VALUES (2,'gmail@x.com','gmail','oauth2','gmail','h',993,'h',587,0,1)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, sort_order, mail_protocol, settings_json)
+             VALUES (2,'gmail@x.com','gmail','oauth2','gmail','h',993,'h',587,0,1,'gmail','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();

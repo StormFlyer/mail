@@ -12,9 +12,9 @@ fn account_from_row(row: &Row) -> rusqlite::Result<Account> {
         email: row.get("email")?,
         display_name: row.get("display_name")?,
         avatar_url: row.get("avatar_url")?,
-        provider: Provider::from_storage(&row.get::<_, String>("provider")?),
-        auth_kind: AuthKind::from_storage(&row.get::<_, String>("auth_kind")?),
-        mail_protocol: MailProtocol::from_storage(&row.get::<_, String>("mail_protocol")?),
+        provider: row.get("provider")?,
+        auth_kind: row.get("auth_kind")?,
+        mail_protocol: row.get("mail_protocol")?,
         sync_state: row.get("sync_state")?,
         sync_error: row.get("sync_error")?,
         can_create_top_level_mailbox: row.get::<_, i64>("can_create_top_level_mailbox")? != 0,
@@ -29,16 +29,16 @@ fn config_from_row(row: &Row) -> rusqlite::Result<AccountConfig> {
         email: row.get("email")?,
         display_name: row.get("display_name")?,
         avatar_url: row.get("avatar_url")?,
-        provider: Provider::from_storage(&row.get::<_, String>("provider")?),
-        auth_kind: AuthKind::from_storage(&row.get::<_, String>("auth_kind")?),
-        mail_protocol: MailProtocol::from_storage(&row.get::<_, String>("mail_protocol")?),
+        provider: row.get("provider")?,
+        auth_kind: row.get("auth_kind")?,
+        mail_protocol: row.get("mail_protocol")?,
         username: row.get("username")?,
         jmap_url: row.get("jmap_url")?,
         jmap_account_id: row.get("jmap_account_id")?,
-        imap_host: row.get("imap_host")?,
-        imap_port: row.get::<_, i64>("imap_port")? as u16,
+        incoming_host: row.get("incoming_host")?,
+        incoming_port: row.get("incoming_port")?,
         smtp_host: row.get("smtp_host")?,
-        smtp_port: row.get::<_, i64>("smtp_port")? as u16,
+        smtp_port: row.get("smtp_port")?,
         settings,
     })
 }
@@ -60,8 +60,8 @@ pub fn list(conn: &Connection) -> Result<Vec<Account>> {
 pub fn list_configs(conn: &Connection) -> Result<Vec<AccountConfig>> {
     let mut stmt = conn.prepare(
         "SELECT id, email, display_name, avatar_url, provider, auth_kind,
-                mail_protocol, username, jmap_url, jmap_account_id, imap_host,
-                imap_port, smtp_host, smtp_port, settings_json
+                mail_protocol, username, jmap_url, jmap_account_id, incoming_host,
+                incoming_port, smtp_host, smtp_port, settings_json
          FROM accounts
          WHERE sync_state <> ?1
          ORDER BY sort_order, id",
@@ -75,8 +75,8 @@ pub fn list_configs(conn: &Connection) -> Result<Vec<AccountConfig>> {
 pub fn get_config(conn: &Connection, id: i64) -> Result<Option<AccountConfig>> {
     let mut stmt = conn.prepare(
         "SELECT id, email, display_name, avatar_url, provider, auth_kind,
-                mail_protocol, username, jmap_url, jmap_account_id, imap_host,
-                imap_port, smtp_host, smtp_port, settings_json
+                mail_protocol, username, jmap_url, jmap_account_id, incoming_host,
+                incoming_port, smtp_host, smtp_port, settings_json
          FROM accounts WHERE id = ?1",
     )?;
     Ok(stmt.query_row(params![id], config_from_row).optional()?)
@@ -122,22 +122,34 @@ pub struct NewAccount<'a> {
     pub username: &'a str,
     pub jmap_url: &'a str,
     pub jmap_account_id: Option<&'a str>,
-    pub imap_host: &'a str,
-    pub imap_port: u16,
+    pub incoming_host: &'a str,
+    pub incoming_port: u16,
     pub smtp_host: &'a str,
     pub smtp_port: u16,
 }
 
-pub fn insert(conn: &Connection, a: &NewAccount) -> Result<i64> {
-    insert_with_sync_state(conn, a, "idle")
+pub fn insert(conn: &Connection, a: &NewAccount, settings: &AccountSettings) -> Result<i64> {
+    insert_with_sync_state(conn, a, settings, "idle")
 }
 
-pub fn insert_with_sync_state(conn: &Connection, a: &NewAccount, sync_state: &str) -> Result<i64> {
-    let settings_json = serde_json::to_string(&AccountSettings::default())?;
+pub fn insert_with_sync_state(
+    conn: &Connection,
+    a: &NewAccount,
+    settings: &AccountSettings,
+    sync_state: &str,
+) -> Result<i64> {
+    let settings_json = serde_json::to_string(settings)?;
+    // JMAP advertises top-level mailbox rights during discovery; until then
+    // the UI must not offer a mutation the server may reject. Other
+    // protocols validate the operation when it is attempted.
+    let can_create_top_level_mailbox = match a.mail_protocol {
+        MailProtocol::Gmail | MailProtocol::Imap => true,
+        MailProtocol::Jmap => false,
+    };
     conn.execute(
         "INSERT INTO accounts (email, display_name, avatar_url, provider, auth_kind, mail_protocol, username,
                                jmap_url, jmap_account_id,
-                               imap_host, imap_port, smtp_host, smtp_port, created_at,
+                               incoming_host, incoming_port, smtp_host, smtp_port, created_at,
                                sort_order, settings_json, sync_state,
                                can_create_top_level_mailbox)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,
@@ -146,20 +158,20 @@ pub fn insert_with_sync_state(conn: &Connection, a: &NewAccount, sync_state: &st
             a.email,
             a.display_name,
             a.avatar_url,
-            a.provider.as_str(),
-            a.auth_kind.as_str(),
-            a.mail_protocol.as_str(),
+            a.provider,
+            a.auth_kind,
+            a.mail_protocol,
             a.username,
             a.jmap_url,
             a.jmap_account_id,
-            a.imap_host,
-            a.imap_port,
+            a.incoming_host,
+            a.incoming_port,
             a.smtp_host,
             a.smtp_port,
             now_ms(),
             settings_json,
             sync_state,
-            a.mail_protocol != MailProtocol::Jmap,
+            can_create_top_level_mailbox,
         ],
     )?;
     let account_id = conn.last_insert_rowid();
@@ -187,7 +199,7 @@ pub fn set_settings(conn: &Connection, id: i64, settings: &AccountSettings) -> R
 
 pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()> {
     let (old_protocol, old_jmap_url, old_jmap_account_id, old_outgoing): (
-        String,
+        MailProtocol,
         String,
         Option<String>,
         (String, u16, String),
@@ -204,8 +216,9 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
             ))
         },
     )?;
-    let jmap_identity_changed = (old_protocol == "jmap" || a.mail_protocol == MailProtocol::Jmap)
-        && (old_protocol != a.mail_protocol.as_str()
+    let jmap_identity_changed = (old_protocol == MailProtocol::Jmap
+        || a.mail_protocol == MailProtocol::Jmap)
+        && (old_protocol != a.mail_protocol
             || old_jmap_url != a.jmap_url
             || old_jmap_account_id.as_deref() != a.jmap_account_id);
     // Addresses the user declared stay while the same server judges them:
@@ -238,7 +251,7 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
         "UPDATE accounts SET email = ?2, display_name = COALESCE(?3, display_name),
                 avatar_url = ?4, provider = ?5,
                 auth_kind = ?6, mail_protocol = ?7, username = ?8,
-                jmap_url = ?9, jmap_account_id = ?10, imap_host = ?11, imap_port = ?12,
+                jmap_url = ?9, jmap_account_id = ?10, incoming_host = ?11, incoming_port = ?12,
                 smtp_host = ?13, smtp_port = ?14, sync_state = 'idle', sync_error = NULL
          WHERE id = ?1",
         params![
@@ -246,14 +259,14 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
             a.email,
             a.display_name,
             a.avatar_url,
-            a.provider.as_str(),
-            a.auth_kind.as_str(),
-            a.mail_protocol.as_str(),
+            a.provider,
+            a.auth_kind,
+            a.mail_protocol,
             a.username,
             a.jmap_url,
             a.jmap_account_id,
-            a.imap_host,
-            a.imap_port,
+            a.incoming_host,
+            a.incoming_port,
             a.smtp_host,
             a.smtp_port,
         ],
@@ -305,7 +318,7 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
             "UPDATE threads SET jmap_id=NULL WHERE account_id=?1",
             params![id],
         )?;
-        if old_protocol == "jmap" && a.mail_protocol == MailProtocol::Jmap {
+        if old_protocol == MailProtocol::Jmap && a.mail_protocol == MailProtocol::Jmap {
             conn.execute(
                 "UPDATE folders SET jmap_id=NULL WHERE account_id=?1",
                 params![id],
@@ -403,6 +416,7 @@ pub fn reorder(conn: &mut Connection, source_id: i64, target_id: i64, after: boo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::testutil::account_settings as settings;
 
     #[test]
     fn password_edits_keep_declared_identities_and_the_display_name() {
@@ -411,18 +425,18 @@ mod tests {
             email: "me@test.dev",
             display_name: Some("Me Myself"),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: "me",
             jmap_url: "",
             jmap_account_id: None,
-            imap_host: "imap.test.dev",
-            imap_port: 993,
+            incoming_host: "imap.test.dev",
+            incoming_port: 993,
             smtp_host: "smtp.test.dev",
             smtp_port: 465,
         };
-        let id = insert_with_sync_state(&conn, &account, "needs_reauth").unwrap();
+        let id = insert_with_sync_state(&conn, &account, &settings(), "needs_reauth").unwrap();
         let identity = |email: &str, source| SenderIdentity {
             account_id: id,
             email: email.into(),
@@ -481,18 +495,18 @@ mod tests {
             email: "me@test.dev",
             display_name: None,
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: "me",
             jmap_url: "",
             jmap_account_id: None,
-            imap_host: "imap.test.dev",
-            imap_port: 993,
+            incoming_host: "imap.test.dev",
+            incoming_port: 993,
             smtp_host: "smtp.test.dev",
             smtp_port: 465,
         };
-        let id = insert(&conn, &account).unwrap();
+        let id = insert(&conn, &account, &settings()).unwrap();
         super::super::sender_identities::save_manual(
             &conn,
             &SenderIdentity {
@@ -559,18 +573,18 @@ mod tests {
             email: "me@test.dev",
             display_name: None,
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: "me",
             jmap_url: "",
             jmap_account_id: None,
-            imap_host: "imap.test.dev",
-            imap_port: 993,
+            incoming_host: "imap.test.dev",
+            incoming_port: 993,
             smtp_host: "smtp.test.dev",
             smtp_port: 465,
         };
-        let id = insert(&conn, &first).unwrap();
+        let id = insert(&conn, &first, &settings()).unwrap();
         assert_eq!(
             get_config(&conn, id)
                 .unwrap()
@@ -586,14 +600,14 @@ mod tests {
             email: "me@test.dev",
             display_name: Some("Me"),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: "updated-user",
             jmap_url: "",
             jmap_account_id: None,
-            imap_host: "imap2.test.dev",
-            imap_port: 993,
+            incoming_host: "imap2.test.dev",
+            incoming_port: 993,
             smtp_host: "smtp2.test.dev",
             smtp_port: 587,
         };
@@ -629,16 +643,17 @@ mod tests {
             avatar_url: None,
             provider: Provider::Gmail,
             auth_kind: AuthKind::Oauth2,
-            mail_protocol: MailProtocol::Imap,
+            mail_protocol: MailProtocol::Gmail,
             username: "pending@test.dev",
             jmap_url: "",
             jmap_account_id: None,
-            imap_host: "imap.gmail.com",
-            imap_port: 993,
+            incoming_host: "imap.gmail.com",
+            incoming_port: 993,
             smtp_host: "smtp.gmail.com",
             smtp_port: 465,
         };
-        let id = insert_with_sync_state(&conn, &account, CREDENTIAL_SETUP_STATE).unwrap();
+        let id =
+            insert_with_sync_state(&conn, &account, &settings(), CREDENTIAL_SETUP_STATE).unwrap();
 
         assert!(list(&conn).unwrap().is_empty());
         assert!(list_configs(&conn).unwrap().is_empty());
@@ -656,19 +671,32 @@ mod tests {
     }
 
     #[test]
-    fn empty_account_settings_use_the_bounded_default() {
+    fn stored_account_values_are_read_strictly() {
         let conn = crate::db::testutil::conn();
         conn.execute(
             "INSERT INTO accounts (
-               email, provider, auth_kind, username, imap_host, imap_port,
-               smtp_host, smtp_port, created_at, settings_json
-             ) VALUES ('legacy@test.dev', 'imap', 'password', 'legacy', 'imap', 993,
-                       'smtp', 465, 0, '{}')",
+               email, provider, auth_kind, mail_protocol, username, incoming_host,
+               incoming_port, smtp_host, smtp_port, created_at, settings_json
+             ) VALUES ('stored@test.dev', 'generic', 'password', 'imap', 'stored', 'imap',
+                       143, 'smtp', 587, 0,
+                       '{\"connection\":{\"incomingSecurity\":\"starttls\",\"smtpSecurity\":\"starttls\"}}')",
             [],
         )
         .unwrap();
         let config = get_config(&conn, 1).unwrap().unwrap();
         assert_eq!(config.settings.mail_history, MailHistory::SixMonths);
+        assert_eq!(
+            config.settings.connection.incoming_security,
+            ConnectionSecurity::Starttls
+        );
+        assert_eq!(config.incoming_port, 143);
+
+        conn.execute("UPDATE accounts SET settings_json = '{}' WHERE id = 1", [])
+            .unwrap();
+        assert!(
+            get_config(&conn, 1).is_err(),
+            "connection security is required"
+        );
     }
 
     #[test]
@@ -694,18 +722,18 @@ mod tests {
             email: "me@test.dev",
             display_name: None,
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Jmap,
             username: "me@test.dev",
             jmap_url: "https://mail.test.dev",
             jmap_account_id: Some("account-a"),
-            imap_host: "",
-            imap_port: 993,
+            incoming_host: "",
+            incoming_port: 993,
             smtp_host: "",
             smtp_port: 465,
         };
-        let id = insert(&conn, &initial).unwrap();
+        let id = insert(&conn, &initial, &settings()).unwrap();
         assert!(
             !get(&conn, id)
                 .unwrap()
@@ -825,21 +853,21 @@ mod tests {
                 email,
                 display_name: None,
                 avatar_url: None,
-                provider: Provider::Imap,
+                provider: Provider::Generic,
                 auth_kind: AuthKind::Password,
                 mail_protocol: MailProtocol::Imap,
                 username: email,
                 jmap_url: "",
                 jmap_account_id: None,
-                imap_host: "imap.test.dev",
-                imap_port: 993,
+                incoming_host: "imap.test.dev",
+                incoming_port: 993,
                 smtp_host: "smtp.test.dev",
                 smtp_port: 465,
             }
         }
-        let first = insert(&conn, &account("first@test.dev")).unwrap();
-        let second = insert(&conn, &account("second@test.dev")).unwrap();
-        let third = insert(&conn, &account("third@test.dev")).unwrap();
+        let first = insert(&conn, &account("first@test.dev"), &settings()).unwrap();
+        let second = insert(&conn, &account("second@test.dev"), &settings()).unwrap();
+        let third = insert(&conn, &account("third@test.dev"), &settings()).unwrap();
 
         reorder(&mut conn, first, third, true).unwrap();
         assert_eq!(

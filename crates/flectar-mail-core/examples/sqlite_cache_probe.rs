@@ -309,8 +309,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     db.write(move |conn| {
         let tx = conn.transaction()?;
         tx.execute_batch(
-            "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
-             VALUES (1,'probe@example.test','imap','password','probe','localhost',993,'localhost',587,0);
+            "INSERT INTO accounts (id,email,provider,auth_kind,username,incoming_host,incoming_port,smtp_host,smtp_port,created_at,mail_protocol,settings_json)
+             VALUES (1,'probe@example.test','generic','password','probe','localhost',993,'localhost',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}');
              INSERT INTO folders (id,account_id,path,role) VALUES (1,1,'INBOX','inbox');
              INSERT INTO route_cache (sender_domain,route_key)
              VALUES ('__routing_backfill__','1');",

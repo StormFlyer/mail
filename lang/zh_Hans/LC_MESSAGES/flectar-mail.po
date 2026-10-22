@@ -186,7 +186,7 @@ msgstr "有往来邮件记录"
 msgid "New address-book entry"
 msgstr "新建通讯录条目"
 
-#: ui/app.slint:125 ui/app.slint:899 ui/components/composer-fields.slint:66
+#: ui/app.slint:125 ui/app.slint:900 ui/components/composer-fields.slint:66
 #: ui/dialogs/compose-dialog.slint:37
 msgid "No connected account"
 msgstr "未连接账户"
@@ -1229,30 +1229,34 @@ msgid "Email template inserted, but its usage could not be saved: {}"
 msgstr "邮件模板已插入，但无法记录其使用情况：{}"
 
 #: ui/app.slint:462
+msgid "Choose a supported account type and connection security."
+msgstr ""
+
+#: ui/app.slint:463
 msgid "IMAP port must be between 1 and 65535."
 msgstr "IMAP 端口必须在 1 到 65535 之间。"
 
-#: ui/app.slint:463
+#: ui/app.slint:464
 msgid "SMTP port must be between 1 and 65535."
 msgstr "SMTP 端口必须在 1 到 65535 之间。"
 
-#: ui/app.slint:464
+#: ui/app.slint:465
 msgid "Local mail data is unavailable. Retry startup."
 msgstr "本地邮件数据不可用，请重新启动。"
 
-#: ui/app.slint:465
+#: ui/app.slint:466
 msgid "Discovering JMAP and checking capabilities…"
 msgstr "正在发现 JMAP 并检查服务能力…"
 
-#: ui/app.slint:466
+#: ui/app.slint:467
 msgid "Certificate imported. Connect to verify the server."
 msgstr "证书已导入。请连接以验证服务器。"
 
-#: ui/app.slint:467
+#: ui/app.slint:468
 msgid "Could not load account preferences: {}"
 msgstr "无法加载账户偏好设置：{}"
 
-#: ui/app.slint:468
+#: ui/app.slint:469
 msgid ""
 "Your edited signature was preserved. Choose No signature to keep it as "
 "message text before inserting another."
@@ -1260,161 +1264,161 @@ msgstr ""
 "您编辑过的签名已保留。插入其他签名前，请选择“不使用签名”，以便将其保留为邮件"
 "正文。"
 
-#: ui/app.slint:469
+#: ui/app.slint:470
 msgid "Certificate import failed: {}"
 msgstr "证书导入失败：{}"
 
-#: ui/app.slint:470
+#: ui/app.slint:471
 msgid "Paste the PEM certificate into the certificate field."
 msgstr "请将 PEM 证书粘贴到证书字段中。"
 
-#: ui/app.slint:471
+#: ui/app.slint:472
 msgid "Testing IMAP and SMTP connections…"
 msgstr "正在测试 IMAP 和 SMTP 连接…"
 
-#: ui/app.slint:476
+#: ui/app.slint:477
 msgid ""
 "Another browser authorization is already in progress; finish it or choose "
 "Cancel."
 msgstr "已有另一项浏览器授权正在进行，请完成它或选择“取消”。"
 
-#: ui/app.slint:477 ui/dialogs/settings-dialog.slint:1646
+#: ui/app.slint:478 ui/dialogs/settings-dialog.slint:1646
 #: ui/dialogs/settings-dialog.slint:1689 ui/views/onboarding-view.slint:153
 msgid "Add app keys in Sign-in settings to enable this provider."
 msgstr "请在“登录设置”中添加应用密钥以启用此服务商。"
 
-#: ui/app.slint:478
+#: ui/app.slint:479
 msgid "Choose Gmail or Outlook OAuth."
 msgstr "请选择 Gmail 或 Outlook OAuth。"
 
-#: ui/app.slint:479
+#: ui/app.slint:480
 msgid "Complete sign-in in your browser, or choose Cancel here."
 msgstr "请在浏览器中完成登录，或在此处选择“取消”。"
 
-#: ui/app.slint:480
+#: ui/app.slint:481
 msgid "Cancelling browser sign-in…"
 msgstr "正在取消浏览器登录…"
 
-#: ui/app.slint:481
+#: ui/app.slint:482
 msgid "Finishing browser sign-in…"
 msgstr "正在完成浏览器登录…"
 
-#: ui/app.slint:482
+#: ui/app.slint:483
 msgid "Could not use that browser address: {}"
 msgstr "无法使用该浏览器地址：{}"
 
-#: ui/app.slint:483
+#: ui/app.slint:484
 msgid "Calendar core is unavailable."
 msgstr "日历核心不可用。"
 
-#: ui/app.slint:484
+#: ui/app.slint:485
 msgid "Account no longer exists."
 msgstr "账户已不存在。"
 
-#: ui/app.slint:485
+#: ui/app.slint:486
 msgid "Authorize calendar access in your browser."
 msgstr "请在浏览器中授权日历访问。"
 
-#: ui/app.slint:486
+#: ui/app.slint:487
 msgid "OAuth app keys saved."
 msgstr "OAuth 应用密钥已保存。"
 
-#: ui/app.slint:487
+#: ui/app.slint:488
 msgid "{} OAuth settings saved."
 msgstr "{} OAuth 设置已保存。"
 
-#: ui/app.slint:488
+#: ui/app.slint:489
 msgid "OAuth settings failed: {}"
 msgstr "OAuth 设置失败：{}"
 
-#: ui/app.slint:489
+#: ui/app.slint:490
 msgid "Mail refresh failed: {}"
 msgstr "邮件刷新失败：{}"
 
-#: ui/app.slint:490
+#: ui/app.slint:491
 msgid "Mail filter failed: {}"
 msgstr "邮件筛选失败：{}"
 
-#: ui/app.slint:491
+#: ui/app.slint:492
 msgid "Mail pagination failed: {}"
 msgstr "邮件分页失败：{}"
 
-#: ui/app.slint:492
+#: ui/app.slint:493
 msgid "Could not mark message as read: {}"
 msgstr "无法将邮件标记为已读：{}"
 
-#: ui/app.slint:493 ui/views/mail-reading-pane.slint:235
+#: ui/app.slint:494 ui/views/mail-reading-pane.slint:235
 #: ui/views/mail-reading-pane.slint:1263
 msgid "Loading message…"
 msgstr "正在加载邮件…"
 
-#: ui/app.slint:499 ui/components/workspace-navigation.slint:854
+#: ui/app.slint:500 ui/components/workspace-navigation.slint:854
 #: ui/tray.slint:12 ui/tray.slint:13
 msgid "Flectar Mail"
 msgstr "Flectar Mail"
 
-#: ui/app.slint:1119 ui/app.slint:1132
+#: ui/app.slint:1120 ui/app.slint:1133
 msgid "Global Labels (local only)"
 msgstr "全局标签（仅本地）"
 
-#: ui/app.slint:2030
+#: ui/app.slint:2031
 msgid "Empty Trash?"
 msgstr ""
 
-#: ui/app.slint:2030 ui/views/files-view.slint:539
+#: ui/app.slint:2031 ui/views/files-view.slint:539
 msgid "Delete permanently?"
 msgstr "永久删除？"
 
-#: ui/app.slint:2034
+#: ui/app.slint:2035
 msgid ""
 "Permanently delete all messages in Trash across every connected account?"
 msgstr ""
 
-#: ui/app.slint:2035
+#: ui/app.slint:2036
 msgid "Permanently delete all messages in this account’s Trash?"
 msgstr ""
 
-#: ui/app.slint:2037
+#: ui/app.slint:2038
 msgid "Permanently delete the selected conversations from Trash?"
 msgstr ""
 
-#: ui/app.slint:2038
+#: ui/app.slint:2039
 msgid "Permanently delete this conversation from Trash?"
 msgstr ""
 
-#: ui/app.slint:2039 ui/components/calendar.slint:937
+#: ui/app.slint:2040 ui/components/calendar.slint:937
 msgid "This action cannot be undone."
 msgstr "此操作无法撤销。"
 
-#: ui/app.slint:2040
+#: ui/app.slint:2041
 msgid "Empty Trash"
 msgstr ""
 
-#: ui/app.slint:2040 ui/views/files-view.slint:621
+#: ui/app.slint:2041 ui/views/files-view.slint:621
 msgid "Delete permanently"
 msgstr "永久删除"
 
-#: ui/app.slint:2210
+#: ui/app.slint:2211
 msgid "Mailbox startup failed"
 msgstr "邮箱启动失败"
 
-#: ui/app.slint:2216
+#: ui/app.slint:2217
 msgid "Flectar Mail could not open local storage"
 msgstr "Flectar Mail 无法打开本地存储"
 
-#: ui/app.slint:2229
+#: ui/app.slint:2230
 msgid "Diagnostic ID: {}"
 msgstr "诊断 ID：{}"
 
-#: ui/app.slint:2232
+#: ui/app.slint:2233
 msgid "Diagnostic ID {}"
 msgstr "诊断 ID {}"
 
-#: ui/app.slint:2237
+#: ui/app.slint:2238
 msgid "Retry"
 msgstr "重试"
 
-#: ui/app.slint:2245 ui/components/copyable-diagnostic.slint:43
+#: ui/app.slint:2246 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "复制诊断信息"
 
@@ -1571,7 +1575,7 @@ msgstr ""
 
 #: ui/components/account-mail-preferences.slint:178
 #: ui/dialogs/folder-dialog.slint:128 ui/dialogs/oauth-setup-dialog.slint:126
-#: ui/dialogs/settings-dialog.slint:1968 ui/dialogs/settings-dialog.slint:2707
+#: ui/dialogs/settings-dialog.slint:1968 ui/dialogs/settings-dialog.slint:2709
 #: ui/views/contacts-view.slint:604 ui/views/files-view.slint:620
 msgid "Cancel"
 msgstr "取消"
@@ -2300,39 +2304,27 @@ msgstr "删除邮件模板？"
 msgid "Delete this template from this device?"
 msgstr "从此设备删除该模板？"
 
-#: ui/components/mail-security-fields.slint:17
+#: ui/components/mail-security-fields.slint:44
 msgid "Connection security"
 msgstr "连接安全"
 
-#: ui/components/mail-security-fields.slint:27
+#: ui/components/mail-security-fields.slint:54
 msgid "IMAP encryption"
 msgstr "IMAP 加密"
 
-#: ui/components/mail-security-fields.slint:32
-msgid "Automatic"
-msgstr "自动"
-
-#: ui/components/mail-security-fields.slint:41
+#: ui/components/mail-security-fields.slint:68
 msgid "SMTP encryption"
 msgstr "SMTP 加密"
 
-#: ui/components/mail-security-fields.slint:53
-msgid ""
-"Automatic: IMAP uses STARTTLS on 143, SSL/TLS otherwise. SMTP uses SSL/TLS "
-"on 465, STARTTLS otherwise."
-msgstr ""
-"自动：IMAP 在 143 端口使用 STARTTLS，其他情况使用 SSL/TLS；SMTP 在 465 端口使"
-"用 SSL/TLS，其他情况使用 STARTTLS。"
-
-#: ui/components/mail-security-fields.slint:58
+#: ui/components/mail-security-fields.slint:81
 msgid "Manage trusted certificate"
 msgstr "管理受信任证书"
 
-#: ui/components/mail-security-fields.slint:58
+#: ui/components/mail-security-fields.slint:81
 msgid "Custom server certificate…"
 msgstr "自定义服务器证书…"
 
-#: ui/components/mail-security-fields.slint:67
+#: ui/components/mail-security-fields.slint:90
 msgid ""
 "For Proton Bridge, export its certificate from Bridge settings and import it "
 "here. Only trust certificates from your server administrator. Server names "
@@ -2341,19 +2333,19 @@ msgstr ""
 "若使用 Proton Bridge，请从 Bridge 设置中导出其证书，然后在此导入。请仅信任由"
 "服务器管理员提供的证书。服务器名称和有效期仍会校验。"
 
-#: ui/components/mail-security-fields.slint:70
+#: ui/components/mail-security-fields.slint:93
 msgid "Import certificate file"
 msgstr "导入证书文件"
 
-#: ui/components/mail-security-fields.slint:72
+#: ui/components/mail-security-fields.slint:95
 msgid "PEM certificate only. Do not paste a private key."
 msgstr "仅支持 PEM 格式证书。请勿粘贴私钥。"
 
-#: ui/components/mail-security-fields.slint:73
+#: ui/components/mail-security-fields.slint:96
 msgid "Remove certificate"
 msgstr "移除证书"
 
-#: ui/components/mail-security-fields.slint:76
+#: ui/components/mail-security-fields.slint:99
 msgid "Custom certificate added for this account."
 msgstr "已为此账户添加自定义证书。"
 
@@ -3736,7 +3728,7 @@ msgid "General"
 msgstr "常规"
 
 #: ui/dialogs/settings-dialog.slint:911 ui/dialogs/settings-dialog.slint:1491
-#: ui/dialogs/settings-dialog.slint:2412 ui/dialogs/settings-dialog.slint:2835
+#: ui/dialogs/settings-dialog.slint:2412 ui/dialogs/settings-dialog.slint:2837
 msgid "Accounts"
 msgstr "账户"
 
@@ -4068,11 +4060,11 @@ msgid ""
 "you create one."
 msgstr "暂无分组。创建分组之前，账户将保持各自或自动生成的颜色。"
 
-#: ui/dialogs/settings-dialog.slint:1617 ui/dialogs/settings-dialog.slint:2731
+#: ui/dialogs/settings-dialog.slint:1617 ui/dialogs/settings-dialog.slint:2733
 msgid "Edit profile"
 msgstr "编辑分组"
 
-#: ui/dialogs/settings-dialog.slint:1627 ui/dialogs/settings-dialog.slint:2949
+#: ui/dialogs/settings-dialog.slint:1627 ui/dialogs/settings-dialog.slint:2951
 msgid "Delete profile"
 msgstr "删除分组"
 
@@ -4339,7 +4331,7 @@ msgstr "从此设备移除账户、已下载的邮件、日历、联系人、偏
 msgid "This does not delete anything from Gmail, Outlook, or your IMAP server."
 msgstr "这不会删除 Gmail、Outlook 或 IMAP 服务器上的任何内容。"
 
-#: ui/dialogs/settings-dialog.slint:2046 ui/dialogs/settings-dialog.slint:2911
+#: ui/dialogs/settings-dialog.slint:2046 ui/dialogs/settings-dialog.slint:2913
 msgid "Delete everything"
 msgstr "全部删除"
 
@@ -4603,7 +4595,7 @@ msgstr "留空则保留当前密码"
 msgid "Stored securely in your system keyring"
 msgstr "安全保存在系统密钥环中"
 
-#: ui/dialogs/settings-dialog.slint:2544 ui/dialogs/settings-dialog.slint:2710
+#: ui/dialogs/settings-dialog.slint:2544 ui/dialogs/settings-dialog.slint:2712
 msgid "Connecting…"
 msgstr "正在连接…"
 
@@ -4692,56 +4684,56 @@ msgstr ""
 "Proton Bridge：请使用 Bridge 中显示的本地服务器、端口和密码，并与其加密设置保"
 "持一致。"
 
-#: ui/dialogs/settings-dialog.slint:2710
+#: ui/dialogs/settings-dialog.slint:2712
 msgid "Save account"
 msgstr "保存账户"
 
-#: ui/dialogs/settings-dialog.slint:2710 ui/views/onboarding-view.slint:393
+#: ui/dialogs/settings-dialog.slint:2712 ui/views/onboarding-view.slint:395
 msgid "Connect account"
 msgstr "连接账户"
 
-#: ui/dialogs/settings-dialog.slint:2731 ui/dialogs/settings-dialog.slint:2787
+#: ui/dialogs/settings-dialog.slint:2733 ui/dialogs/settings-dialog.slint:2789
 msgid "Create profile"
 msgstr "创建分组"
 
-#: ui/dialogs/settings-dialog.slint:2788
+#: ui/dialogs/settings-dialog.slint:2790
 msgid ""
 "Its color marks its accounts' mail, and choosing it shows only their mail."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2793
+#: ui/dialogs/settings-dialog.slint:2795
 msgid "Profile name"
 msgstr "分组名称"
 
-#: ui/dialogs/settings-dialog.slint:2795
+#: ui/dialogs/settings-dialog.slint:2797
 msgid "Personal or Work"
 msgstr "个人或工作"
 
-#: ui/dialogs/settings-dialog.slint:2801 ui/views/mail-reading-pane.slint:1971
+#: ui/dialogs/settings-dialog.slint:2803 ui/views/mail-reading-pane.slint:1971
 msgid "Color"
 msgstr "颜色"
 
-#: ui/dialogs/settings-dialog.slint:2810
+#: ui/dialogs/settings-dialog.slint:2812
 msgid "Profile color {}"
 msgstr "分组颜色 {}"
 
-#: ui/dialogs/settings-dialog.slint:2852
+#: ui/dialogs/settings-dialog.slint:2854
 msgid "Save profile"
 msgstr "保存分组"
 
-#: ui/dialogs/settings-dialog.slint:2860
+#: ui/dialogs/settings-dialog.slint:2862
 msgid "Could not save this profile. Check the name and try again."
 msgstr "无法保存此分组。请检查名称后重试。"
 
-#: ui/dialogs/settings-dialog.slint:2878
+#: ui/dialogs/settings-dialog.slint:2880
 msgid "Choose a profile for {}"
 msgstr "为 {} 选择分组"
 
-#: ui/dialogs/settings-dialog.slint:2908
+#: ui/dialogs/settings-dialog.slint:2910
 msgid "Delete all local data?"
 msgstr "删除全部本地数据？"
 
-#: ui/dialogs/settings-dialog.slint:2909
+#: ui/dialogs/settings-dialog.slint:2911
 msgid ""
 "This removes every account, downloaded message, calendar, contact, "
 "preference, and credential stored by Flectar Mail on this device."
@@ -4749,50 +4741,50 @@ msgstr ""
 "这将从此设备移除 Flectar Mail 存储的所有账户、已下载的邮件、日历、联系人、偏"
 "好设置和凭据。"
 
-#: ui/dialogs/settings-dialog.slint:2910
+#: ui/dialogs/settings-dialog.slint:2912
 msgid ""
 "Mail and events on Gmail, Outlook, and IMAP servers will not be deleted."
 msgstr "Gmail、Outlook 和 IMAP 服务器上的邮件和日程不会被删除。"
 
-#: ui/dialogs/settings-dialog.slint:2912
+#: ui/dialogs/settings-dialog.slint:2914
 msgid "Keep my data"
 msgstr "保留我的数据"
 
-#: ui/dialogs/settings-dialog.slint:2926
+#: ui/dialogs/settings-dialog.slint:2928
 msgid "Remove account?"
 msgstr "移除账户？"
 
-#: ui/dialogs/settings-dialog.slint:2928
+#: ui/dialogs/settings-dialog.slint:2930
 msgid "Remove this account and its downloaded mail from this device."
 msgstr "从此设备移除此账户及其已下载的邮件。"
 
-#: ui/dialogs/settings-dialog.slint:2929
+#: ui/dialogs/settings-dialog.slint:2931
 msgid "Messages on the mail server will not be deleted."
 msgstr "邮件服务器上的邮件不会被删除。"
 
-#: ui/dialogs/settings-dialog.slint:2930
+#: ui/dialogs/settings-dialog.slint:2932
 msgid "Remove account"
 msgstr "移除账户"
 
-#: ui/dialogs/settings-dialog.slint:2931
+#: ui/dialogs/settings-dialog.slint:2933
 msgid "Keep account"
 msgstr "保留账户"
 
-#: ui/dialogs/settings-dialog.slint:2945
+#: ui/dialogs/settings-dialog.slint:2947
 msgid "Delete profile?"
 msgstr "删除分组？"
 
-#: ui/dialogs/settings-dialog.slint:2947
+#: ui/dialogs/settings-dialog.slint:2949
 msgid ""
 "Accounts assigned to this profile will return to their individual or "
 "generated account colors."
 msgstr "归入此分组的账户将恢复为各自或自动生成的颜色。"
 
-#: ui/dialogs/settings-dialog.slint:2948
+#: ui/dialogs/settings-dialog.slint:2950
 msgid "Accounts and provider data are not changed."
 msgstr "账户和服务商数据不会改变。"
 
-#: ui/dialogs/settings-dialog.slint:2950
+#: ui/dialogs/settings-dialog.slint:2952
 msgid "Keep profile"
 msgstr "保留分组"
 

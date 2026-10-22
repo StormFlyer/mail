@@ -18,8 +18,9 @@ fn mail_domain(address: &str) -> Option<&str> {
 }
 
 fn same_mail_transport(left: &AccountConfig, right: &AccountConfig) -> bool {
-    left.imap_host.eq_ignore_ascii_case(&right.imap_host)
-        && left.imap_port == right.imap_port
+    left.incoming_host
+        .eq_ignore_ascii_case(&right.incoming_host)
+        && left.incoming_port == right.incoming_port
         && left.smtp_host.eq_ignore_ascii_case(&right.smtp_host)
         && left.smtp_port == right.smtp_port
         && left.settings.connection == right.settings.connection
@@ -33,7 +34,7 @@ pub(super) fn reusable_mail_transport<'a>(
 ) -> Option<&'a AccountConfig> {
     let domain = mail_domain(address)?;
     let mut matches = configs.iter().filter(|config| {
-        config.provider == Provider::Imap
+        config.provider == Provider::Generic
             && config.mail_protocol == MailProtocol::Imap
             && mail_domain(&config.email)
                 .is_some_and(|candidate| candidate.eq_ignore_ascii_case(domain))
@@ -246,7 +247,7 @@ pub(super) fn apply_connected_accounts(
                 has_account_color: presentation.has_account_color(account.id),
                 username: config.username.clone().into(),
                 jmap_url: config.jmap_url.clone().into(),
-                imap_security: config.settings.connection.imap_security.as_str().into(),
+                incoming_security: config.settings.connection.incoming_security.as_str().into(),
                 smtp_security: config.settings.connection.smtp_security.as_str().into(),
                 trusted_certificate_pem: config
                     .settings
@@ -254,8 +255,8 @@ pub(super) fn apply_connected_accounts(
                     .trusted_certificate_pem
                     .clone()
                     .into(),
-                imap_host: config.imap_host.clone().into(),
-                imap_port: config.imap_port.to_string().into(),
+                incoming_host: config.incoming_host.clone().into(),
+                incoming_port: config.incoming_port.to_string().into(),
                 smtp_host: config.smtp_host.clone().into(),
                 smtp_port: config.smtp_port.to_string().into(),
                 mail_history: config.settings.mail_history.as_str().into(),
@@ -613,23 +614,26 @@ pub(super) fn normalize_appimage_environment() {
 mod mail_transport_suggestion_tests {
     use super::*;
 
-    fn config(id: i64, email: &str, imap_host: &str, smtp_host: &str) -> AccountConfig {
+    fn config(id: i64, email: &str, incoming_host: &str, smtp_host: &str) -> AccountConfig {
         AccountConfig {
             id,
             email: email.into(),
             display_name: None,
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: flectar_mail_core::models::AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             username: email.into(),
             jmap_url: String::new(),
             jmap_account_id: None,
-            imap_host: imap_host.into(),
-            imap_port: 993,
+            incoming_host: incoming_host.into(),
+            incoming_port: 993,
             smtp_host: smtp_host.into(),
             smtp_port: 465,
-            settings: Default::default(),
+            settings: flectar_mail_core::models::AccountSettings::new(MailConnectionSettings::new(
+                ConnectionSecurity::Tls,
+                ConnectionSecurity::Tls,
+            )),
         }
     }
 
@@ -642,7 +646,7 @@ mod mail_transport_suggestion_tests {
             "smtp.example.com",
         )];
         let suggestion = reusable_mail_transport(&configs, "second@example.COM").unwrap();
-        assert_eq!(suggestion.imap_host, "imap.example.com");
+        assert_eq!(suggestion.incoming_host, "imap.example.com");
         assert_eq!(suggestion.smtp_host, "smtp.example.com");
     }
 

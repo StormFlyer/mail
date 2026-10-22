@@ -3,7 +3,7 @@ pub mod folder_map;
 pub mod gmail;
 pub mod threading;
 
-use crate::{db::repo, error::Result, events::CoreEvent};
+use crate::{db::repo, error::Result, events::CoreEvent, models::MailProtocol};
 use engine::SyncCtx;
 use rusqlite::{OptionalExtension, params};
 
@@ -17,7 +17,7 @@ pub(crate) async fn is_local_only_draft(ctx: &SyncCtx, message_id: i64) -> Resul
             let identity = conn
                 .query_row(
                     "SELECT m.is_draft, m.uid, m.gm_msgid, m.gmail_draft_id,
-                            m.jmap_id, a.provider, a.mail_protocol
+                            m.jmap_id, a.mail_protocol
                      FROM messages m JOIN accounts a ON a.id = m.account_id
                      WHERE m.id = ?1",
                     params![message_id],
@@ -28,14 +28,12 @@ pub(crate) async fn is_local_only_draft(ctx: &SyncCtx, message_id: i64) -> Resul
                             row.get::<_, Option<String>>(2)?,
                             row.get::<_, Option<String>>(3)?,
                             row.get::<_, Option<String>>(4)?,
-                            row.get::<_, String>(5)?,
-                            row.get::<_, String>(6)?,
+                            row.get::<_, MailProtocol>(5)?,
                         ))
                     },
                 )
                 .optional()?;
-            let Some((is_draft, uid, gm_msgid, gmail_draft_id, jmap_id, provider, protocol)) =
-                identity
+            let Some((is_draft, uid, gm_msgid, gmail_draft_id, jmap_id, protocol)) = identity
             else {
                 return Ok(false);
             };
@@ -50,23 +48,23 @@ pub(crate) async fn is_local_only_draft(ctx: &SyncCtx, message_id: i64) -> Resul
             {
                 return Ok(false);
             }
-            if provider == "gmail" {
-                return Ok(gm_msgid.is_none() && gmail_draft_id.is_none());
+            match protocol {
+                MailProtocol::Gmail => Ok(gm_msgid.is_none() && gmail_draft_id.is_none()),
+                MailProtocol::Jmap => Ok(jmap_id.is_none()),
+                MailProtocol::Imap => {
+                    if uid.is_some() {
+                        return Ok(false);
+                    }
+                    let moved_from_server: bool = conn.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM pending_actions
+                         WHERE message_id = ?1 AND kind IN ('trash','move')
+                           AND json_extract(payload, '$.srcUid') IS NOT NULL)",
+                        params![message_id],
+                        |row| row.get(0),
+                    )?;
+                    Ok(!moved_from_server)
+                }
             }
-            if protocol == "jmap" {
-                return Ok(jmap_id.is_none());
-            }
-            if uid.is_some() {
-                return Ok(false);
-            }
-            let moved_from_server: bool = conn.query_row(
-                "SELECT EXISTS(SELECT 1 FROM pending_actions
-                 WHERE message_id = ?1 AND kind IN ('trash','move')
-                   AND json_extract(payload, '$.srcUid') IS NOT NULL)",
-                params![message_id],
-                |row| row.get(0),
-            )?;
-            Ok(!moved_from_server)
         })
         .await
 }

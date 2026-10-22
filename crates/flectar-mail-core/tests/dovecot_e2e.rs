@@ -200,15 +200,18 @@ async fn full_sync_triage_and_search() {
     // 1. Add the account (verifies IMAP login on the way in).
     let account = core
         .add_account_password(AddPasswordAccountArgs {
-            connection: Default::default(),
+            connection: flectar_mail_core::models::MailConnectionSettings::new(
+                flectar_mail_core::models::ConnectionSecurity::Tls,
+                flectar_mail_core::models::ConnectionSecurity::Starttls,
+            ),
             email: "testuser@example.com".into(),
             display_name: Some("Test User".into()),
             username: "testuser".into(),
             password: "pass".into(),
             mail_protocol: flectar_mail_core::models::MailProtocol::Imap,
             jmap_url: String::new(),
-            imap_host: "127.0.0.1".into(),
-            imap_port: 10993,
+            incoming_host: "127.0.0.1".into(),
+            incoming_port: 10993,
             smtp_host: "127.0.0.1".into(),
             smtp_port: 10587,
         })

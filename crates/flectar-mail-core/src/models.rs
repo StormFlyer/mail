@@ -3,27 +3,33 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The service behind an account. It decides how the user signs in and which
+/// provider extras (calendars, aliases) exist; [`MailProtocol`] decides how
+/// mail itself is synchronized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
-    Imap,
+    /// Any standards-based server the user configures by hand.
+    Generic,
     Gmail,
     Microsoft,
 }
 
 impl Provider {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
-            Provider::Imap => "imap",
-            Provider::Gmail => "gmail",
-            Provider::Microsoft => "microsoft",
+            Self::Generic => "generic",
+            Self::Gmail => "gmail",
+            Self::Microsoft => "microsoft",
         }
     }
-    pub fn from_storage(s: &str) -> Self {
-        match s {
-            "gmail" => Provider::Gmail,
-            "microsoft" => Provider::Microsoft,
-            _ => Provider::Imap,
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "generic" => Some(Self::Generic),
+            "gmail" => Some(Self::Gmail),
+            "microsoft" => Some(Self::Microsoft),
+            _ => None,
         }
     }
 }
@@ -35,33 +41,45 @@ pub enum AuthKind {
     Oauth2,
 }
 
-/// Remote mail transport used by an account. Provider identifies the service
-/// (Google, Microsoft, or a standards-based server); this value identifies the
-/// wire protocol. Keeping them separate lets Stalwart and other generic
-/// providers use JMAP without pretending to be a different provider.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// The wire protocol an account uses for mail. Every synchronization,
+/// mailbox, and action code path dispatches on this value exhaustively, so a
+/// protocol can never silently inherit another protocol's behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MailProtocol {
+    /// The Gmail REST API for synchronization, labels, drafts, and sending.
+    Gmail,
+    /// IMAP access with SMTP submission.
+    Imap,
     /// RFC 8620/8621 JMAP Mail and EmailSubmission.
     Jmap,
-    /// IMAP access plus SMTP submission compatibility mode.
-    #[default]
-    Imap,
 }
 
 impl MailProtocol {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Jmap => "jmap",
+            Self::Gmail => "gmail",
             Self::Imap => "imap",
+            Self::Jmap => "jmap",
         }
     }
 
-    pub fn from_storage(value: &str) -> Self {
-        if value.eq_ignore_ascii_case("jmap") {
-            Self::Jmap
-        } else {
-            Self::Imap
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "gmail" => Some(Self::Gmail),
+            "imap" => Some(Self::Imap),
+            "jmap" => Some(Self::Jmap),
+            _ => None,
+        }
+    }
+
+    /// Whether one message can belong to several mailboxes at once (Gmail
+    /// labels, JMAP `mailboxIds`). Single-folder protocols store location in
+    /// `messages.folder_id` alone.
+    pub const fn has_multi_mailbox_messages(self) -> bool {
+        match self {
+            Self::Gmail | Self::Jmap => true,
+            Self::Imap => false,
         }
     }
 }
@@ -113,17 +131,18 @@ impl SenderVerification {
 }
 
 impl AuthKind {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
-            AuthKind::Password => "password",
-            AuthKind::Oauth2 => "oauth2",
+            Self::Password => "password",
+            Self::Oauth2 => "oauth2",
         }
     }
-    pub fn from_storage(s: &str) -> Self {
-        if s == "oauth2" {
-            AuthKind::Oauth2
-        } else {
-            AuthKind::Password
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "password" => Some(Self::Password),
+            "oauth2" => Some(Self::Oauth2),
+            _ => None,
         }
     }
 }
@@ -191,27 +210,29 @@ impl MailHistory {
     }
 }
 
-/// Explicit wire security. Auto infers the mode from conventional server ports.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Transport security of one mail connection. Stored explicitly for every
+/// account so the server port never decides whether a connection is
+/// encrypted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionSecurity {
-    #[default]
-    Auto,
+    /// TLS from the first byte.
     Tls,
+    /// A plaintext greeting upgraded with STARTTLS before any credentials
+    /// are sent. A server that refuses the upgrade is never used.
     Starttls,
 }
 
 impl ConnectionSecurity {
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Auto => "auto",
             Self::Tls => "tls",
             Self::Starttls => "starttls",
         }
     }
+
     pub fn parse(value: &str) -> Option<Self> {
         match value {
-            "auto" => Some(Self::Auto),
             "tls" => Some(Self::Tls),
             "starttls" => Some(Self::Starttls),
             _ => None,
@@ -219,14 +240,26 @@ impl ConnectionSecurity {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MailConnectionSettings {
-    pub imap_security: ConnectionSecurity,
+    /// Security of the incoming mail server (IMAP).
+    pub incoming_security: ConnectionSecurity,
     pub smtp_security: ConnectionSecurity,
     /// Additional trust anchors for this account only; normal hostname and
     /// validity checks still apply. Contains public certificates, never keys.
+    #[serde(default)]
     pub trusted_certificate_pem: String,
+}
+
+impl MailConnectionSettings {
+    pub fn new(incoming_security: ConnectionSecurity, smtp_security: ConnectionSecurity) -> Self {
+        Self {
+            incoming_security,
+            smtp_security,
+            trusted_certificate_pem: String::new(),
+        }
+    }
 }
 
 /// Who files a copy after an SMTP submission. API transports own their filing.
@@ -277,7 +310,6 @@ pub struct AccountSettings {
     pub mail_history: MailHistory,
     #[serde(default)]
     pub security: crate::mail_security::MailSecurity,
-    #[serde(default)]
     pub connection: MailConnectionSettings,
     /// The sender identity Flectar should preselect for new messages. The
     /// authenticated account address remains the account/login identity.
@@ -287,12 +319,14 @@ pub struct AccountSettings {
     pub sent_copy_policy: SentCopyPolicy,
 }
 
-impl Default for AccountSettings {
-    fn default() -> Self {
+impl AccountSettings {
+    /// Settings of a newly created account. Connection security has no
+    /// default: every account records the modes it was configured with.
+    pub fn new(connection: MailConnectionSettings) -> Self {
         Self {
             mail_history: default_mail_history(),
             security: Default::default(),
-            connection: MailConnectionSettings::default(),
+            connection,
             default_sender_email: None,
             sent_copy_policy: SentCopyPolicy::Auto,
         }
@@ -307,12 +341,15 @@ const fn default_mail_history() -> MailHistory {
 mod account_settings_tests {
     use super::*;
 
+    const MINIMAL_SETTINGS: &str =
+        r#"{"connection":{"incomingSecurity":"tls","smtpSecurity":"starttls"}}"#;
+
     #[test]
     fn sent_copy_defaults_and_overrides_survive_serialization() {
-        let mut settings: AccountSettings = serde_json::from_str("{}").unwrap();
+        let mut settings: AccountSettings = serde_json::from_str(MINIMAL_SETTINGS).unwrap();
         assert_eq!(settings.sent_copy_policy, SentCopyPolicy::Auto);
         assert!(!settings.sent_copy_policy.should_append(Provider::Microsoft));
-        assert!(settings.sent_copy_policy.should_append(Provider::Imap));
+        assert!(settings.sent_copy_policy.should_append(Provider::Generic));
         for policy in [
             SentCopyPolicy::Auto,
             SentCopyPolicy::Server,
@@ -325,33 +362,33 @@ mod account_settings_tests {
             assert_eq!(SentCopyPolicy::from_storage(policy.as_str()), Some(policy));
         }
         assert!(SentCopyPolicy::Client.should_append(Provider::Microsoft));
-        assert!(!SentCopyPolicy::Server.should_append(Provider::Imap));
+        assert!(!SentCopyPolicy::Server.should_append(Provider::Generic));
     }
 
     #[test]
-    fn new_missing_and_imported_settings_share_the_bounded_default() {
-        assert_eq!(
-            AccountSettings::default().mail_history,
-            MailHistory::SixMonths
-        );
-        let missing: AccountSettings = serde_json::from_str("{}").unwrap();
-        assert_eq!(missing.mail_history, MailHistory::SixMonths);
+    fn new_and_partially_stored_settings_share_the_bounded_default() {
+        let connection =
+            MailConnectionSettings::new(ConnectionSecurity::Tls, ConnectionSecurity::Starttls);
+        let created = AccountSettings::new(connection.clone());
+        assert_eq!(created.mail_history, MailHistory::SixMonths);
+        let stored: AccountSettings = serde_json::from_str(MINIMAL_SETTINGS).unwrap();
+        assert_eq!(stored, created);
+        assert_eq!(stored.connection.trusted_certificate_pem, "");
+    }
 
-        let imported: PortableAccountConfig = serde_json::from_str(
-            r#"{
-                "email":"person@example.com",
-                "displayName":null,
-                "provider":"imap",
-                "authKind":"password",
-                "username":"person",
-                "imapHost":"imap.example.com",
-                "imapPort":993,
-                "smtpHost":"smtp.example.com",
-                "smtpPort":465
-            }"#,
-        )
-        .unwrap();
-        assert_eq!(imported.settings.mail_history, MailHistory::SixMonths);
+    #[test]
+    fn connection_security_is_never_inferred() {
+        assert!(serde_json::from_str::<AccountSettings>("{}").is_err());
+        assert!(
+            serde_json::from_str::<AccountSettings>(
+                r#"{"connection":{"incomingSecurity":"auto","smtpSecurity":"tls"}}"#
+            )
+            .is_err()
+        );
+        assert_eq!(ConnectionSecurity::parse("auto"), None);
+        for security in [ConnectionSecurity::Tls, ConnectionSecurity::Starttls] {
+            assert_eq!(ConnectionSecurity::parse(security.as_str()), Some(security));
+        }
     }
 
     #[test]
@@ -402,8 +439,9 @@ pub struct AccountConfig {
     pub jmap_url: String,
     /// Selected JMAP Mail account id advertised by the Session resource.
     pub jmap_account_id: Option<String>,
-    pub imap_host: String,
-    pub imap_port: u16,
+    /// Incoming mail server (IMAP). Unused by API protocols.
+    pub incoming_host: String,
+    pub incoming_port: u16,
     pub smtp_host: String,
     pub smtp_port: u16,
     pub settings: AccountSettings,
@@ -418,17 +456,34 @@ pub struct PortableAccountConfig {
     pub display_name: Option<String>,
     pub provider: Provider,
     pub auth_kind: AuthKind,
-    #[serde(default)]
     pub mail_protocol: MailProtocol,
     pub username: String,
     #[serde(default)]
     pub jmap_url: String,
-    pub imap_host: String,
-    pub imap_port: u16,
+    pub incoming_host: String,
+    pub incoming_port: u16,
     pub smtp_host: String,
     pub smtp_port: u16,
-    #[serde(default)]
     pub settings: AccountSettings,
+}
+
+impl From<&AccountConfig> for PortableAccountConfig {
+    fn from(config: &AccountConfig) -> Self {
+        Self {
+            email: config.email.clone(),
+            display_name: config.display_name.clone(),
+            provider: config.provider,
+            auth_kind: config.auth_kind,
+            mail_protocol: config.mail_protocol,
+            username: config.username.clone(),
+            jmap_url: config.jmap_url.clone(),
+            incoming_host: config.incoming_host.clone(),
+            incoming_port: config.incoming_port,
+            smtp_host: config.smtp_host.clone(),
+            smtp_port: config.smtp_port,
+            settings: config.settings.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -915,15 +970,13 @@ pub struct AddPasswordAccountArgs {
     pub display_name: Option<String>,
     pub username: String,
     pub password: String,
-    #[serde(default)]
     pub mail_protocol: MailProtocol,
     #[serde(default)]
     pub jmap_url: String,
-    pub imap_host: String,
-    pub imap_port: u16,
+    pub incoming_host: String,
+    pub incoming_port: u16,
     pub smtp_host: String,
     pub smtp_port: u16,
-    #[serde(default)]
     pub connection: MailConnectionSettings,
 }
 
@@ -1130,6 +1183,7 @@ pub struct FolderInfo {
     /// identifier used in SELECT and other protocol commands.
     pub display_name: String,
     pub is_jmap: bool,
+    /// Full hierarchical folder name, joined with `delimiter`.
     pub path: String,
     /// IMAP hierarchy delimiter (e.g. "/" or "."), for nesting user folders.
     pub delimiter: Option<String>,
@@ -2028,17 +2082,27 @@ mod tests {
 
     #[test]
     fn provider_string_roundtrip() {
-        for p in [Provider::Imap, Provider::Gmail, Provider::Microsoft] {
-            assert_eq!(Provider::from_storage(p.as_str()), p);
+        for p in [Provider::Generic, Provider::Gmail, Provider::Microsoft] {
+            assert_eq!(Provider::parse(p.as_str()), Some(p));
         }
+        assert_eq!(Provider::parse("imap"), None);
     }
 
     #[test]
-    fn mail_protocol_roundtrip_defaults_unknown_storage_to_imap() {
-        for protocol in [MailProtocol::Imap, MailProtocol::Jmap] {
-            assert_eq!(MailProtocol::from_storage(protocol.as_str()), protocol);
+    fn mail_protocol_roundtrip_rejects_unknown_values() {
+        for protocol in [MailProtocol::Gmail, MailProtocol::Imap, MailProtocol::Jmap] {
+            assert_eq!(MailProtocol::parse(protocol.as_str()), Some(protocol));
         }
-        assert_eq!(MailProtocol::from_storage("future"), MailProtocol::Imap);
+        assert_eq!(MailProtocol::parse("future"), None);
+        assert_eq!(MailProtocol::parse("JMAP"), None);
+    }
+
+    #[test]
+    fn auth_kind_roundtrip_rejects_unknown_values() {
+        for kind in [AuthKind::Password, AuthKind::Oauth2] {
+            assert_eq!(AuthKind::parse(kind.as_str()), Some(kind));
+        }
+        assert_eq!(AuthKind::parse("token"), None);
     }
 
     #[test]

@@ -37,7 +37,7 @@ fn settings_with_certificate(
     certificate: &str,
 ) -> MailConnectionSettings {
     MailConnectionSettings {
-        imap_security: mode,
+        incoming_security: mode,
         smtp_security: mode,
         trusted_certificate_pem: certificate.into(),
     }
@@ -798,20 +798,17 @@ fn smtp_config(port: u16, mode: ConnectionSecurity, certificate: &str) -> Accoun
         email: "user@example.com".into(),
         display_name: None,
         avatar_url: None,
-        provider: Provider::Imap,
+        provider: Provider::Generic,
         auth_kind: AuthKind::Password,
         mail_protocol: MailProtocol::Imap,
         username: "bridge-user".into(),
         jmap_url: String::new(),
         jmap_account_id: None,
-        imap_host: "127.0.0.1".into(),
-        imap_port: 993,
+        incoming_host: "127.0.0.1".into(),
+        incoming_port: 993,
         smtp_host: "127.0.0.1".into(),
         smtp_port: port,
-        settings: AccountSettings {
-            connection: settings_with_certificate(mode, certificate),
-            ..Default::default()
-        },
+        settings: AccountSettings::new(settings_with_certificate(mode, certificate)),
     }
 }
 #[tokio::test]
@@ -825,7 +822,7 @@ async fn smtp_implicit_tls_on_custom_port() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn smtp_delivery_does_not_wait_for_the_imap_sync_actor() {
-    smtp_sent_policy(Provider::Imap, SentCopyPolicy::Auto, 1).await;
+    smtp_sent_policy(Provider::Generic, SentCopyPolicy::Auto, 1).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -836,11 +833,11 @@ async fn smtp_microsoft_auto_save_skips_append_and_client_override_restores_it()
 
 #[tokio::test(flavor = "multi_thread")]
 async fn smtp_server_override_takes_effect_without_restarting_worker() {
-    smtp_sent_policy(Provider::Imap, SentCopyPolicy::Server, 0).await;
+    smtp_sent_policy(Provider::Generic, SentCopyPolicy::Server, 0).await;
 }
 
 async fn smtp_sent_policy(provider: Provider, policy: SentCopyPolicy, expected_appends: i64) {
-    let (imap_port, imap_task) = imap_server(false, false).await;
+    let (incoming_port, imap_task) = imap_server(false, false).await;
     let (smtp_port, delivered, smtp_task) = smtp_test_and_delivery_server().await;
     let temp = tempfile::tempdir().unwrap();
     let credentials = Arc::new(DevelopmentFileCredentialStore::new(
@@ -857,8 +854,8 @@ async fn smtp_sent_policy(provider: Provider, policy: SentCopyPolicy, expected_a
             password: "test-password".into(),
             mail_protocol: MailProtocol::Imap,
             jmap_url: String::new(),
-            imap_host: "127.0.0.1".into(),
-            imap_port,
+            incoming_host: "127.0.0.1".into(),
+            incoming_port,
             smtp_host: "127.0.0.1".into(),
             smtp_port,
             connection: settings(ConnectionSecurity::Tls),
@@ -1074,13 +1071,8 @@ fn rejects_invalid_certificate_imports() {
     assert_eq!(imap::trusted_certificates(CERT).unwrap().len(), 1);
 }
 #[test]
-fn settings_round_trip_and_legacy_defaults() {
-    let legacy: AccountSettings = serde_json::from_str("{}").unwrap();
-    assert_eq!(legacy.connection, MailConnectionSettings::default());
-    let configured = AccountSettings {
-        connection: settings(ConnectionSecurity::Starttls),
-        ..legacy
-    };
+fn connection_settings_round_trip() {
+    let configured = AccountSettings::new(settings(ConnectionSecurity::Starttls));
     let restored: AccountSettings =
         serde_json::from_str(&serde_json::to_string(&configured).unwrap()).unwrap();
     assert_eq!(configured.connection, restored.connection);
@@ -1119,7 +1111,7 @@ async fn smtp_failure_prevents_saving_account() {
     )
     .await
     .unwrap();
-    let (imap_port, imap_task) = imap_server(true, false).await;
+    let (incoming_port, imap_task) = imap_server(true, false).await;
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let smtp_port = listener.local_addr().unwrap().port();
     let smtp_task = tokio::spawn(async move {
@@ -1139,8 +1131,8 @@ async fn smtp_failure_prevents_saving_account() {
             password: "\r\nbridge-password\r\n".into(),
             mail_protocol: MailProtocol::Imap,
             jmap_url: String::new(),
-            imap_host: "127.0.0.1".into(),
-            imap_port,
+            incoming_host: "127.0.0.1".into(),
+            incoming_port,
             smtp_host: "127.0.0.1".into(),
             smtp_port,
             connection: settings(ConnectionSecurity::Starttls),
@@ -1159,7 +1151,7 @@ async fn imap_mailbox_failure_prevents_saving_account() {
         Core, accounts::credentials::DevelopmentFileCredentialStore, config::Paths,
     };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let imap_port = listener.local_addr().unwrap().port();
+    let incoming_port = listener.local_addr().unwrap().port();
     let imap_task = tokio::spawn(async move {
         let (tcp, _) = listener.accept().await.unwrap();
         let tls = acceptor_for(CERT).accept(tcp).await.unwrap();
@@ -1213,8 +1205,8 @@ async fn imap_mailbox_failure_prevents_saving_account() {
             password: "bridge-password".into(),
             mail_protocol: MailProtocol::Imap,
             jmap_url: String::new(),
-            imap_host: "127.0.0.1".into(),
-            imap_port,
+            incoming_host: "127.0.0.1".into(),
+            incoming_port,
             smtp_host: "127.0.0.1".into(),
             smtp_port: 1,
             connection: settings(ConnectionSecurity::Tls),
@@ -1236,19 +1228,16 @@ async fn backup_import_preserves_transport_settings_and_rejects_private_keys() {
     let mut config = PortableAccountConfig {
         email: "user@example.com".into(),
         display_name: None,
-        provider: Provider::Imap,
+        provider: Provider::Generic,
         auth_kind: AuthKind::Password,
         mail_protocol: MailProtocol::Imap,
         username: "bridge-user".into(),
         jmap_url: String::new(),
-        imap_host: "127.0.0.1".into(),
-        imap_port: 1143,
+        incoming_host: "127.0.0.1".into(),
+        incoming_port: 1143,
         smtp_host: "127.0.0.1".into(),
         smtp_port: 1025,
-        settings: AccountSettings {
-            connection: settings(ConnectionSecurity::Starttls),
-            ..Default::default()
-        },
+        settings: AccountSettings::new(settings(ConnectionSecurity::Starttls)),
     };
     core.import_account_configs(vec![config.clone()])
         .await

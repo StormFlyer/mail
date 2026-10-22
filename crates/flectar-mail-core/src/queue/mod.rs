@@ -321,12 +321,12 @@ fn mark_failed_and_rollback(
 
     let source_uid = failed.payload["srcUid"].as_i64();
     repo::messages::set_uid_and_folder(&tx, message_id, source_folder, source_uid)?;
-    let multi_mailbox: bool = tx.query_row(
-        "SELECT provider='gmail' OR mail_protocol='jmap' FROM accounts WHERE id=?1",
+    let protocol: crate::models::MailProtocol = tx.query_row(
+        "SELECT mail_protocol FROM accounts WHERE id=?1",
         rusqlite::params![failed.account_id],
         |row| row.get(0),
     )?;
-    if multi_mailbox {
+    if protocol.has_multi_mailbox_messages() {
         if let Some(target_folder) = target_folder {
             tx.execute(
                 "DELETE FROM message_folders WHERE message_id=?1 AND folder_id=?2",

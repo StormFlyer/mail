@@ -2201,7 +2201,7 @@ mod tests {
             email: format!("person{id}@example.com"),
             display_name: None,
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: flectar_mail_core::models::AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             sync_state: "idle".into(),

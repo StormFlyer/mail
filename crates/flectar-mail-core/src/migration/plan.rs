@@ -57,7 +57,7 @@ pub enum SignIn {
 impl SignIn {
     pub fn for_provider(provider: Provider) -> Self {
         match provider {
-            Provider::Imap => Self::Password,
+            Provider::Generic => Self::Password,
             Provider::Gmail => Self::Google,
             Provider::Microsoft => Self::Microsoft,
         }
@@ -309,10 +309,11 @@ fn plan_account(
 /// The Flectar provider and servers chosen for one account.
 struct ServerMapping {
     provider: Provider,
+    mail_protocol: MailProtocol,
     email: String,
     username: String,
-    imap_host: String,
-    imap_port: u16,
+    incoming_host: String,
+    incoming_port: u16,
     smtp_host: String,
     smtp_port: u16,
     connection: MailConnectionSettings,
@@ -347,23 +348,15 @@ fn map_servers(
     // Google and Microsoft accounts use their own sign-in, as Thunderbird
     // migrated them: both providers are retiring IMAP passwords.
     let oauth = incoming.auth == SourceAuth::OAuth2;
-    for (provider, matches, replaced) in [
-        (
-            Provider::Gmail,
-            is_google_host(&host),
-            FindingCode::GoogleSignInReplacesPassword,
-        ),
-        (
-            Provider::Microsoft,
-            is_microsoft_host(&host),
-            FindingCode::MicrosoftSignInReplacesPassword,
-        ),
-    ] {
-        if matches {
+    for oauth_provider in &OAUTH_PROVIDERS {
+        if (oauth_provider.owns_host)(&host) {
             if !oauth {
-                findings.push(Finding::new(replaced, &incoming.host));
+                findings.push(Finding::new(
+                    oauth_provider.replaces_password,
+                    &incoming.host,
+                ));
             }
-            return provider_mapping(provider, candidate, incoming, primary_email, findings);
+            return provider_mapping(oauth_provider, candidate, incoming, primary_email, findings);
         }
     }
     if incoming.protocol != ServerProtocol::Imap {
@@ -376,19 +369,39 @@ fn map_servers(
     password_mapping(candidate, incoming, primary_email?, findings)
 }
 
-/// Gmail and Microsoft accounts use Flectar's provider configuration, which
-/// owns the server names and OAuth scopes.
-fn provider_mapping(
+/// A provider whose accounts sign in with OAuth. Flectar's provider
+/// configuration owns their server names and OAuth scopes.
+struct OAuthProvider {
     provider: Provider,
+    servers: &'static providers::ProviderServers,
+    owns_host: fn(&str) -> bool,
+    /// Reported when the source signed in with a password instead.
+    replaces_password: FindingCode,
+}
+
+const OAUTH_PROVIDERS: [OAuthProvider; 2] = [
+    OAuthProvider {
+        provider: Provider::Gmail,
+        servers: &providers::GMAIL,
+        owns_host: is_google_host,
+        replaces_password: FindingCode::GoogleSignInReplacesPassword,
+    },
+    OAuthProvider {
+        provider: Provider::Microsoft,
+        servers: &providers::MICROSOFT,
+        owns_host: is_microsoft_host,
+        replaces_password: FindingCode::MicrosoftSignInReplacesPassword,
+    },
+];
+
+fn provider_mapping(
+    oauth_provider: &OAuthProvider,
     candidate: &AccountCandidate,
     incoming: &ServerCandidate,
     primary_email: Option<&str>,
     findings: &mut Vec<Finding>,
 ) -> Option<ServerMapping> {
-    let servers = match provider {
-        Provider::Gmail => &providers::GMAIL,
-        _ => &providers::MICROSOFT,
-    };
+    let servers = oauth_provider.servers;
     // Sign-in must return this exact mailbox, so the source login wins when
     // it is an address (a Workspace user may send as another identity). A
     // login that is not an address, such as Microsoft's shared mailbox form
@@ -404,11 +417,7 @@ fn provider_mapping(
     };
     if let Some(outgoing) = &candidate.outgoing {
         let host = outgoing.host.trim().to_ascii_lowercase();
-        let same_provider = match provider {
-            Provider::Gmail => is_google_host(&host),
-            _ => is_microsoft_host(&host),
-        };
-        if !host.is_empty() && !same_provider {
+        if !host.is_empty() && !(oauth_provider.owns_host)(&host) {
             findings.push(Finding::new(
                 FindingCode::OutgoingServerReplaced,
                 &outgoing.host,
@@ -416,14 +425,15 @@ fn provider_mapping(
         }
     }
     Some(ServerMapping {
-        provider,
+        provider: oauth_provider.provider,
+        mail_protocol: servers.mail_protocol,
         username: email.clone(),
         email,
-        imap_host: servers.imap_host.to_owned(),
-        imap_port: servers.imap_port,
+        incoming_host: servers.incoming_host.to_owned(),
+        incoming_port: servers.incoming_port,
         smtp_host: servers.smtp_host.to_owned(),
         smtp_port: servers.smtp_port,
-        connection: MailConnectionSettings::default(),
+        connection: servers.connection(),
     })
 }
 
@@ -434,14 +444,14 @@ fn password_mapping(
     findings: &mut Vec<Finding>,
 ) -> Option<ServerMapping> {
     let blocked_before = blocking_count(findings);
-    let imap_security = check_security(incoming, FindingCode::UnencryptedIncoming, findings);
+    let incoming_security = check_security(incoming, FindingCode::UnencryptedIncoming, findings);
     check_password_auth(
         incoming,
         FindingCode::IncomingSignInUnsupported,
         SourceAuth::OAuth2,
         findings,
     );
-    let imap_host = check_host(incoming, findings);
+    let incoming_host = check_host(incoming, findings);
     let username = incoming.username.trim();
     if username.is_empty() {
         findings.push(Finding::new(FindingCode::MissingUsername, &incoming.host));
@@ -492,20 +502,17 @@ fn password_mapping(
         return None;
     }
     Some(ServerMapping {
-        provider: Provider::Imap,
+        provider: Provider::Generic,
+        mail_protocol: MailProtocol::Imap,
         email: primary_email.to_owned(),
         // Login names are opaque to the server; keep them byte for byte apart
         // from surrounding whitespace.
         username: incoming.username.trim().to_owned(),
-        imap_host: imap_host?,
-        imap_port: incoming.effective_port(),
+        incoming_host: incoming_host?,
+        incoming_port: incoming.effective_port(),
         smtp_host: smtp_host?,
         smtp_port: outgoing.effective_port(),
-        connection: MailConnectionSettings {
-            imap_security: imap_security?,
-            smtp_security: smtp_security?,
-            trusted_certificate_pem: String::new(),
-        },
+        connection: MailConnectionSettings::new(incoming_security?, smtp_security?),
     })
 }
 
@@ -700,27 +707,25 @@ fn draft(
         findings.push(Finding::new(FindingCode::SignatureTooLarge, ""));
     }
 
+    let mut settings = AccountSettings::new(mapping.connection);
+    settings.default_sender_email = default_sender_email;
     AccountDraft {
         config: PortableAccountConfig {
             email: mapping.email,
             display_name,
             provider: mapping.provider,
             auth_kind: match mapping.provider {
-                Provider::Imap => AuthKind::Password,
+                Provider::Generic => AuthKind::Password,
                 Provider::Gmail | Provider::Microsoft => AuthKind::Oauth2,
             },
-            mail_protocol: MailProtocol::Imap,
+            mail_protocol: mapping.mail_protocol,
             username: mapping.username,
             jmap_url: String::new(),
-            imap_host: mapping.imap_host,
-            imap_port: mapping.imap_port,
+            incoming_host: mapping.incoming_host,
+            incoming_port: mapping.incoming_port,
             smtp_host: mapping.smtp_host,
             smtp_port: mapping.smtp_port,
-            settings: AccountSettings {
-                connection: mapping.connection,
-                default_sender_email,
-                ..AccountSettings::default()
-            },
+            settings,
         },
         aliases,
         signatures,

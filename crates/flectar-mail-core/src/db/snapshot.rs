@@ -331,10 +331,10 @@ mod tests {
         mail.write(|conn| {
             conn.execute(
                 "INSERT INTO accounts (
-                   id, email, provider, auth_kind, username, imap_host, imap_port,
-                   smtp_host, smtp_port, created_at
-                 ) VALUES (1, 'snapshot@example.test', 'imap', 'password', 'snapshot',
-                           'imap.example.test', 993, 'smtp.example.test', 465, 0)",
+                   id, email, provider, auth_kind, username, incoming_host, incoming_port,
+                   smtp_host, smtp_port, created_at, mail_protocol, settings_json
+                 ) VALUES (1, 'snapshot@example.test', 'generic', 'password', 'snapshot',
+                           'imap.example.test', 993, 'smtp.example.test', 465, 0, 'imap', '{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
                 [],
             )?;
             Ok(())

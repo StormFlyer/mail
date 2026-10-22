@@ -162,8 +162,7 @@ impl Server {
             },
             &MailConnectionSettings {
                 trusted_certificate_pem: CERT.into(),
-                imap_security: ConnectionSecurity::Tls,
-                ..Default::default()
+                ..MailConnectionSettings::new(ConnectionSecurity::Tls, ConnectionSecurity::Tls)
             },
         )
         .await

@@ -1,5 +1,5 @@
 {
-  "format_version": 4,
+  "format_version": 5,
   "saved_at_ms": 1787961600000,
   "scope": "Unified Inbox",
   "inbox_count": 2,
@@ -10,7 +10,7 @@
       "email": "alex@example.com",
       "displayName": "Example account",
       "avatarUrl": null,
-      "provider": "imap",
+      "provider": "generic",
       "authKind": "password",
       "mailProtocol": "imap",
       "syncState": "idle",

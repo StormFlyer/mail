@@ -1575,8 +1575,13 @@ mod tests {
         )
         .unwrap();
         assert!(missing_bodies_at(&c, 2, 20, NOW, None).unwrap().is_empty());
-        c.execute("UPDATE accounts SET provider = 'gmail' WHERE id = 1", [])
-            .unwrap();
+        c.execute(
+            "UPDATE accounts SET provider = 'gmail', auth_kind = 'oauth2',
+                    mail_protocol = 'gmail'
+             WHERE id = 1",
+            [],
+        )
+        .unwrap();
         assert_eq!(missing_bodies_at(&c, 2, 20, NOW, None).unwrap().len(), 1);
     }
 

@@ -225,7 +225,7 @@ mod account_handle_tests {
         let (tx, mut rx) = mpsc::channel(1);
         let (body_tx, _body_rx) = mpsc::channel(1);
         let (send_tx, mut send_rx) = mpsc::channel(1);
-        let (settings_tx, _settings_rx) = watch::channel(AccountSettings::default());
+        let (settings_tx, _settings_rx) = watch::channel(crate::db::testutil::account_settings());
         let handle = AccountHandle {
             account_id: 7,
             tx,
@@ -253,56 +253,64 @@ pub struct SyncCtx {
 
 pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
     let account_id = config.id;
-    let dedicated_smtp =
-        config.provider != Provider::Gmail && config.mail_protocol == MailProtocol::Imap;
     let (tx, rx) = mpsc::channel(SYNC_COMMAND_QUEUE_CAPACITY);
     let (body_tx, body_rx) = mpsc::channel(PRIORITY_FETCH_QUEUE_CAPACITY);
-    let (send_tx, send_rx) = mpsc::channel(1);
-    // These carry idempotent wakeups rather than work. A single pending item
-    // represents every newer nudge and prevents bursts from retaining memory.
-    let (pool_tx, pool_rx) = mpsc::channel(1);
-    let (hist_tx, hist_rx) = mpsc::channel(1);
     let (settings_tx, settings_rx) = watch::channel(config.settings.clone());
-    let joins = if config.provider == Provider::Gmail {
-        crate::sync::gmail::spawn(ctx, config, rx, body_rx, settings_rx)
-    } else if config.mail_protocol == MailProtocol::Jmap {
-        crate::jmap::sync::spawn(ctx, config, rx, body_rx, settings_rx)
-    } else {
-        vec![
-            tokio::spawn(run_send_dispatcher(
-                ctx.clone(),
-                config.clone(),
-                send_rx,
-                tx.clone(),
-            )),
-            tokio::spawn(run_actor(
-                ctx.clone(),
-                config.clone(),
-                rx,
-                pool_tx.clone(),
-                hist_tx,
-            )),
-            tokio::spawn(run_body_fetcher(ctx.clone(), config.clone(), body_rx)),
-            tokio::spawn(run_backfill_pool(
-                ctx.clone(),
-                config.clone(),
-                pool_rx,
-                settings_rx.clone(),
-            )),
-            tokio::spawn(run_history_backfill(
-                ctx,
-                config,
-                hist_rx,
-                pool_tx,
-                settings_rx,
-            )),
-        ]
+    // API protocols own their submission queues. SMTP-based protocols get a
+    // dedicated submission worker that never waits behind mailbox sync.
+    let (joins, send_tx) = match config.mail_protocol {
+        MailProtocol::Gmail => (
+            crate::sync::gmail::spawn(ctx, config, rx, body_rx, settings_rx),
+            None,
+        ),
+        MailProtocol::Jmap => (
+            crate::jmap::sync::spawn(ctx, config, rx, body_rx, settings_rx),
+            None,
+        ),
+        MailProtocol::Imap => {
+            let (send_tx, send_rx) = mpsc::channel(1);
+            // These carry idempotent wakeups rather than work. A single
+            // pending item represents every newer nudge and prevents bursts
+            // from retaining memory.
+            let (pool_tx, pool_rx) = mpsc::channel(1);
+            let (hist_tx, hist_rx) = mpsc::channel(1);
+            let joins = vec![
+                tokio::spawn(run_send_dispatcher(
+                    ctx.clone(),
+                    config.clone(),
+                    send_rx,
+                    tx.clone(),
+                )),
+                tokio::spawn(run_actor(
+                    ctx.clone(),
+                    config.clone(),
+                    rx,
+                    pool_tx.clone(),
+                    hist_tx,
+                )),
+                tokio::spawn(run_body_fetcher(ctx.clone(), config.clone(), body_rx)),
+                tokio::spawn(run_backfill_pool(
+                    ctx.clone(),
+                    config.clone(),
+                    pool_rx,
+                    settings_rx.clone(),
+                )),
+                tokio::spawn(run_history_backfill(
+                    ctx,
+                    config,
+                    hist_rx,
+                    pool_tx,
+                    settings_rx,
+                )),
+            ];
+            (joins, Some(send_tx))
+        }
     };
     AccountHandle {
         account_id,
         tx,
         body_tx,
-        send_tx: dedicated_smtp.then_some(send_tx),
+        send_tx,
         settings_tx,
         tasks: joins
             .iter()
@@ -796,7 +804,7 @@ async fn run_actor(
                     crate::events::sync_diagnostic("imap_connect", Some(account_id), e.code());
                     tracing::warn!(
                         account_id,
-                        imap_host = %config.imap_host,
+                        incoming_host = %config.incoming_host,
                         error = %e,
                         "imap connect rejected at auth; marking needs_reauth"
                     );
@@ -1155,8 +1163,9 @@ pub async fn status_for_account(db: &Db, account_id: i64) -> Result<SyncStatus> 
         let cutoff = repo::accounts::get_config(conn, account_id)?
             .and_then(|config| config.settings.mail_history.cutoff_ms_at(now_ms()));
         let content = repo::messages::content_progress_since(conn, account_id, cutoff)?;
-        let (header_done, header_total): (i64, i64) = if account.provider == Provider::Gmail {
-            conn.query_row(
+        let gmail = account.mail_protocol == MailProtocol::Gmail;
+        let (header_done, header_total): (i64, i64) = match account.mail_protocol {
+            MailProtocol::Gmail => conn.query_row(
                 "SELECT COALESCE(backfill_done, 0), 1
                  FROM gmail_sync_state WHERE account_id = ?1
                  UNION ALL SELECT 0, 1
@@ -1164,15 +1173,14 @@ pub async fn status_for_account(db: &Db, account_id: i64) -> Result<SyncStatus> 
                  LIMIT 1",
                 rusqlite::params![account_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
-            )?
-        } else {
-            conn.query_row(
+            )?,
+            MailProtocol::Imap | MailProtocol::Jmap => conn.query_row(
                 "SELECT COALESCE(SUM(backfill_done), 0), COUNT(*)
                  FROM folders
                  WHERE account_id = ?1 AND COALESCE(role, '') <> 'all'",
                 rusqlite::params![account_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
-            )?
+            )?,
         };
         let header_failed: i64 = conn.query_row(
             "SELECT COUNT(*)
@@ -1180,7 +1188,7 @@ pub async fn status_for_account(db: &Db, account_id: i64) -> Result<SyncStatus> 
              JOIN folders f ON f.id = sf.folder_id
              WHERE sf.account_id = ?1 AND sf.stage = 'header'
                AND (?2 = 1 OR COALESCE(f.role, '') <> 'all')",
-            rusqlite::params![account_id, (account.provider == Provider::Gmail) as i64],
+            rusqlite::params![account_id, gmail],
             |row| row.get(0),
         )?;
         let (indexed, index_total): (i64, i64) = conn.query_row(
@@ -1251,8 +1259,8 @@ async fn connect(ctx: &SyncCtx, config: &AccountConfig) -> Result<Session> {
     let creds = imap_credentials(ctx, config).await?;
     crate::events::sync_diagnostic("imap_connect", Some(config.id), "connecting");
     match imap::connect_with_settings(
-        &config.imap_host,
-        config.imap_port,
+        &config.incoming_host,
+        config.incoming_port,
         creds,
         &config.settings.connection,
     )
@@ -1274,8 +1282,8 @@ async fn connect(ctx: &SyncCtx, config: &AccountConfig) -> Result<Session> {
             ctx.tokens.invalidate(config.id).await;
             let creds = imap_credentials(ctx, config).await?;
             imap::connect_with_settings(
-                &config.imap_host,
-                config.imap_port,
+                &config.incoming_host,
+                config.incoming_port,
                 creds,
                 &config.settings.connection,
             )
@@ -1360,7 +1368,8 @@ async fn run_cycle(
         if folder.role.as_deref() == Some(roles::INBOX) {
             continue;
         }
-        if folder.role.as_deref() == Some(roles::ALL) && config.provider != Provider::Gmail {
+        // A special-use \All mailbox repeats messages stored in other folders.
+        if folder.role.as_deref() == Some(roles::ALL) {
             continue;
         }
         // Non-inbox folders get new-mail checks every cycle but heavy
@@ -1764,8 +1773,7 @@ async fn run_history_backfill(
             });
 
             for folder in ordered {
-                if folder.role.as_deref() == Some(roles::ALL) && config.provider != Provider::Gmail
-                {
+                if folder.role.as_deref() == Some(roles::ALL) {
                     continue;
                 }
                 if folder.backfill_cursor.is_some() && folder.backfill_done {
@@ -3018,7 +3026,7 @@ async fn drain_missing_bodies(
 
         let mut chunks: VecDeque<BodyChunk> = VecDeque::new();
         for folder in ordered {
-            if folder.role.as_deref() == Some(roles::ALL) && config.provider != Provider::Gmail {
+            if folder.role.as_deref() == Some(roles::ALL) {
                 continue;
             }
             if exhausted.contains(&folder.id) {

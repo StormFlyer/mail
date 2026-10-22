@@ -63,8 +63,8 @@ def favicon_path(address):
     | .has_profile = true
     | .has_account_color = false
     | .jmap_url = (.jmap_url // "")
-    | .imap_security = (.imap_security // "auto")
-    | .smtp_security = (.smtp_security // "auto")
+    | .incoming_security = (.incoming_security // "tls")
+    | .smtp_security = (.smtp_security // "tls")
     | .trusted_certificate_pem = (.trusted_certificate_pem // "")
     | .mail_history = (.mail_history // "sixMonths")
     | .caldav_url = (.caldav_url // "")

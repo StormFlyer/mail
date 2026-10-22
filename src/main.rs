@@ -92,8 +92,9 @@ use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::ThreadCursor;
 use flectar_mail_core::models::{
     Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, CardDavConnection,
-    ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn,
-    Label, MailProfile, MailProtocol, Provider, Settings, Snippet, UpdateEventArgs,
+    ConnectionSecurity, ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs,
+    DraftAttachmentIn, Label, MailConnectionSettings, MailProfile, MailProtocol, Provider,
+    Settings, Snippet, UpdateEventArgs,
 };
 #[cfg(test)]
 use mail::fixture_messages;
@@ -4587,15 +4588,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             }
             if update.clear_account_form {
                 app.set_account_form_open(false);
-                app.set_imap_security("auto".into());
-                app.set_smtp_security("auto".into());
+                app.set_incoming_security("tls".into());
+                app.set_smtp_security("tls".into());
                 app.set_trusted_certificate_pem("".into());
                 app.set_account_email("".into());
                 app.set_account_username("".into());
                 app.set_account_password("".into());
                 app.set_account_protocol("imap".into());
                 app.set_jmap_url("".into());
-                app.set_imap_host("".into());
+                app.set_incoming_host("".into());
                 app.set_smtp_host("".into());
             }
             if let Some(removal) = update.account_removal.as_mut().filter(|removal| removal.removed) {
@@ -6748,23 +6749,23 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             .borrow()
             .as_ref()
             .is_some_and(|config| {
-                app.get_imap_host().as_str() == config.imap_host
-                    && app.get_imap_port().as_str() == config.imap_port.to_string()
+                app.get_incoming_host().as_str() == config.incoming_host
+                    && app.get_incoming_port().as_str() == config.incoming_port.to_string()
                     && app.get_smtp_host().as_str() == config.smtp_host
                     && app.get_smtp_port().as_str() == config.smtp_port.to_string()
-                    && app.get_imap_security().as_str()
-                        == config.settings.connection.imap_security.as_str()
+                    && app.get_incoming_security().as_str()
+                        == config.settings.connection.incoming_security.as_str()
                     && app.get_smtp_security().as_str()
                         == config.settings.connection.smtp_security.as_str()
                     && app.get_trusted_certificate_pem().as_str()
                         == config.settings.connection.trusted_certificate_pem
             });
-        let transport_is_pristine = app.get_imap_host().trim().is_empty()
+        let transport_is_pristine = app.get_incoming_host().trim().is_empty()
             && app.get_smtp_host().trim().is_empty()
-            && app.get_imap_port().as_str() == "993"
+            && app.get_incoming_port().as_str() == "993"
             && app.get_smtp_port().as_str() == "465"
-            && app.get_imap_security().as_str() == "auto"
-            && app.get_smtp_security().as_str() == "auto"
+            && app.get_incoming_security().as_str() == "tls"
+            && app.get_smtp_security().as_str() == "tls"
             && app.get_trusted_certificate_pem().trim().is_empty();
         if !transport_is_pristine && !transport_matches_last_suggestion {
             last_suggested_transport.borrow_mut().take();
@@ -6776,22 +6777,22 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         };
         let Some(config) = suggestion else {
             if transport_matches_last_suggestion {
-                app.set_imap_host("".into());
-                app.set_imap_port("993".into());
+                app.set_incoming_host("".into());
+                app.set_incoming_port("993".into());
                 app.set_smtp_host("".into());
                 app.set_smtp_port("465".into());
-                app.set_imap_security("auto".into());
-                app.set_smtp_security("auto".into());
+                app.set_incoming_security("tls".into());
+                app.set_smtp_security("tls".into());
                 app.set_trusted_certificate_pem("".into());
             }
             last_suggested_transport.borrow_mut().take();
             return;
         };
-        app.set_imap_host(config.imap_host.clone().into());
-        app.set_imap_port(config.imap_port.to_string().into());
+        app.set_incoming_host(config.incoming_host.clone().into());
+        app.set_incoming_port(config.incoming_port.to_string().into());
         app.set_smtp_host(config.smtp_host.clone().into());
         app.set_smtp_port(config.smtp_port.to_string().into());
-        app.set_imap_security(config.settings.connection.imap_security.as_str().into());
+        app.set_incoming_security(config.settings.connection.incoming_security.as_str().into());
         app.set_smtp_security(config.settings.connection.smtp_security.as_str().into());
         app.set_trusted_certificate_pem(
             config
@@ -6810,8 +6811,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
               username,
               password,
               jmap_url,
-              imap_host,
-              imap_port,
+              incoming_host,
+              incoming_port,
               smtp_host,
               smtp_port| {
             let Some(app) = app_weak.upgrade() else {
@@ -6820,31 +6821,49 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             if app.get_account_setup_in_progress() {
                 return;
             }
-            let mail_protocol = MailProtocol::from_storage(protocol.as_str());
-            let imap_port = if mail_protocol == MailProtocol::Jmap {
-                993
-            } else {
-                match imap_port.trim().parse::<u16>() {
-                    Ok(port) if port > 0 => port,
-                    _ => {
+            let unsupported = || {
+                app.set_sync_status(UiMessage::plain(
+                    "Choose a supported account type and connection security.",
+                ))
+            };
+            let (Some(mail_protocol), Some(incoming_security), Some(smtp_security)) = (
+                MailProtocol::parse(protocol.as_str()),
+                ConnectionSecurity::parse(app.get_incoming_security().as_str()),
+                ConnectionSecurity::parse(app.get_smtp_security().as_str()),
+            ) else {
+                unsupported();
+                return;
+            };
+            let port = |value: &str| value.trim().parse::<u16>().ok().filter(|port| *port > 0);
+            let (incoming_port, smtp_port, progress) = match mail_protocol {
+                // JMAP discovers its endpoints; the server ports are unused.
+                MailProtocol::Jmap => (
+                    993,
+                    465,
+                    UiMessage::plain("Discovering JMAP and checking capabilities…"),
+                ),
+                MailProtocol::Imap => {
+                    let Some(incoming_port) = port(&incoming_port) else {
                         app.set_sync_status(UiMessage::plain(
                             "IMAP port must be between 1 and 65535.",
                         ));
                         return;
-                    }
-                }
-            };
-            let smtp_port = if mail_protocol == MailProtocol::Jmap {
-                465
-            } else {
-                match smtp_port.trim().parse::<u16>() {
-                    Ok(port) if port > 0 => port,
-                    _ => {
+                    };
+                    let Some(smtp_port) = port(&smtp_port) else {
                         app.set_sync_status(UiMessage::plain(
                             "SMTP port must be between 1 and 65535.",
                         ));
                         return;
-                    }
+                    };
+                    (
+                        incoming_port,
+                        smtp_port,
+                        UiMessage::plain("Testing IMAP and SMTP connections…"),
+                    )
+                }
+                MailProtocol::Gmail => {
+                    unsupported();
+                    return;
                 }
             };
             let Some(core) = state_for_account.borrow().core.clone() else {
@@ -6853,11 +6872,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 ));
                 return;
             };
-            app.set_sync_status(if mail_protocol == MailProtocol::Jmap {
-                UiMessage::plain("Discovering JMAP and checking capabilities…")
-            } else {
-                UiMessage::plain("Testing IMAP and SMTP connections…")
-            });
+            app.set_sync_status(progress);
             let args = AddPasswordAccountArgs {
                 email: email.to_string(),
                 display_name: None,
@@ -6865,20 +6880,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 password: password.to_string(),
                 mail_protocol,
                 jmap_url: jmap_url.to_string(),
-                imap_host: imap_host.to_string(),
-                imap_port,
+                incoming_host: incoming_host.to_string(),
+                incoming_port,
                 smtp_host: smtp_host.to_string(),
                 smtp_port,
-                connection: flectar_mail_core::models::MailConnectionSettings {
-                    imap_security: flectar_mail_core::models::ConnectionSecurity::parse(
-                        app.get_imap_security().as_str(),
-                    )
-                    .unwrap_or_default(),
-                    smtp_security: flectar_mail_core::models::ConnectionSecurity::parse(
-                        app.get_smtp_security().as_str(),
-                    )
-                    .unwrap_or_default(),
+                connection: MailConnectionSettings {
                     trusted_certificate_pem: app.get_trusted_certificate_pem().to_string(),
+                    ..MailConnectionSettings::new(incoming_security, smtp_security)
                 },
             };
             app.set_account_setup_in_progress(true);
@@ -6942,11 +6950,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             ));
             return;
         }
-        let provider = Provider::from_storage(provider.as_str());
-        if provider == Provider::Imap {
-            app.set_sync_status(UiMessage::plain("Choose Gmail or Outlook OAuth."));
-            return;
-        }
+        let provider = match Provider::parse(provider.as_str()) {
+            Some(provider @ (Provider::Gmail | Provider::Microsoft)) => provider,
+            Some(Provider::Generic) | None => {
+                app.set_sync_status(UiMessage::plain("Choose Gmail or Outlook OAuth."));
+                return;
+            }
+        };
         let Some(core) = state_for_oauth.borrow().core.clone() else {
             app.set_sync_status(UiMessage::plain(
                 "Local mail data is unavailable. Retry startup.",

@@ -9,10 +9,10 @@ use flectar_mail_core::{
         Account, AccountConfig, ActionKind, ActionParams, AddPasswordAccountArgs, Address,
         CalendarConnection, CalendarEvent, CardDavConnection, ConnectCalendarArgs,
         ConnectCardDavArgs, ContactRecordCursor, ContactRecordPage, CreateEventArgs, CustomTheme,
-        DraftAttachmentIn, FolderInfo, Label, MailHistory, MailProfile, MailboxBadgeCounts,
-        MessageDetail, PerformActionArgs, PortableAccountConfig, Provider, QueueSendArgs,
-        QueueSendResult, SaveDraftArgs, SearchCursor, Settings, Snippet, ThreadCursor,
-        ThreadSummary, View, normalized_workspace_list_pane_width,
+        DraftAttachmentIn, FolderInfo, Label, MailHistory, MailProfile, MailProtocol,
+        MailboxBadgeCounts, MessageDetail, PerformActionArgs, PortableAccountConfig, Provider,
+        QueueSendArgs, QueueSendResult, SaveDraftArgs, SearchCursor, Settings, Snippet,
+        ThreadCursor, ThreadSummary, View, normalized_workspace_list_pane_width,
     },
 };
 #[cfg(test)]
@@ -1537,7 +1537,7 @@ impl CoreMailSource {
                 .connect_microsoft_calendar(account_id, open_url)
                 .await
                 .map_err(|error| error.to_string())?,
-            Provider::Imap => return Err("use CalDAV for an IMAP account".into()),
+            Provider::Generic => return Err("use CalDAV for an IMAP account".into()),
         };
         Ok(())
     }
@@ -1868,7 +1868,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
             .into_iter()
             .filter(|folder| {
                 role_folder_ids.contains(&folder.id)
-                    || (account.provider != Provider::Gmail && !is_standard_folder(folder))
+                    || (account.mail_protocol != MailProtocol::Gmail && !is_standard_folder(folder))
             })
             .collect::<Vec<_>>();
         tree_folders.sort_by_key(|folder| (folder.display_name.to_lowercase(), folder.id));
@@ -2617,7 +2617,7 @@ mod tests {
             email: "person@example.com".into(),
             display_name: Some("Person".into()),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             sync_state: "idle".into(),
@@ -2628,9 +2628,14 @@ mod tests {
 
     #[test]
     fn single_account_scopes_preserve_every_standard_view() {
-        for provider in [Provider::Imap, Provider::Gmail, Provider::Microsoft] {
+        for (provider, mail_protocol) in [
+            (Provider::Generic, MailProtocol::Imap),
+            (Provider::Gmail, MailProtocol::Gmail),
+            (Provider::Microsoft, MailProtocol::Imap),
+        ] {
             let mut account = test_account();
             account.provider = provider;
+            account.mail_protocol = mail_protocol;
             account.display_name = Some("Work / Personal".into());
             let accounts = [account];
             let entries = mailbox_entries(&accounts, &[]);
@@ -2991,6 +2996,8 @@ mod tests {
     fn gmail_user_labels_are_not_duplicated_as_account_folders() {
         let mut account = test_account();
         account.provider = Provider::Gmail;
+        account.auth_kind = AuthKind::Oauth2;
+        account.mail_protocol = MailProtocol::Gmail;
         let folders = vec![FolderInfo {
             id: 10,
             account_id: account.id,
@@ -3178,8 +3185,8 @@ mod search_pagination_adapter_tests {
             .db
             .write(|conn| {
                 conn.execute(
-                    "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
-                     VALUES (1,'fixture@example.test','imap','password','fixture','imap.example.test',993,'smtp.example.test',465,0)",
+                    "INSERT INTO accounts (id,email,provider,auth_kind,username,incoming_host,incoming_port,smtp_host,smtp_port,created_at,mail_protocol,settings_json)
+                     VALUES (1,'fixture@example.test','generic','password','fixture','imap.example.test',993,'smtp.example.test',465,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
                     [],
                 )?;
                 conn.execute(
@@ -3248,8 +3255,8 @@ mod search_pagination_adapter_tests {
             .write(|conn| {
                 for account in [1_i64, 2] {
                     conn.execute(
-                        "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
-                         VALUES (?1,'fixture'||?1||'@example.test','imap','password','fixture','imap.example.test',993,'smtp.example.test',465,0)",
+                        "INSERT INTO accounts (id,email,provider,auth_kind,username,incoming_host,incoming_port,smtp_host,smtp_port,created_at,mail_protocol,settings_json)
+                         VALUES (?1,'fixture'||?1||'@example.test','generic','password','fixture','imap.example.test',993,'smtp.example.test',465,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
                         [account],
                     )?;
                     conn.execute(
@@ -3411,8 +3418,8 @@ mod account_removal_snapshot_tests {
     }
     async fn seed(source: &CoreMailSource) {
         source.core.db.write(|conn| {
-            conn.execute("INSERT INTO accounts (id, email, provider, auth_kind, username, imap_host, imap_port, smtp_host, smtp_port, created_at)
-                VALUES (1, 'fixture@example.test', 'imap', 'password', 'fixture', 'imap.example.test', 993, 'smtp.example.test', 465, 0)", [])?;
+            conn.execute("INSERT INTO accounts (id, email, provider, auth_kind, username, incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+                VALUES (1, 'fixture@example.test', 'generic', 'password', 'fixture', 'imap.example.test', 993, 'smtp.example.test', 465, 0, 'imap', '{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')", [])?;
             Ok(())
         }).await.unwrap();
     }

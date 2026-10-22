@@ -279,6 +279,11 @@ mod tests {
     use crate::models::{AuthKind, MailProtocol, Provider};
 
     fn account(conn: &Connection, provider: Provider) -> i64 {
+        let (auth_kind, mail_protocol) = match provider {
+            Provider::Gmail => (AuthKind::Oauth2, MailProtocol::Gmail),
+            Provider::Microsoft => (AuthKind::Oauth2, MailProtocol::Imap),
+            Provider::Generic => (AuthKind::Password, MailProtocol::Imap),
+        };
         accounts::insert(
             conn,
             &NewAccount {
@@ -286,16 +291,17 @@ mod tests {
                 display_name: Some("Login"),
                 avatar_url: None,
                 provider,
-                auth_kind: AuthKind::Oauth2,
-                mail_protocol: MailProtocol::Imap,
+                auth_kind,
+                mail_protocol,
                 username: "login@example.test",
                 jmap_url: "",
                 jmap_account_id: None,
-                imap_host: "",
-                imap_port: 993,
+                incoming_host: "",
+                incoming_port: 993,
                 smtp_host: "",
                 smtp_port: 465,
             },
+            &crate::db::testutil::account_settings(),
         )
         .unwrap()
     }
@@ -355,7 +361,7 @@ mod tests {
     #[test]
     fn provider_refresh_keeps_manual_identities_and_learned_delivery() {
         let mut conn = crate::db::testutil::conn();
-        let account_id = account(&conn, Provider::Imap);
+        let account_id = account(&conn, Provider::Generic);
         let mut alias = identity(account_id, "alias@example.test", false, "accepted");
         alias.display_name = Some("Alias".into());
         alias.reply_to_email = Some("desk@example.test".into());
@@ -427,7 +433,7 @@ mod tests {
     #[test]
     fn wildcard_identities_authorize_concrete_addresses_only() {
         let mut conn = crate::db::testutil::conn();
-        let account_id = account(&conn, Provider::Imap);
+        let account_id = account(&conn, Provider::Generic);
         let mut wildcard = identity(account_id, "*@team.test", false, "accepted");
         wildcard.display_name = Some("Team".into());
         wildcard.reply_to_email = Some("help@team.test".into());

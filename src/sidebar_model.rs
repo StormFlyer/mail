@@ -283,7 +283,7 @@ pub(super) fn refresh_sidebar_with_motion(state: &Rc<RefCell<InboxState>>, anima
     let gmail_account_ids = state
         .connected_accounts
         .iter()
-        .filter(|account| account.provider == Provider::Gmail)
+        .filter(|account| account.mail_protocol == MailProtocol::Gmail)
         .filter_map(|account| i32::try_from(account.id).ok())
         .collect::<HashSet<_>>();
     let rows = if filtering {
