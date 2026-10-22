@@ -4260,6 +4260,10 @@ msgid "Sign-in required"
 msgstr "Требуется вход"
 
 #: ui/dialogs/settings-dialog.slint:1769
+msgid "Connected · Gmail"
+msgstr "Подключено · Gmail"
+
+#: ui/dialogs/settings-dialog.slint:1769
 msgid "Connected · JMAP"
 msgstr "Подключено · JMAP"
 

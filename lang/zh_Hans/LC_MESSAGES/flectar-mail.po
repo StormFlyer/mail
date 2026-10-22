@@ -4093,6 +4093,10 @@ msgid "Sign-in required"
 msgstr "需要登录"
 
 #: ui/dialogs/settings-dialog.slint:1769
+msgid "Connected · Gmail"
+msgstr ""
+
+#: ui/dialogs/settings-dialog.slint:1769
 msgid "Connected · JMAP"
 msgstr "已连接 · JMAP"
 
