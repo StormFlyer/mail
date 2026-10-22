@@ -1001,6 +1001,17 @@ pub struct AddPasswordAccountArgs {
     pub connection: MailConnectionSettings,
 }
 
+/// What an account's mail export wrote.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailExport {
+    pub folders: usize,
+    pub messages: usize,
+    /// Messages left out because their original is missing from this device
+    /// and the server no longer has it.
+    pub missing: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionTestResult {

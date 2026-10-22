@@ -197,6 +197,26 @@ async fn a_pop3_account_downloads_files_and_sends_mail_on_this_device() {
             .any(|line| line == "QUIT")
     );
 
+    // The mail can be kept elsewhere, one mbox file per folder.
+    let exports = tempfile::tempdir().unwrap();
+    let first_export = exports.path().join("first");
+    let exported = core
+        .export_account_mail(account.id, first_export.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        (exported.folders, exported.messages, exported.missing),
+        (1, 1, 0)
+    );
+    let inbox = std::fs::read_to_string(first_export.join("Inbox.mbox")).unwrap();
+    assert!(inbox.starts_with("From alice@example.com "), "{inbox}");
+    assert!(inbox.contains("Subject: Hello there\n"), "{inbox}");
+    let again = core
+        .export_account_mail(account.id, first_export)
+        .await
+        .unwrap_err();
+    assert!(again.to_string().contains("already exists"), "{again}");
+
     // The mail can't follow the account to a protocol that keeps mail on a
     // server.
     let switched = core
@@ -347,6 +367,37 @@ async fn a_pop3_account_downloads_files_and_sends_mail_on_this_device() {
         .unwrap();
     assert_eq!(folder_role, roles::SENT);
     assert_eq!(appends, 0);
+
+    // Drafts have no original yet; the export builds one.
+    core.save_draft(SaveDraftArgs {
+        draft_id: None,
+        account_id: account.id,
+        from: None,
+        to: Vec::new(),
+        cc: Vec::new(),
+        bcc: Vec::new(),
+        subject: "Unsent idea".into(),
+        body_text: "Still thinking.".into(),
+        body_html: None,
+        mode: "new".into(),
+        in_reply_to_message_id: None,
+        attachments: Vec::new(),
+    })
+    .await
+    .unwrap();
+    let second_export = exports.path().join("second");
+    let exported = core
+        .export_account_mail(account.id, second_export.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        (exported.folders, exported.messages, exported.missing),
+        (2, 2, 0)
+    );
+    let drafts = std::fs::read_to_string(second_export.join("Drafts.mbox")).unwrap();
+    assert!(drafts.contains("Subject: Unsent idea\n"), "{drafts}");
+    let sent = std::fs::read_to_string(second_export.join("Sent.mbox")).unwrap();
+    assert!(sent.contains("Subject: From a POP3 account\n"), "{sent}");
 }
 
 #[tokio::test]

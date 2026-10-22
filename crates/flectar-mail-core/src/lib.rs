@@ -22,6 +22,7 @@ mod http_body;
 pub mod imap;
 pub mod jmap;
 pub mod mail_security;
+mod mbox;
 pub mod migration;
 pub mod mime;
 pub mod models;
@@ -2215,23 +2216,7 @@ impl Core {
         &self,
         destination: std::path::PathBuf,
     ) -> Result<DatabaseSnapshotManifest> {
-        let parent = destination.parent().ok_or_else(|| {
-            CoreError::Other("database snapshot destination has no parent directory".into())
-        })?;
-        let canonical_parent = tokio::fs::canonicalize(parent).await.map_err(|error| {
-            CoreError::Other(format!(
-                "resolving snapshot destination {}: {error}",
-                parent.display()
-            ))
-        })?;
-        let data_dir = tokio::fs::canonicalize(&self.paths.data_dir).await?;
-        let cache_dir = tokio::fs::canonicalize(&self.paths.cache_dir).await?;
-        if canonical_parent.starts_with(&data_dir) || canonical_parent.starts_with(&cache_dir) {
-            return Err(CoreError::Other(
-                "database snapshots must be exported outside the application data and cache directories"
-                    .into(),
-            ));
-        }
+        self.check_export_destination(&destination).await?;
         let _files_guard = self.file_work_lock.lock().await;
         db::snapshot::create(
             &self.db,
@@ -2241,6 +2226,201 @@ impl Core {
             &destination,
         )
         .await
+    }
+
+    /// Exports go outside the app's own directories, where nothing the app
+    /// cleans up can take them away, and never replace an earlier export.
+    async fn check_export_destination(&self, destination: &std::path::Path) -> Result<()> {
+        let parent = destination
+            .parent()
+            .ok_or_else(|| CoreError::Other("the destination has no parent directory".into()))?;
+        let canonical_parent = tokio::fs::canonicalize(parent).await.map_err(|error| {
+            CoreError::Other(format!(
+                "resolving the destination {}: {error}",
+                parent.display()
+            ))
+        })?;
+        let data_dir = tokio::fs::canonicalize(&self.paths.data_dir).await?;
+        let cache_dir = tokio::fs::canonicalize(&self.paths.cache_dir).await?;
+        if canonical_parent.starts_with(&data_dir) || canonical_parent.starts_with(&cache_dir) {
+            return Err(CoreError::Other(
+                "exports must go outside the application data and cache directories".into(),
+            ));
+        }
+        if tokio::fs::try_exists(destination).await? {
+            return Err(CoreError::Other(format!(
+                "{} already exists",
+                destination.display()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Write a POP3 account's mail to a new directory as one mbox file per
+    /// folder, so mail that exists only on this device can be kept before it
+    /// is removed. The directory must not exist yet.
+    pub async fn export_account_mail(
+        &self,
+        account_id: i64,
+        destination: std::path::PathBuf,
+    ) -> Result<MailExport> {
+        let config = self.folder_account_config(account_id).await?;
+        match config.mail_protocol {
+            MailProtocol::Pop3 => {}
+            MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
+                return Err(CoreError::Other(
+                    "only POP3 accounts keep their mail on this device alone".into(),
+                ));
+            }
+        }
+        self.check_export_destination(&destination).await?;
+        let staging = crate::file_io::staging_directory(&destination)?;
+        tokio::fs::create_dir(&staging).await?;
+        let result = async {
+            crate::file_io::restrict_permissions(&staging, &[])?;
+            let export = self.write_mail_export(account_id, &staging).await?;
+            crate::file_io::publish_directory(&staging, &destination)?;
+            Ok(export)
+        }
+        .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_dir_all(&staging).await;
+        }
+        result
+    }
+
+    async fn write_mail_export(
+        &self,
+        account_id: i64,
+        directory: &std::path::Path,
+    ) -> Result<MailExport> {
+        use tokio::io::AsyncWriteExt;
+        let folders = self
+            .db
+            .read(move |conn| repo::folders::list(conn, Some(account_id)))
+            .await?;
+        let mut names = HashSet::new();
+        let mut export = MailExport::default();
+        for folder in folders {
+            let folder_id = folder.id;
+            let messages = self
+                .db
+                .read(move |conn| repo::messages::in_folder_for_export(conn, folder_id))
+                .await?;
+            if messages.is_empty() {
+                continue;
+            }
+            let path = directory.join(mbox::file_name(&folder.path, &mut names));
+            let mut file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .await?;
+            for message in messages {
+                let original = match &message.raw_path {
+                    Some(raw_path) => self
+                        .read_original(
+                            account_id,
+                            message.id,
+                            raw_path,
+                            MAX_CACHED_MESSAGE_BYTES,
+                            "exported message",
+                        )
+                        .await
+                        .inspect_err(|error| {
+                            tracing::warn!(message_id = message.id, %error, "message left out of a mail export");
+                        })
+                        .ok(),
+                    None if message.is_draft => Some(self.draft_message(message.id).await?),
+                    None => None,
+                };
+                let Some(original) = original else {
+                    export.missing += 1;
+                    continue;
+                };
+                file.write_all(mbox::separator(&message.from, message.date).as_bytes())
+                    .await?;
+                file.write_all(&mbox::entry(&original)).await?;
+                export.messages += 1;
+            }
+            // The account may be removed right after its export.
+            file.sync_all().await?;
+            crate::file_io::restrict_permissions(directory, &[&path])?;
+            export.folders += 1;
+        }
+        Ok(export)
+    }
+
+    /// A draft as a message file. Drafts have no original until they are
+    /// sent.
+    async fn draft_message(&self, draft_id: i64) -> Result<Vec<u8>> {
+        let (detail, bcc, staged) = self
+            .db
+            .read(move |conn| {
+                let detail = repo::messages::detail(conn, draft_id)?;
+                let bcc: String = conn.query_row(
+                    "SELECT bcc_json FROM messages WHERE id = ?1",
+                    [draft_id],
+                    |row| row.get(0),
+                )?;
+                let mut statement = conn.prepare(
+                    "SELECT file_path, filename FROM draft_attachments WHERE draft_id = ?1",
+                )?;
+                let staged = statement
+                    .query_map([draft_id], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok((detail, serde_json::from_str::<Vec<Address>>(&bcc)?, staged))
+            })
+            .await?;
+        // Like sending, only ever read files from the app's own staging area.
+        let staging_root = tokio::fs::canonicalize(self.paths.draft_attachments_dir())
+            .await
+            .ok();
+        let mut attachments = Vec::new();
+        let mut budget = MAX_DRAFT_ATTACHMENT_BYTES;
+        for (path, filename) in staged {
+            let path = tokio::fs::canonicalize(&path).await?;
+            if !staging_root
+                .as_ref()
+                .is_some_and(|root| path.starts_with(root))
+            {
+                return Err(CoreError::Other(format!(
+                    "attachment {filename}: refusing to read a file outside the staging area"
+                )));
+            }
+            let bytes = crate::file_io::read(&path, budget, "draft attachment").await?;
+            budget -= bytes.len();
+            attachments.push(crate::mime::OutgoingAttachment {
+                mime_type: crate::queue::mime_guess_from_name(&filename),
+                filename,
+                bytes,
+            });
+        }
+        let domain = detail
+            .from
+            .email
+            .split('@')
+            .nth(1)
+            .unwrap_or("localhost")
+            .to_owned();
+        let (_, raw) = crate::mime::build_message_owned(crate::mime::OutgoingMessage {
+            from: detail.from.clone(),
+            reply_to: None,
+            to: &detail.to,
+            cc: &detail.cc,
+            bcc: &bcc,
+            subject: &detail.subject,
+            body_text: detail.text_body.as_deref().unwrap_or(""),
+            body_html: detail.html_body.as_deref(),
+            in_reply_to: None,
+            references: &[],
+            message_id: None,
+            message_id_domain: &domain,
+            attachments,
+        })?;
+        Ok(raw)
     }
 
     pub async fn sync_now(&self, account_id: Option<i64>) -> Result<()> {

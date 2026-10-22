@@ -207,6 +207,65 @@ async fn write_replacing(
     result
 }
 
+/// A hidden working directory beside `destination`, for building a
+/// directory that [`publish_directory`] then puts in place whole.
+pub(crate) fn staging_directory(destination: &Path) -> Result<std::path::PathBuf> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| CoreError::Other("the destination has no parent directory".into()))?;
+    let name = destination
+        .file_name()
+        .ok_or_else(|| CoreError::Other("the destination has no directory name".into()))?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| CoreError::Other(format!("system clock before Unix epoch: {error}")))?
+        .as_nanos();
+    Ok(parent.join(format!(
+        ".{}.partial-{}-{nonce}",
+        name.to_string_lossy(),
+        std::process::id()
+    )))
+}
+
+/// Move a finished staging directory to `destination`, which must not exist,
+/// so an export never replaces an earlier one.
+pub(crate) fn publish_directory(staging: &Path, destination: &Path) -> Result<()> {
+    #[cfg(rename_noreplace)]
+    {
+        rustix::fs::renameat_with(
+            rustix::fs::CWD,
+            staging,
+            rustix::fs::CWD,
+            destination,
+            rustix::fs::RenameFlags::NOREPLACE,
+        )
+        .map_err(std::io::Error::from)?;
+    }
+    #[cfg(not(rename_noreplace))]
+    {
+        // Windows directory rename fails if the destination already exists.
+        std::fs::rename(staging, destination)?;
+    }
+    Ok(())
+}
+
+/// Limit a directory and the listed files in it to their owner.
+#[cfg(unix)]
+pub(crate) fn restrict_permissions(directory: &Path, files: &[&Path]) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
+    for file in files {
+        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn restrict_permissions(_directory: &Path, _files: &[&Path]) -> Result<()> {
+    Ok(())
+}
+
 /// Read only the RFC-style header prefix of a potentially large cached file.
 pub(crate) async fn read_headers(
     path: impl AsRef<Path>,
