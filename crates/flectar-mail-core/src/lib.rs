@@ -8959,11 +8959,16 @@ fn revert_action(
                         // Remote never changed; restore the original mapping.
                         repo::messages::set_uid_and_folder(&tx, mid, src, src_uid)?;
                     } else {
-                        // Remote moved; move it back.
+                        // Remote moved; move it back. The message's UID there
+                        // is known once that mailbox has synced, and the move
+                        // looks it up otherwise.
+                        let current_uid = repo::messages::get_row(&tx, mid)?
+                            .filter(|row| row.folder_id == cur_folder)
+                            .and_then(|row| row.uid);
                         repo::messages::set_uid_and_folder(&tx, mid, src, None)?;
                         let payload = serde_json::json!({
                             "srcFolderId": cur_folder,
-                            "srcUid": serde_json::Value::Null,
+                            "srcUid": current_uid,
                             "targetFolderId": src,
                         });
                         repo::actions::enqueue(
