@@ -8558,7 +8558,7 @@ fn revert_action(
                             None,
                         )?;
                     }
-                    if protocol == MailProtocol::Gmail {
+                    if protocol.has_multi_mailbox_messages() {
                         if let Some(current) = cur_folder {
                             tx.execute(
                                 "DELETE FROM message_folders
@@ -9457,5 +9457,72 @@ mod local_data_reset_tests {
                 ("linked-missing".to_owned(), None),
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod move_undo_tests {
+    use super::*;
+    use crate::db::testutil;
+
+    fn mailboxes(conn: &rusqlite::Connection, message_id: i64) -> Vec<i64> {
+        conn.prepare(
+            "SELECT folder_id FROM message_folders WHERE message_id = ?1 ORDER BY folder_id",
+        )
+        .unwrap()
+        .query_map([message_id], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+    }
+
+    #[test]
+    fn undoing_a_completed_jmap_move_restores_its_mailbox_membership() {
+        let mut conn = testutil::conn();
+        testutil::seed_account(&conn);
+        conn.execute_batch(
+            "UPDATE accounts SET mail_protocol = 'jmap' WHERE id = 1;
+             UPDATE folders SET jmap_id = 'inbox' WHERE id = 1;
+             INSERT INTO folders (id, account_id, path, role, jmap_id)
+               VALUES (2, 1, 'Archive', 'archive', 'archive');",
+        )
+        .unwrap();
+        let (thread_id, message_id) =
+            testutil::seed_message(&conn, "a@example.com", "Plans", false);
+        // The archive already reached the server.
+        conn.execute(
+            "UPDATE messages SET folder_id = 2, uid = NULL WHERE id = ?1",
+            [message_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO message_folders (message_id, folder_id) VALUES (?1, 2)",
+            [message_id],
+        )
+        .unwrap();
+        let action_id = repo::actions::enqueue(
+            &conn,
+            1,
+            "archive",
+            Some(message_id),
+            Some(thread_id),
+            &serde_json::json!({"srcFolderId": 1, "srcUid": null, "targetFolderId": 2}),
+            None,
+        )
+        .unwrap();
+        repo::actions::set_state(&conn, action_id, "done", None).unwrap();
+        let action = repo::actions::get(&conn, action_id).unwrap().unwrap();
+
+        revert_action(&mut conn, &action).unwrap();
+
+        let folder: i64 = conn
+            .query_row(
+                "SELECT folder_id FROM messages WHERE id = ?1",
+                [message_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(folder, 1);
+        assert_eq!(mailboxes(&conn, message_id), [1]);
     }
 }
