@@ -1605,7 +1605,7 @@ msgstr ""
 
 #: ui/components/account-mail-preferences.slint:178
 #: ui/dialogs/folder-dialog.slint:128 ui/dialogs/oauth-setup-dialog.slint:126
-#: ui/dialogs/settings-dialog.slint:1985 ui/dialogs/settings-dialog.slint:2730
+#: ui/dialogs/settings-dialog.slint:1985 ui/dialogs/settings-dialog.slint:2732
 #: ui/views/contacts-view.slint:604 ui/views/files-view.slint:620
 msgid "Cancel"
 msgstr ""
@@ -3751,7 +3751,7 @@ msgid "General"
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:927 ui/dialogs/settings-dialog.slint:1507
-#: ui/dialogs/settings-dialog.slint:2429 ui/dialogs/settings-dialog.slint:2858
+#: ui/dialogs/settings-dialog.slint:2429 ui/dialogs/settings-dialog.slint:2863
 msgid "Accounts"
 msgstr ""
 
@@ -4077,11 +4077,11 @@ msgid ""
 "you create one."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:1633 ui/dialogs/settings-dialog.slint:2754
+#: ui/dialogs/settings-dialog.slint:1633 ui/dialogs/settings-dialog.slint:2759
 msgid "Edit profile"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:1643 ui/dialogs/settings-dialog.slint:2984
+#: ui/dialogs/settings-dialog.slint:1643 ui/dialogs/settings-dialog.slint:2989
 msgid "Delete profile"
 msgstr ""
 
@@ -4370,7 +4370,7 @@ msgstr ""
 msgid "This does not delete anything from Gmail, Outlook, or your IMAP server."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2063 ui/dialogs/settings-dialog.slint:2940
+#: ui/dialogs/settings-dialog.slint:2063 ui/dialogs/settings-dialog.slint:2945
 msgid "Delete everything"
 msgstr ""
 
@@ -4633,7 +4633,7 @@ msgstr ""
 msgid "Stored securely in your system keyring"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2561 ui/dialogs/settings-dialog.slint:2733
+#: ui/dialogs/settings-dialog.slint:2561 ui/dialogs/settings-dialog.slint:2738
 msgid "Connecting…"
 msgstr ""
 
@@ -4729,125 +4729,125 @@ msgid ""
 "and match its encryption settings."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2733
+#: ui/dialogs/settings-dialog.slint:2738
 msgid "Save account"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2733 ui/views/onboarding-view.slint:413
+#: ui/dialogs/settings-dialog.slint:2738 ui/views/onboarding-view.slint:413
 msgid "Connect account"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2754 ui/dialogs/settings-dialog.slint:2810
+#: ui/dialogs/settings-dialog.slint:2759 ui/dialogs/settings-dialog.slint:2815
 msgid "Create profile"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2811
+#: ui/dialogs/settings-dialog.slint:2816
 msgid ""
 "Its color marks its accounts' mail, and choosing it shows only their mail."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2816
+#: ui/dialogs/settings-dialog.slint:2821
 msgid "Profile name"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2818
+#: ui/dialogs/settings-dialog.slint:2823
 msgid "Personal or Work"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2824 ui/views/mail-reading-pane.slint:1971
+#: ui/dialogs/settings-dialog.slint:2829 ui/views/mail-reading-pane.slint:1971
 msgid "Color"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2833
+#: ui/dialogs/settings-dialog.slint:2838
 msgid "Profile color {}"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2875
+#: ui/dialogs/settings-dialog.slint:2880
 msgid "Save profile"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2883
+#: ui/dialogs/settings-dialog.slint:2888
 msgid "Could not save this profile. Check the name and try again."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2901
+#: ui/dialogs/settings-dialog.slint:2906
 msgid "Choose a profile for {}"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2931
+#: ui/dialogs/settings-dialog.slint:2936
 msgid "Delete all local data?"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2932
+#: ui/dialogs/settings-dialog.slint:2937
 msgid ""
 "This removes every account, downloaded message, calendar, contact, "
 "preference, and credential stored by Flectar Mail on this device."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2934
+#: ui/dialogs/settings-dialog.slint:2939
 msgid ""
 "POP3 mail is stored only on this device and will be deleted. Mail and events "
 "on Gmail, Outlook, and IMAP servers will not be deleted."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2935
+#: ui/dialogs/settings-dialog.slint:2940
 msgid ""
 "Mail and events on Gmail, Outlook, and IMAP servers will not be deleted."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2936
+#: ui/dialogs/settings-dialog.slint:2941
 msgid "Export POP3 mail…"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2941
+#: ui/dialogs/settings-dialog.slint:2946
 msgid "Keep my data"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2955
+#: ui/dialogs/settings-dialog.slint:2960
 msgid "Remove account?"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2957
+#: ui/dialogs/settings-dialog.slint:2962
 msgid "Remove this account and its downloaded mail from this device."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2959
+#: ui/dialogs/settings-dialog.slint:2964
 msgid ""
 "This account's mail is stored only on this device. Export it first to keep a "
 "copy."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2960
+#: ui/dialogs/settings-dialog.slint:2965
 msgid "Messages on the mail server will not be deleted."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2961
+#: ui/dialogs/settings-dialog.slint:2966
 msgid "Export mail…"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2965
+#: ui/dialogs/settings-dialog.slint:2970
 msgid "Remove account"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2966
+#: ui/dialogs/settings-dialog.slint:2971
 msgid "Keep account"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2980
+#: ui/dialogs/settings-dialog.slint:2985
 msgid "Delete profile?"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2982
+#: ui/dialogs/settings-dialog.slint:2987
 msgid ""
 "Accounts assigned to this profile will return to their individual or "
 "generated account colors."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2983
+#: ui/dialogs/settings-dialog.slint:2988
 msgid "Accounts and provider data are not changed."
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2985
+#: ui/dialogs/settings-dialog.slint:2990
 msgid "Keep profile"
 msgstr ""
 

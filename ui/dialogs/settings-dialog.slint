@@ -2602,7 +2602,7 @@ export component SettingsDialog inherits Rectangle {
                         reject
                     }
 
-                    VerticalBox {
+                    account-content := VerticalBox {
                         padding: 0px;
                         padding-top: 22px;
                         padding-right: 22px;
@@ -2722,14 +2722,19 @@ export component SettingsDialog inherits Rectangle {
                             }
                         }
 
-                        HorizontalBox {
-                            padding: 0px;
-                            height: root.compact ? 44px : 34px;
+                        // Phone-width dialogs give the whole row to the buttons
+                        // and stack them when a label does not fit in half of it.
+                        GridLayout {
+                            property <bool> stacked: root.compact && max(cancel-account.content-width, save-account.content-width) * 2 + self.spacing
+                                > account-panel.width - account-content.padding-left - account-content.padding-right;
                             spacing: 8px;
-                            Rectangle { horizontal-stretch: 1; }
-                            Button { height: parent.height; text: @tr("Cancel"); clicked => { root.account_form_open = false; } }
-                            Button {
-                                height: parent.height;
+                            if !root.compact : Rectangle { row: 0; col: 0; horizontal-stretch: 1; }
+                            cancel-account := Button { row: 0; col: root.compact ? 0 : 1; height: root.compact ? 44px : 34px; label-overflow: elide; text: @tr("Cancel"); clicked => { root.account_form_open = false; } }
+                            save-account := Button {
+                                row: parent.stacked ? 1 : 0;
+                                col: parent.stacked ? 0 : root.compact ? 1 : 2;
+                                height: root.compact ? 44px : 34px;
+                                label-overflow: elide;
                                 text: root.account_setup_in_progress ? @tr("Connecting…") : root.account_editing ? @tr("Save account") : @tr("Connect account");
                                 primary: true;
                                 enabled: root.account_form_valid && !root.account_setup_in_progress;
