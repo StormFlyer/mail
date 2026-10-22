@@ -3505,11 +3505,7 @@ impl Core {
                         .await
                         .map_err(jmap::client::map_error)?;
                 }
-                let root_name = folder.path;
-                self.db
-                    .write(move |conn| {
-                        repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
-                    })
+                sync::delete_folder_tree(&self.sync_ctx(), account_id, folder.path, delimiter)
                     .await?;
             }
             MailProtocol::Imap => {
@@ -3518,11 +3514,7 @@ impl Core {
                     imap::delete_folder(&mut session, &candidate.path).await?;
                 }
                 imap::logout(session).await;
-                let root_name = folder.path;
-                self.db
-                    .write(move |conn| {
-                        repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
-                    })
+                sync::delete_folder_tree(&self.sync_ctx(), account_id, folder.path, delimiter)
                     .await?;
             }
             // The folders and their mail exist only here.

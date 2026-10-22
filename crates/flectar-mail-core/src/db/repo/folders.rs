@@ -250,6 +250,8 @@ pub fn messages_in_tree(
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// Delete a folder and its subfolders. Their messages go first, with their
+/// search entries and files (see `crate::sync::delete_folder_tree`).
 pub fn delete_tree(
     conn: &Connection,
     account_id: i64,
@@ -257,33 +259,11 @@ pub fn delete_tree(
     delimiter: &str,
 ) -> Result<()> {
     let pattern = subtree_pattern(prefix, delimiter);
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT m.thread_id
-         FROM messages m JOIN folders f ON f.id = m.folder_id
-         WHERE f.account_id = ?1 AND (f.path = ?2 OR f.path LIKE ?3 ESCAPE '\\')
-           AND m.thread_id IS NOT NULL",
-    )?;
-    let thread_ids = stmt
-        .query_map(params![account_id, prefix, pattern], |row| {
-            row.get::<_, i64>(0)
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    drop(stmt);
-    conn.execute(
-        "DELETE FROM messages WHERE folder_id IN (
-           SELECT id FROM folders
-           WHERE account_id = ?1 AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')
-         )",
-        params![account_id, prefix, pattern],
-    )?;
     conn.execute(
         "DELETE FROM folders
          WHERE account_id = ?1 AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')",
         params![account_id, prefix, pattern],
     )?;
-    for thread_id in thread_ids {
-        super::threads::recompute(conn, thread_id)?;
-    }
     Ok(())
 }
 

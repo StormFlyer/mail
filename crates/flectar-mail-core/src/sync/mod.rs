@@ -200,7 +200,8 @@ pub(crate) async fn finish_empty_trash(
 }
 
 /// Delete a folder and its subfolders from this device together with the
-/// messages they hold, including each message's search entry and files.
+/// messages they hold, including each message's search entry and files. For
+/// server folders this follows their deletion on the server.
 pub(crate) async fn delete_folder_tree(
     ctx: &SyncCtx,
     account_id: i64,
