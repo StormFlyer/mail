@@ -48,7 +48,7 @@ fraction of the memory of a typical web-based mail client.
 - **Offline by design.** Your mailbox and calendar are stored locally, so your
   synced data remains useful without a connection.
 - **Works with your accounts.** Connect Gmail, Outlook and Microsoft 365, or
-  standards-based IMAP/SMTP, JMAP, CalDAV, and CardDAV services.
+  standards-based IMAP, POP3, SMTP, JMAP, CalDAV, and CardDAV services.
 - **Privacy-conscious defaults.** Remote images are blocked until you allow
   them, helping prevent tracking pixels from reporting when you read a message.
 - **Security by architecture.** Email content is never opened in a WebView.
@@ -358,6 +358,11 @@ snapshots or transfer connected-account setup and preferences through a backup.
 Passwords and OAuth tokens stay in the system keyring, so a restored device asks
 you to sign in again.
 
+POP3 accounts download mail to this device and leave it on the server. Their
+folders exist only on this device, so snapshots include that mail, and removing
+a POP3 account or deleting all data offers to export it first as mbox files,
+one per folder, which other mail apps can import.
+
 The same import also brings accounts over from Thunderbird (a profile folder,
 its Tools › Export archive, or `prefs.js`) and from Thunderbird for Android or
 K-9 Mail (`.k9s` settings exports). You review each account before anything is
@@ -394,11 +399,11 @@ Flectar Mail is currently in development and is not yet stable.
 >
 > Google and Microsoft OAuth verification is still in progress. Earlier GitHub
 > prereleases are intended for testers using their own OAuth registrations or
-> IMAP/JMAP accounts.
+> IMAP, POP3, or JMAP accounts.
 
 Builds without OAuth app keys keep Gmail and Outlook sign-in disabled. Use the
 **Sign-in settings** cog on the welcome screen to save your own Google or
-Microsoft app registration, or connect an IMAP/JMAP account. Custom keys are
+Microsoft app registration, or connect an IMAP, POP3, or JMAP account. Custom keys are
 shared with Settings and take precedence over bundled keys; clearing a custom
 client ID restores the defaults when available. Each provider enables separately
 once its configuration is saved.

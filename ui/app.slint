@@ -256,6 +256,11 @@ export global I18n {
 
     ui-message-account(key, argument, second-argument, third-argument) => {
         if (key == "Database snapshot exported to {}.") { return @tr("Database snapshot exported to {}.", argument); }
+        if (key == "Choose where to export the mail") { return @tr("Choose where to export the mail"); }
+        if (key == "Exporting mail…") { return @tr("Exporting mail…"); }
+        if (key == "Mail exported to {}.") { return @tr("Mail exported to {}.", argument); }
+        if (key == "Mail exported to {}. Some messages could not be found on this device or the mail server.") { return @tr("Mail exported to {}. Some messages could not be found on this device or the mail server.", argument); }
+        if (key == "Could not export mail: {}") { return @tr("Could not export mail: {}", argument); }
         if (key == "Could not export database snapshot: {}") { return @tr("Could not export database snapshot: {}", argument); }
         if (key == "Account order saved.") { return @tr("Account order saved."); }
         if (key == "Could not save account order: {}") { return @tr("Could not save account order: {}", argument); }
@@ -461,6 +466,7 @@ export global I18n {
         if (key == "Email template inserted, but its usage could not be saved: {}") { return @tr("Email template inserted, but its usage could not be saved: {}", argument); }
         if (key == "Choose a supported account type and connection security.") { return @tr("Choose a supported account type and connection security."); }
         if (key == "IMAP port must be between 1 and 65535.") { return @tr("IMAP port must be between 1 and 65535."); }
+        if (key == "POP3 port must be between 1 and 65535.") { return @tr("POP3 port must be between 1 and 65535."); }
         if (key == "SMTP port must be between 1 and 65535.") { return @tr("SMTP port must be between 1 and 65535."); }
         if (key == "Local mail data is unavailable. Retry startup.") { return @tr("Local mail data is unavailable. Retry startup."); }
         if (key == "Discovering JMAP and checking capabilities…") { return @tr("Discovering JMAP and checking capabilities…"); }
@@ -470,6 +476,7 @@ export global I18n {
         if (key == "Certificate import failed: {}") { return @tr("Certificate import failed: {}", argument); }
         if (key == "Paste the PEM certificate into the certificate field.") { return @tr("Paste the PEM certificate into the certificate field."); }
         if (key == "Testing IMAP and SMTP connections…") { return @tr("Testing IMAP and SMTP connections…"); }
+        if (key == "Testing POP3 and SMTP connections…") { return @tr("Testing POP3 and SMTP connections…"); }
         return "";
     }
 
@@ -612,6 +619,7 @@ export component AppWindow inherits Window {
     callback export_account_backup();
     callback import_accounts();
     callback export_database_snapshot();
+    callback export_device_mail(int);
     callback delete_all_data();
     callback load_storage_usage();
     callback cancel_storage_usage();
@@ -684,6 +692,9 @@ export component AppWindow inherits Window {
     in property <int> selected_mail_label_count: 0;
     in property <bool> selected_account_uses_labels: false;
     in property <[AccountRow]> connected_accounts: [];
+    in property <bool> has_device_mail: false;
+    in property <bool> mail_export_running: false;
+    in property <LocalizedMessage> mail-export-message;
     in property <[MailProfileRow]> mail_profiles: [];
     in property <[ProfileMemberRow]> profile_members: [];
     // The profile the mail view shows; an empty id means every account.
@@ -1723,6 +1734,9 @@ export component AppWindow inherits Window {
             width: parent.width;
             height: parent.height;
             connected_accounts: root.connected_accounts;
+            has_device_mail: root.has_device_mail;
+            mail_export_running: root.mail_export_running;
+            mail_export_status: I18n.ui-message(root.mail-export-message.key, root.mail-export-message.argument, root.mail-export-message.second_argument, root.mail-export-message.third_argument);
             mail_profiles: root.mail_profiles;
             profile_members: root.profile_members;
             new-profile-requested <=> root.new_profile_requested;
@@ -1904,6 +1918,7 @@ export component AppWindow inherits Window {
             export_account_backup => { root.export_account_backup(); }
             import_accounts => { root.import_accounts(); }
             export_database_snapshot => { root.export_database_snapshot(); }
+            export_device_mail(account-id) => { root.export_device_mail(account-id); }
             delete_all_data => { root.delete_all_data(); }
             load_storage_usage => { root.load_storage_usage(); }
             open-link(url) => { root.open_email_link(url); }
