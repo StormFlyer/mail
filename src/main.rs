@@ -6861,7 +6861,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         UiMessage::plain("Testing IMAP and SMTP connections…"),
                     )
                 }
-                MailProtocol::Gmail => {
+                MailProtocol::Gmail | MailProtocol::Pop3 => {
                     unsupported();
                     return;
                 }

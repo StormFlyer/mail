@@ -116,9 +116,22 @@ pub struct AccountHandle {
     /// Coalesced wake-up for the dedicated SMTP submission worker. Gmail and
     /// JMAP own their native send queues and therefore leave this unset.
     send_tx: Option<mpsc::Sender<()>>,
+    /// Set for accounts whose mail exists only on this device (POP3), where a
+    /// message's original file can only be downloaded again from the server.
+    restore_tx: Option<mpsc::Sender<RestoreRequest>>,
     settings_tx: watch::Sender<crate::models::AccountSettings>,
     tasks: Vec<tokio::task::AbortHandle>,
 }
+
+/// A request to download a stored message's original file again after it
+/// went missing from this device. Answered with the file's new path.
+pub(crate) struct RestoreRequest {
+    pub message_id: i64,
+    pub complete: oneshot::Sender<std::result::Result<String, String>>,
+}
+
+/// Restoring waits for any running download session to end first.
+const RESTORE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 #[derive(Debug)]
 pub(crate) enum PriorityFetchCmd {
@@ -193,6 +206,26 @@ impl AccountHandle {
         self.send(SyncCmd::SyncNow { complete: None });
     }
 
+    /// Download a stored message's original again; see [`RestoreRequest`].
+    pub(crate) async fn restore_message(&self, message_id: i64) -> Result<String> {
+        let restore_tx = self.restore_tx.as_ref().ok_or_else(|| {
+            CoreError::Other("this account reads its messages from the server".into())
+        })?;
+        let (tx, rx) = oneshot::channel();
+        restore_tx
+            .send(RestoreRequest {
+                message_id,
+                complete: tx,
+            })
+            .await
+            .map_err(|_| CoreError::Other("mail worker stopped".into()))?;
+        tokio::time::timeout(RESTORE_TIMEOUT, rx)
+            .await
+            .map_err(|_| CoreError::Other("downloading the message again timed out".into()))?
+            .map_err(|_| CoreError::Other("mail worker stopped".into()))?
+            .map_err(CoreError::Other)
+    }
+
     pub async fn fetch_attachment(&self, attachment_id: i64) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
         tokio::time::timeout(
@@ -231,6 +264,7 @@ mod account_handle_tests {
             tx,
             body_tx,
             send_tx: Some(send_tx),
+            restore_tx: None,
             settings_tx,
             tasks: Vec::new(),
         };
@@ -258,13 +292,15 @@ pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
     let (settings_tx, settings_rx) = watch::channel(config.settings.clone());
     // API protocols own their submission queues. SMTP-based protocols get a
     // dedicated submission worker that never waits behind mailbox sync.
-    let (joins, send_tx) = match config.mail_protocol {
+    let (joins, send_tx, restore_tx) = match config.mail_protocol {
         MailProtocol::Gmail => (
             crate::sync::gmail::spawn(ctx, config, rx, body_rx, settings_rx),
+            None,
             None,
         ),
         MailProtocol::Jmap => (
             crate::jmap::sync::spawn(ctx, config, rx, body_rx, settings_rx),
+            None,
             None,
         ),
         MailProtocol::Imap => {
@@ -303,7 +339,30 @@ pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
                     settings_rx,
                 )),
             ];
-            (joins, Some(send_tx))
+            (joins, Some(send_tx), None)
+        }
+        MailProtocol::Pop3 => {
+            let (send_tx, send_rx) = mpsc::channel(1);
+            let (restore_tx, restore_rx) = mpsc::channel(PRIORITY_FETCH_QUEUE_CAPACITY);
+            let joins = vec![
+                tokio::spawn(run_send_dispatcher(
+                    ctx.clone(),
+                    config.clone(),
+                    send_rx,
+                    tx.clone(),
+                )),
+                tokio::spawn(crate::sync::pop3::run(
+                    ctx,
+                    config,
+                    crate::sync::pop3::Inputs {
+                        commands: rx,
+                        reads: body_rx,
+                        restores: restore_rx,
+                        settings: settings_rx,
+                    },
+                )),
+            ];
+            (joins, Some(send_tx), Some(restore_tx))
         }
     };
     AccountHandle {
@@ -311,6 +370,7 @@ pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
         tx,
         body_tx,
         send_tx,
+        restore_tx,
         settings_tx,
         tasks: joins
             .iter()
@@ -1181,6 +1241,8 @@ pub async fn status_for_account(db: &Db, account_id: i64) -> Result<SyncStatus> 
                 rusqlite::params![account_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )?,
+            // POP3 downloads whole messages in its foreground sync.
+            MailProtocol::Pop3 => (0, 0),
         };
         let header_failed: i64 = conn.query_row(
             "SELECT COUNT(*)

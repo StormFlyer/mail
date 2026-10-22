@@ -143,7 +143,7 @@ pub fn insert_with_sync_state(
     // the UI must not offer a mutation the server may reject. Other
     // protocols validate the operation when it is attempted.
     let can_create_top_level_mailbox = match a.mail_protocol {
-        MailProtocol::Gmail | MailProtocol::Imap => true,
+        MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Pop3 => true,
         MailProtocol::Jmap => false,
     };
     conn.execute(
@@ -182,6 +182,11 @@ pub fn insert_with_sync_state(
          ) VALUES (?1,?2,?3,1,1,'accepted',?4)",
         params![account_id, a.email, a.display_name, now_ms()],
     )?;
+    match a.mail_protocol {
+        MailProtocol::Pop3 => super::pop3::create_account_state(conn, account_id)?,
+        // Folders come from the server.
+        MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {}
+    }
     Ok(account_id)
 }
 
@@ -198,13 +203,14 @@ pub fn set_settings(conn: &Connection, id: i64, settings: &AccountSettings) -> R
 }
 
 pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()> {
-    let (old_protocol, old_jmap_url, old_jmap_account_id, old_outgoing): (
+    let (old_protocol, old_jmap_url, old_jmap_account_id, old_outgoing, old_incoming_host): (
         MailProtocol,
         String,
         Option<String>,
         (String, u16, String),
+        String,
     ) = conn.query_row(
-        "SELECT mail_protocol,jmap_url,jmap_account_id,smtp_host,smtp_port,username
+        "SELECT mail_protocol,jmap_url,jmap_account_id,smtp_host,smtp_port,username,incoming_host
          FROM accounts WHERE id=?1",
         params![id],
         |row| {
@@ -213,9 +219,17 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
                 row.get(1)?,
                 row.get(2)?,
                 (row.get(3)?, row.get(4)?, row.get(5)?),
+                row.get(6)?,
             ))
         },
     )?;
+    // POP3 mail exists only on this device, so it can't move to or from a
+    // protocol that keeps mail on the server.
+    if (old_protocol == MailProtocol::Pop3) != (a.mail_protocol == MailProtocol::Pop3) {
+        return Err(crate::error::CoreError::Other(
+            "an account can't switch between POP3 and IMAP or JMAP".into(),
+        ));
+    }
     let jmap_identity_changed = (old_protocol == MailProtocol::Jmap
         || a.mail_protocol == MailProtocol::Jmap)
         && (old_protocol != a.mail_protocol
@@ -298,6 +312,14 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
            verification_status='accepted',source='provider'",
         params![id, a.email, now_ms()],
     )?;
+    // UIDLs only identify messages on the server and mailbox that issued
+    // them.
+    if a.mail_protocol == MailProtocol::Pop3
+        && (!old_incoming_host.eq_ignore_ascii_case(a.incoming_host)
+            || old_outgoing.2 != a.username)
+    {
+        super::pop3::forget_server(conn, id)?;
+    }
     if jmap_identity_changed {
         conn.execute(
             "UPDATE pending_actions
@@ -896,5 +918,58 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![first, second, third]
         );
+    }
+
+    #[test]
+    fn pop3_edits_keep_the_ledger_only_for_the_same_server_and_user() {
+        let conn = crate::db::testutil::conn();
+        let initial = NewAccount {
+            email: "me@test.dev",
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Generic,
+            auth_kind: AuthKind::Password,
+            mail_protocol: MailProtocol::Pop3,
+            username: "me",
+            jmap_url: "",
+            jmap_account_id: None,
+            incoming_host: "pop.test.dev",
+            incoming_port: 995,
+            smtp_host: "smtp.test.dev",
+            smtp_port: 465,
+        };
+        let id = insert(&conn, &initial, &settings()).unwrap();
+        let known = |conn: &Connection| super::super::pop3::known_uidls(conn, id).unwrap().len();
+        super::super::pop3::record_skipped(&conn, id, "a", 1, 1).unwrap();
+
+        // Another port or letter case reaches the same mailbox.
+        let same = NewAccount {
+            incoming_host: "POP.test.dev",
+            incoming_port: 110,
+            ..initial
+        };
+        update_password(&conn, id, &same).unwrap();
+        assert_eq!(known(&conn), 1);
+
+        let other_user = NewAccount {
+            username: "other",
+            ..same
+        };
+        update_password(&conn, id, &other_user).unwrap();
+        assert_eq!(known(&conn), 0);
+
+        super::super::pop3::record_skipped(&conn, id, "b", 1, 1).unwrap();
+        let other_server = NewAccount {
+            incoming_host: "mail.test.dev",
+            ..other_user
+        };
+        update_password(&conn, id, &other_server).unwrap();
+        assert_eq!(known(&conn), 0);
+
+        let to_imap = NewAccount {
+            mail_protocol: MailProtocol::Imap,
+            ..other_server
+        };
+        assert!(update_password(&conn, id, &to_imap).is_err());
     }
 }

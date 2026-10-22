@@ -53,6 +53,9 @@ pub enum MailProtocol {
     Imap,
     /// RFC 8620/8621 JMAP Mail and EmailSubmission.
     Jmap,
+    /// POP3 download into folders that exist only on this device, with SMTP
+    /// submission.
+    Pop3,
 }
 
 impl MailProtocol {
@@ -61,6 +64,7 @@ impl MailProtocol {
             Self::Gmail => "gmail",
             Self::Imap => "imap",
             Self::Jmap => "jmap",
+            Self::Pop3 => "pop3",
         }
     }
 
@@ -69,6 +73,7 @@ impl MailProtocol {
             "gmail" => Some(Self::Gmail),
             "imap" => Some(Self::Imap),
             "jmap" => Some(Self::Jmap),
+            "pop3" => Some(Self::Pop3),
             _ => None,
         }
     }
@@ -79,7 +84,7 @@ impl MailProtocol {
     pub const fn has_multi_mailbox_messages(self) -> bool {
         match self {
             Self::Gmail | Self::Jmap => true,
-            Self::Imap => false,
+            Self::Imap | Self::Pop3 => false,
         }
     }
 }
@@ -2051,7 +2056,7 @@ pub struct ConnectCalendarArgs {
     pub password: Option<String>,
 }
 
-/// Standard IMAP folder roles.
+/// Standard folder roles.
 pub mod roles {
     pub const INBOX: &str = "inbox";
     pub const ARCHIVE: &str = "archive";
@@ -2106,7 +2111,12 @@ mod tests {
 
     #[test]
     fn mail_protocol_roundtrip_rejects_unknown_values() {
-        for protocol in [MailProtocol::Gmail, MailProtocol::Imap, MailProtocol::Jmap] {
+        for protocol in [
+            MailProtocol::Gmail,
+            MailProtocol::Imap,
+            MailProtocol::Jmap,
+            MailProtocol::Pop3,
+        ] {
             assert_eq!(MailProtocol::parse(protocol.as_str()), Some(protocol));
         }
         assert_eq!(MailProtocol::parse("future"), None);

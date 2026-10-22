@@ -101,7 +101,52 @@ pub(crate) async fn write_atomic(
     bytes: &[u8],
     context: &'static str,
 ) -> Result<()> {
-    let path = path.as_ref();
+    write_replacing(path.as_ref(), bytes, context, false).await
+}
+
+/// [`write_atomic`] for data that exists nowhere else: the file and its
+/// directory entry are on stable storage when this returns, so a crash or
+/// power loss right after can't lose it.
+pub(crate) async fn write_durable(
+    path: impl AsRef<Path>,
+    bytes: &[u8],
+    context: &'static str,
+) -> Result<()> {
+    write_replacing(path.as_ref(), bytes, context, true).await
+}
+
+/// Temporary files of interrupted [`write_atomic`] and [`write_durable`]
+/// calls, which nothing references.
+fn is_partial_write(name: &str) -> bool {
+    name.starts_with('.') && name.ends_with(".partial")
+}
+
+/// Remove what interrupted writes left in `dir`, returning how many files.
+/// Call it only while nothing writes there.
+pub(crate) async fn remove_partial_writes(dir: impl AsRef<Path>) -> Result<usize> {
+    let mut entries = match tokio::fs::read_dir(dir.as_ref()).await {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
+    let mut removed = 0;
+    while let Some(entry) = entries.next_entry().await? {
+        if entry.file_name().to_str().is_some_and(is_partial_write)
+            && entry.file_type().await?.is_file()
+        {
+            tokio::fs::remove_file(entry.path()).await?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+async fn write_replacing(
+    path: &Path,
+    bytes: &[u8],
+    context: &'static str,
+    durable: bool,
+) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| CoreError::Other(format!("{context}: destination has no parent")))?;
@@ -126,6 +171,11 @@ pub(crate) async fn write_atomic(
         file.flush()
             .await
             .map_err(|error| CoreError::Other(format!("{context}: {error}")))?;
+        if durable {
+            file.sync_all()
+                .await
+                .map_err(|error| CoreError::Other(format!("{context}: {error}")))?;
+        }
         drop(file);
         #[cfg(windows)]
         if tokio::fs::symlink_metadata(path).await.is_ok() {
@@ -135,7 +185,20 @@ pub(crate) async fn write_atomic(
         }
         tokio::fs::rename(&temporary, path)
             .await
-            .map_err(|error| CoreError::Other(format!("{context}: {error}")))
+            .map_err(|error| CoreError::Other(format!("{context}: {error}")))?;
+        // The rename is only durable once the directory is. Windows can't
+        // open a directory for this, and NTFS journals the rename itself.
+        #[cfg(unix)]
+        if durable {
+            let directory = tokio::fs::File::open(parent)
+                .await
+                .map_err(|error| CoreError::Other(format!("{context}: {error}")))?;
+            directory
+                .sync_all()
+                .await
+                .map_err(|error| CoreError::Other(format!("{context}: {error}")))?;
+        }
+        Ok(())
     }
     .await;
     if result.is_err() {
@@ -254,6 +317,47 @@ mod tests {
             4
         );
         assert_eq!(tokio::fs::read(destination).await.unwrap(), [1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn durable_writes_replace_whole_files_and_leave_no_partials() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mail").join("message.eml");
+        write_durable(&path, b"first", "test write").await.unwrap();
+        write_durable(&path, b"second", "test write").await.unwrap();
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), b"second");
+        let mut names = Vec::new();
+        let mut entries = tokio::fs::read_dir(path.parent().unwrap()).await.unwrap();
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            names.push(entry.file_name().into_string().unwrap());
+        }
+        assert_eq!(names, ["message.eml"]);
+    }
+
+    #[tokio::test]
+    async fn interrupted_writes_are_swept_without_touching_real_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let kept = ["message.eml", ".hidden", "notes.partial"];
+        for name in kept {
+            tokio::fs::write(dir.path().join(name), b"x").await.unwrap();
+        }
+        tokio::fs::write(dir.path().join(".message.eml.00ab.partial"), b"x")
+            .await
+            .unwrap();
+        tokio::fs::create_dir(dir.path().join(".folder.partial"))
+            .await
+            .unwrap();
+        assert_eq!(remove_partial_writes(dir.path()).await.unwrap(), 1);
+        for name in kept.iter().chain([&".folder.partial"]) {
+            assert!(dir.path().join(name).exists(), "{name}");
+        }
+        assert!(!dir.path().join(".message.eml.00ab.partial").exists());
+        assert_eq!(
+            remove_partial_writes(dir.path().join("missing"))
+                .await
+                .unwrap(),
+            0
+        );
     }
 
     #[tokio::test]
