@@ -2,7 +2,7 @@
 use flectar_mail_core::accounts::credentials::DevelopmentFileCredentialStore;
 use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::*;
-use flectar_mail_core::{Core, imap, smtp};
+use flectar_mail_core::{Core, imap, net, smtp};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use std::sync::Arc;
 use tokio::{
@@ -811,6 +811,46 @@ fn smtp_config(port: u16, mode: ConnectionSecurity, certificate: &str) -> Accoun
         settings: AccountSettings::new(settings_with_certificate(mode, certificate)),
     }
 }
+/// A relay that takes the message and then never answers must not hold the
+/// submission worker forever.
+#[tokio::test(start_paused = true)]
+async fn smtp_send_gives_up_on_a_stalled_relay() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut stream = BufReader::new(acceptor_for(CERT).accept(tcp).await.unwrap());
+        stream.write_all(b"220 localhost ESMTP\r\n").await.unwrap();
+        assert!(line(&mut stream).await.starts_with("EHLO "));
+        stream
+            .write_all(b"250-localhost\r\n250 AUTH PLAIN\r\n")
+            .await
+            .unwrap();
+        assert!(line(&mut stream).await.starts_with("AUTH PLAIN "));
+        stream.write_all(b"235 Authenticated\r\n").await.unwrap();
+        assert!(line(&mut stream).await.starts_with("MAIL FROM:"));
+        stream.write_all(b"250 OK\r\n").await.unwrap();
+        assert!(line(&mut stream).await.starts_with("RCPT TO:"));
+        stream.write_all(b"250 OK\r\n").await.unwrap();
+        assert_eq!(line(&mut stream).await, "DATA\r\n");
+        stream.write_all(b"354 Continue\r\n").await.unwrap();
+        while line(&mut stream).await != ".\r\n" {}
+        std::future::pending::<()>().await;
+    });
+    let config = smtp_config(port, ConnectionSecurity::Tls, CERT);
+    let error = smtp::send_raw(
+        &config,
+        &smtp::SmtpAuth::Password("bridge-password".into()),
+        "user@example.com",
+        &["friend@example.com".into()],
+        b"Subject: Hello\r\n\r\nBody\r\n",
+    )
+    .await
+    .unwrap_err();
+    assert!(error.to_string().contains("timed out"), "{error}");
+    server.abort();
+}
+
 #[tokio::test]
 async fn smtp_starttls_on_custom_port() {
     smtp_connection(ConnectionSecurity::Starttls).await;
@@ -1064,11 +1104,11 @@ async fn proton_bridge_ca_certificate_still_checks_hostname() {
 
 #[test]
 fn rejects_invalid_certificate_imports() {
-    assert!(imap::trusted_certificates(KEY).is_err());
-    assert!(imap::trusted_certificates(&format!("{CERT}\n{KEY}")).is_err());
-    assert!(imap::trusted_certificates("not a certificate").is_err());
-    assert!(imap::trusted_certificates(&"x".repeat(256 * 1024 + 1)).is_err());
-    assert_eq!(imap::trusted_certificates(CERT).unwrap().len(), 1);
+    assert!(net::tls::trusted_certificates(KEY).is_err());
+    assert!(net::tls::trusted_certificates(&format!("{CERT}\n{KEY}")).is_err());
+    assert!(net::tls::trusted_certificates("not a certificate").is_err());
+    assert!(net::tls::trusted_certificates(&"x".repeat(256 * 1024 + 1)).is_err());
+    assert_eq!(net::tls::trusted_certificates(CERT).unwrap().len(), 1);
 }
 #[test]
 fn connection_settings_round_trip() {

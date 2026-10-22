@@ -25,6 +25,7 @@ pub mod mail_security;
 pub mod migration;
 pub mod mime;
 pub mod models;
+pub mod net;
 pub mod oauth;
 pub mod queue;
 pub mod route;
@@ -188,7 +189,7 @@ fn normalize_account_email(value: &str) -> Option<String> {
 /// Rules every account created from portable or migrated settings must
 /// satisfy. Interactive setup checks the same fields as the user types them.
 pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Result<()> {
-    imap::trusted_certificates(&config.settings.connection.trusted_certificate_pem)?;
+    net::tls::trusted_certificates(&config.settings.connection.trusted_certificate_pem)?;
     let email = config.email.trim();
     if email.len() > 320 || !email.contains('@') {
         return Err(CoreError::Other(format!(
@@ -1082,7 +1083,7 @@ impl Core {
     }
 
     pub async fn add_account_password(&self, args: AddPasswordAccountArgs) -> Result<Account> {
-        imap::trusted_certificates(&args.connection.trusted_certificate_pem)?;
+        net::tls::trusted_certificates(&args.connection.trusted_certificate_pem)?;
         let email = normalize_account_email(&args.email)
             .ok_or_else(|| CoreError::Auth("enter a valid email address".into()))?;
         let mut args = AddPasswordAccountArgs {
