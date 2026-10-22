@@ -2159,11 +2159,7 @@ async fn fetch_body(ctx: &SyncCtx, config: &AccountConfig, message_id: i64) -> R
     let connected = connect(ctx, config).await?;
     let raw = download_message_bounded(&connected, &expected_blob).await?;
     let parsed = crate::mime::parse_message(&raw)?;
-    let calendar_events = parsed
-        .calendar_parts
-        .iter()
-        .flat_map(|ics| crate::calendar::parse_ics(ics))
-        .collect::<Vec<_>>();
+    let calendar_events = crate::sync::ingest::calendar_events(&parsed);
     let dir = ctx.paths.mail_dir(config.id);
     tokio::fs::create_dir_all(&dir).await?;
     let path = dir.join(format!("{message_id}.jmap.eml"));
@@ -2183,38 +2179,7 @@ async fn fetch_body(ctx: &SyncCtx, config: &AccountConfig, message_id: i64) -> R
             if !valid {
                 return Ok((false, None));
             }
-            repo::messages::store_body(
-                &tx,
-                message_id,
-                parsed.text.as_deref(),
-                parsed.html.as_deref(),
-                Some(&path_string),
-                parsed
-                    .attachments
-                    .iter()
-                    .any(|attachment| !attachment.is_inline),
-                Some(&parsed.snippet),
-            )?;
-            repo::messages::set_sender_verification(
-                &tx,
-                message_id,
-                parsed.headers.sender_verification,
-            )?;
-            let attachments = parsed
-                .attachments
-                .iter()
-                .map(|attachment| repo::messages::NewAttachment {
-                    message_id,
-                    part_id: Some(&attachment.part_id),
-                    filename: attachment.filename.as_deref(),
-                    mime_type: attachment.mime_type.as_deref(),
-                    size: Some(attachment.size),
-                    content_id: attachment.content_id.as_deref(),
-                    is_inline: attachment.is_inline,
-                })
-                .collect::<Vec<_>>();
-            repo::messages::replace_attachments(&tx, message_id, &attachments)?;
-            repo::search::index_message(&tx, message_id)?;
+            crate::sync::ingest::store_body(&tx, message_id, &path_string, &parsed)?;
             let thread_id = current.and_then(|row| row.thread_id);
             if let Some(thread_id) = thread_id {
                 repo::threads::recompute(&tx, thread_id)?;
@@ -2227,20 +2192,7 @@ async fn fetch_body(ctx: &SyncCtx, config: &AccountConfig, message_id: i64) -> R
         let _ = tokio::fs::remove_file(path).await;
         return Ok(());
     }
-    if !calendar_events.is_empty() {
-        let account_id = config.id;
-        ctx.calendar_db
-            .write(move |conn| {
-                let tx = conn.transaction()?;
-                for event in &calendar_events {
-                    repo::calendar::upsert(&tx, account_id, message_id, event)?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
-        ctx.bus.emit(CoreEvent::CalendarUpdated { account_id });
-    }
+    crate::sync::ingest::store_calendar_events(ctx, config.id, message_id, calendar_events).await?;
     if let Some(thread_id) = thread_id {
         ctx.bus.emit(CoreEvent::MailUpdated {
             thread_ids: vec![thread_id],

@@ -1,6 +1,7 @@
 pub mod engine;
 pub mod folder_map;
 pub mod gmail;
+pub(crate) mod ingest;
 pub mod threading;
 
 use crate::{db::repo, error::Result, events::CoreEvent, models::MailProtocol};
