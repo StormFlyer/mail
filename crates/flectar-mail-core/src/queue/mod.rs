@@ -321,12 +321,12 @@ fn mark_failed_and_rollback(
 
     let source_uid = failed.payload["srcUid"].as_i64();
     repo::messages::set_uid_and_folder(&tx, message_id, source_folder, source_uid)?;
-    let multi_mailbox: bool = tx.query_row(
-        "SELECT provider='gmail' OR mail_protocol='jmap' FROM accounts WHERE id=?1",
+    let protocol: crate::models::MailProtocol = tx.query_row(
+        "SELECT mail_protocol FROM accounts WHERE id=?1",
         rusqlite::params![failed.account_id],
         |row| row.get(0),
     )?;
-    if multi_mailbox {
+    if protocol.has_multi_mailbox_messages() {
         if let Some(target_folder) = target_folder {
             tx.execute(
                 "DELETE FROM message_folders WHERE message_id=?1 AND folder_id=?2",
@@ -378,7 +378,7 @@ async fn execute_one(
                 ));
             }
             let snapshot_ids = crate::sync::snapshot_trash_ids(ctx, config.id).await?;
-            imap::select(session, &folder.imap_name).await?;
+            imap::select(session, &folder.path).await?;
             imap::empty_selected_trash(session).await?;
             crate::sync::finish_empty_trash(ctx, config.id, snapshot_ids).await
         }
@@ -415,7 +415,7 @@ async fn execute_one(
             {
                 return Err(CoreError::NotFound("message is no longer in Trash".into()));
             }
-            let selected = imap::select(session, &folder.imap_name).await?;
+            let selected = imap::select(session, &folder.path).await?;
             match (folder.uidvalidity, selected.uid_validity) {
                 (Some(stored), Some(remote)) if stored == remote => {}
                 _ => {
@@ -471,7 +471,7 @@ async fn resolve_remote(
     let Some(folder) = folder else {
         return Ok(None);
     };
-    imap::select(session, &folder.imap_name).await?;
+    imap::select(session, &folder.path).await?;
     Ok(Some((folder, uid as u32)))
 }
 
@@ -500,7 +500,7 @@ async fn resolve_source(
             "queued move source belongs to another account".into(),
         ));
     }
-    imap::select(session, &folder.imap_name).await?;
+    imap::select(session, &folder.path).await?;
     Ok((folder, uid))
 }
 
@@ -563,7 +563,7 @@ async fn move_action(
         ));
     }
 
-    imap::uid_move(session, uid, &target.imap_name).await?;
+    imap::uid_move(session, uid, &target.path).await?;
 
     // The message's new UID in the target is unknown (COPYUID not parsed in
     // v1); clear it so the next target-folder sync re-links by Message-ID.
@@ -600,7 +600,7 @@ async fn append_sent_action(
         })
         .await?
         .ok_or_else(|| CoreError::Imap("Sent mailbox has not been discovered yet".into()))?;
-    let selected = imap::select(session, &sent.imap_name).await?;
+    let selected = imap::select(session, &sent.path).await?;
     let existing_uid = if row.folder_id == Some(sent.id)
         && sent.uidvalidity.is_some()
         && sent.uidvalidity == selected.uid_validity
@@ -658,7 +658,7 @@ async fn append_sent_action(
             Ok(())
         })
         .await?;
-    let receipt = imap::append_with_receipt(session, &sent.imap_name, &raw, true).await?;
+    let receipt = imap::append_with_receipt(session, &sent.path, &raw, true).await?;
     // Tagged OK is enough to complete filing even without UIDPLUS. Header sync
     // will attach the UID later; no fallible post-APPEND SELECT/search is needed.
     let (validity, uid) = receipt
@@ -1222,7 +1222,7 @@ mod tests {
         let mut conn = crate::db::testutil::conn();
         crate::db::testutil::seed_account(&conn);
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'Archive', 'archive')",
             [],
         )
@@ -1253,9 +1253,9 @@ mod tests {
         let mut conn = crate::db::testutil::conn();
         crate::db::testutil::seed_account(&conn);
         conn.execute_batch(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'Archive', 'archive');
-             INSERT INTO folders (id, account_id, imap_name, role)
+             INSERT INTO folders (id, account_id, path, role)
              VALUES (3, 1, 'Later', '');",
         )
         .unwrap();

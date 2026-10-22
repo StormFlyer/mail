@@ -32,8 +32,8 @@ export component OnboardingView inherits Rectangle {
     callback copy-oauth-link();
     callback submit-oauth-redirect(string);
     callback import-mail-certificate();
-    in-out property <string> imap-security: "auto";
-    in-out property <string> smtp-security: "auto";
+    in-out property <string> incoming-security: "tls";
+    in-out property <string> smtp-security: "tls";
     in-out property <string> trusted-certificate-pem;
     in-out property <string> account-username;
     in property <string> status: "";
@@ -48,11 +48,11 @@ export component OnboardingView inherits Rectangle {
     in-out property <string> account-password: "";
     in-out property <string> account-protocol: "imap";
     in-out property <string> jmap-url: "";
-    in-out property <string> imap-host: "";
-    in-out property <string> imap-port: "993";
+    in-out property <string> incoming-host: "";
+    in-out property <string> incoming-port: "993";
     in-out property <string> smtp-host: "";
     in-out property <string> smtp-port: "465";
-    in-out property <bool> imap-form-open: false;
+    in-out property <bool> account-form-open: false;
     private property <bool> show-account-status: false;
     callback add-password-account(string, string, string, string, string, string, string, string, string);
     callback suggest-account-settings(string);
@@ -60,11 +60,11 @@ export component OnboardingView inherits Rectangle {
     callback cancel-oauth();
     callback import-accounts();
 
-    private property <bool> imap-form-valid: root.account-email != ""
+    private property <bool> account-form-valid: root.account-email != ""
         && root.account-password != ""
         && (root.account-protocol == "jmap" || (
-            root.imap-host != ""
-            && root.imap-port != ""
+            root.incoming-host != ""
+            && root.incoming-port != ""
             && root.smtp-host != ""
             && root.smtp-port != ""));
 
@@ -74,15 +74,15 @@ export component OnboardingView inherits Rectangle {
         root.account-password = "";
         root.account-protocol = "imap";
         root.jmap-url = "";
-        root.imap-security = "auto";
-        root.smtp-security = "auto";
+        root.incoming-security = "tls";
+        root.smtp-security = "tls";
         root.trusted-certificate-pem = "";
-        root.imap-host = "";
-        root.imap-port = "993";
+        root.incoming-host = "";
+        root.incoming-port = "993";
         root.smtp-host = "";
         root.smtp-port = "465";
         root.show-account-status = false;
-        root.imap-form-open = true;
+        root.account-form-open = true;
     }
 
     background: root.page-bg;
@@ -103,18 +103,18 @@ export component OnboardingView inherits Rectangle {
             spacing: 0px;
 
             HorizontalBox {
-                height: root.imap-form-open ? 40px : 62px;
+                height: root.account-form-open ? 40px : 62px;
                 Rectangle { horizontal-stretch: 1; }
                 Image {
-                    width: root.imap-form-open ? 40px : 62px;
-                    height: root.imap-form-open ? 40px : 62px;
+                    width: root.account-form-open ? 40px : 62px;
+                    height: root.account-form-open ? 40px : 62px;
                     source: @image-url("../../resources/app-icon/flectar-mail-masked.svg");
                     image-fit: contain;
                     accessible-label: @tr("Flectar Mail logo");
                 }
                 Rectangle { horizontal-stretch: 1; }
             }
-            Rectangle { height: root.imap-form-open ? 12px : 22px; }
+            Rectangle { height: root.account-form-open ? 12px : 22px; }
             Text {
                 text: @tr("Flectar Mail");
                 color: root.title-color;
@@ -135,7 +135,7 @@ export component OnboardingView inherits Rectangle {
                 }
             }
 
-            if root.startup-ready && !root.imap-form-open : VerticalBox {
+            if root.startup-ready && !root.account-form-open : VerticalBox {
                 padding: 0px;
                 spacing: 10px;
                 Rectangle { height: 6px; }
@@ -231,7 +231,7 @@ export component OnboardingView inherits Rectangle {
                 }
             }
 
-            if root.startup-ready && root.imap-form-open : VerticalBox {
+            if root.startup-ready && root.account-form-open : VerticalBox {
                 padding: 0px;
                 spacing: 10px;
                 Rectangle { height: 6px; }
@@ -321,19 +321,19 @@ export component OnboardingView inherits Rectangle {
                         horizontal-stretch: 1;
                         label: @tr("IMAP server");
                         label-color: root.muted-text;
-                        value: root.imap-host;
+                        value: root.incoming-host;
                         placeholder: @tr("IMAP server");
-                        edited(value) => { root.imap-host = value; }
+                        edited(value) => { root.incoming-host = value; }
                     }
                     FormField {
                         enabled: !root.account-setup-in-progress;
                         width: max(82px, self.preferred-width);
                         label: @tr("Port");
                         label-color: root.muted-text;
-                        value: root.imap-port;
+                        value: root.incoming-port;
                         input-type: number;
                         placeholder: @tr("993");
-                        edited(value) => { root.imap-port = value; }
+                        edited(value) => { root.incoming-port = value; }
                     }
                 }
                 if root.account-protocol == "imap" : HorizontalBox {
@@ -365,8 +365,10 @@ export component OnboardingView inherits Rectangle {
                     color: root.muted-text; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height;
                 }
                 if root.account-protocol == "imap" : MailSecurityFields {
-                    imap-security <=> root.imap-security;
+                    incoming-security <=> root.incoming-security;
                     smtp-security <=> root.smtp-security;
+                    incoming-port <=> root.incoming-port;
+                    smtp-port <=> root.smtp-port;
                     enabled: !root.account-setup-in-progress;
                     certificate-pem <=> root.trusted-certificate-pem;
                     import-certificate => { root.import-mail-certificate(); }
@@ -392,7 +394,7 @@ export component OnboardingView inherits Rectangle {
                     height: 42px;
                     text: root.account-setup-in-progress ? @tr("Connecting…") : @tr("Connect account");
                     primary: true;
-                    enabled: root.imap-form-valid && !root.account-setup-in-progress;
+                    enabled: root.account-form-valid && !root.account-setup-in-progress;
                     clicked => {
                         root.show-account-status = true;
                         root.add-password-account(
@@ -401,8 +403,8 @@ export component OnboardingView inherits Rectangle {
                             root.account-username,
                             root.account-password,
                             root.jmap-url,
-                            root.imap-host,
-                            root.imap-port,
+                            root.incoming-host,
+                            root.incoming-port,
                             root.smtp-host,
                             root.smtp-port
                         );
@@ -412,11 +414,11 @@ export component OnboardingView inherits Rectangle {
                     height: 40px;
                     text: @tr("Back");
                     enabled: !root.account-setup-in-progress;
-                    clicked => { root.imap-form-open = false; }
+                    clicked => { root.account-form-open = false; }
                 }
             }
 
-            if root.startup-ready && !root.imap-form-open && root.status != "" : VerticalBox {
+            if root.startup-ready && !root.account-form-open && root.status != "" : VerticalBox {
                 padding: 0px;
                 padding-top: 12px;
                 Text {

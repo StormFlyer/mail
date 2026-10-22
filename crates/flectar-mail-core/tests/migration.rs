@@ -79,7 +79,7 @@ fn k9_export_maps_supported_accounts_and_explains_the_rest() {
     assert_eq!(config.display_name.as_deref(), Some("Jane Doe"));
     assert_eq!(config.username, "jane@example.com");
     assert_eq!(
-        (config.imap_host.as_str(), config.imap_port),
+        (config.incoming_host.as_str(), config.incoming_port),
         ("imap.example.com", 993)
     );
     // An omitted port is the protocol default for the configured security.
@@ -88,7 +88,7 @@ fn k9_export_maps_supported_accounts_and_explains_the_rest() {
         ("smtp.example.com", 587)
     );
     assert_eq!(
-        config.settings.connection.imap_security,
+        config.settings.connection.incoming_security,
         ConnectionSecurity::Tls
     );
     assert_eq!(
@@ -117,7 +117,7 @@ fn k9_export_maps_supported_accounts_and_explains_the_rest() {
     assert_eq!(codes(gmail), [FindingCode::AliasesManagedByProvider]);
     let gmail = &gmail.draft.as_ref().unwrap().config;
     assert_eq!(gmail.provider, Provider::Gmail);
-    assert_eq!(gmail.imap_host, "imap.gmail.com");
+    assert_eq!(gmail.incoming_host, "imap.gmail.com");
 
     let pop = &plans[2];
     assert_eq!(pop.status, PlanStatus::Unsupported);
@@ -164,10 +164,10 @@ fn k9_legacy_exports_use_the_defaults_k9_applies() {
     let draft = plans[0].draft.as_ref().expect("legacy account imports");
     // Before content version 92 a missing security mode meant TLS.
     assert_eq!(
-        draft.config.settings.connection.imap_security,
+        draft.config.settings.connection.incoming_security,
         ConnectionSecurity::Tls
     );
-    assert_eq!(draft.config.imap_port, 993);
+    assert_eq!(draft.config.incoming_port, 993);
     // Before version 68 signatures were on unless switched off.
     assert_eq!(draft.signatures[0].html, "<div>Legacy</div>");
     assert_eq!(draft.color.as_deref(), Some("#2196F3"));
@@ -205,7 +205,7 @@ fn thunderbird_profile_reads_accounts_identities_signatures_and_colors() {
         Some("Ana Ruiz García")
     );
     assert_eq!(draft.config.username, "ana");
-    assert_eq!(draft.config.imap_port, 993);
+    assert_eq!(draft.config.incoming_port, 993);
     assert_eq!(draft.config.smtp_port, 587);
     assert_eq!(
         draft
@@ -397,7 +397,7 @@ async fn one_invalid_draft_does_not_block_or_corrupt_the_others() {
         .into_iter()
         .filter_map(|plan| plan.draft)
         .collect::<Vec<_>>();
-    drafts[0].config.imap_port = 0;
+    drafts[0].config.incoming_port = 0;
     drafts[0].color = Some("not a color".into());
 
     let report = core.import_accounts(drafts).await.unwrap();

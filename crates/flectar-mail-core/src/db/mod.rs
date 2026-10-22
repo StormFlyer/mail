@@ -520,17 +520,26 @@ pub(crate) mod testutil {
         c
     }
 
+    /// Settings of a test account that connects with TLS.
+    pub fn account_settings() -> crate::models::AccountSettings {
+        use crate::models::{AccountSettings, ConnectionSecurity, MailConnectionSettings};
+        AccountSettings::new(MailConnectionSettings::new(
+            ConnectionSecurity::Tls,
+            ConnectionSecurity::Tls,
+        ))
+    }
+
     /// Account 1 with an inbox folder 1, the minimum most repos need.
     pub fn seed_account(c: &Connection) {
         c.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
-             VALUES (1,'me@test.dev','imap','password','me','h',993,'h',587,0)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+             VALUES (1,'me@test.dev','generic','password','me','h',993,'h',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (1,1,'INBOX','inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (1,1,'INBOX','inbox')",
             [],
         )
         .unwrap();

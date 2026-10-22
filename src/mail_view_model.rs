@@ -532,11 +532,9 @@ pub(super) fn render_current(
     });
     app.set_has_selected(selected_email.is_some());
     app.set_selected_account_uses_labels(selected_email.as_ref().is_some_and(|email| {
-        state
-            .borrow()
-            .connected_accounts
-            .iter()
-            .any(|account| account.id == email.account_id && account.provider == Provider::Gmail)
+        state.borrow().connected_accounts.iter().any(|account| {
+            account.id == email.account_id && account.mail_protocol == MailProtocol::Gmail
+        })
     }));
     apply_label_rows(app, &labels, selected_email.as_ref());
     app.set_previous_email_id(previous_email_id);
@@ -1184,11 +1182,9 @@ pub(super) fn refresh_rows_only(
     );
     app.set_mail_selection_count(checked_ids.len() as i32);
     app.set_selected_account_uses_labels(selected_email.as_ref().is_some_and(|email| {
-        state
-            .borrow()
-            .connected_accounts
-            .iter()
-            .any(|account| account.id == email.account_id && account.provider == Provider::Gmail)
+        state.borrow().connected_accounts.iter().any(|account| {
+            account.id == email.account_id && account.mail_protocol == MailProtocol::Gmail
+        })
     }));
     apply_label_rows(app, &labels, selected_email.as_ref());
     refresh_sidebar(state);

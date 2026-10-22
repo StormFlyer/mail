@@ -5,8 +5,12 @@ import { TypeScale } from "../typography.slint";
 
 // The same account-scoped transport settings are used during setup and edits.
 export component MailSecurityFields inherits VerticalBox {
-    in-out property <string> imap-security: "auto";
-    in-out property <string> smtp-security: "auto";
+    in-out property <string> incoming-security: "tls";
+    in-out property <string> smtp-security: "tls";
+    // A port follows the selected security only while it still holds the
+    // previous mode's standard port, so a custom port is never overwritten.
+    in-out property <string> incoming-port: "993";
+    in-out property <string> smtp-port: "465";
     in-out property <string> certificate-pem;
     in property <bool> enabled: true;
     callback import-certificate();
@@ -14,6 +18,29 @@ export component MailSecurityFields inherits VerticalBox {
     spacing: 8px;
     padding: 0px;
     vertical-stretch: 0;
+
+    pure function standard-incoming-port(security: string) -> string {
+        return security == "starttls" ? "143" : "993";
+    }
+
+    pure function standard-smtp-port(security: string) -> string {
+        return security == "starttls" ? "587" : "465";
+    }
+
+    function choose-incoming-security(security: string) {
+        if (root.incoming-port == root.standard-incoming-port(root.incoming-security)) {
+            root.incoming-port = root.standard-incoming-port(security);
+        }
+        root.incoming-security = security;
+    }
+
+    function choose-smtp-security(security: string) {
+        if (root.smtp-port == root.standard-smtp-port(root.smtp-security)) {
+            root.smtp-port = root.standard-smtp-port(security);
+        }
+        root.smtp-security = security;
+    }
+
     Text { text: @tr("Connection security"); color: AppTheme.heading; font-size: TypeScale.secondary; font-weight: 600; }
     HorizontalBox {
         height: 58px;
@@ -29,9 +56,9 @@ export component MailSecurityFields inherits VerticalBox {
                 height: 36px;
                 min-width: 0px;
                 enabled: root.enabled;
-                model: [@tr("Automatic"), "SSL/TLS", "STARTTLS"];
-                current-index: root.imap-security == "tls" ? 1 : root.imap-security == "starttls" ? 2 : 0;
-                selected(value) => { root.imap-security = self.current-index == 1 ? "tls" : self.current-index == 2 ? "starttls" : "auto"; }
+                model: ["SSL/TLS", "STARTTLS"];
+                current-index: root.incoming-security == "starttls" ? 1 : 0;
+                selected(value) => { root.choose-incoming-security(self.current-index == 1 ? "starttls" : "tls"); }
             }
         }
         VerticalBox {
@@ -43,15 +70,11 @@ export component MailSecurityFields inherits VerticalBox {
                 height: 36px;
                 min-width: 0px;
                 enabled: root.enabled;
-                model: [@tr("Automatic"), "SSL/TLS", "STARTTLS"];
-                current-index: root.smtp-security == "tls" ? 1 : root.smtp-security == "starttls" ? 2 : 0;
-                selected(value) => { root.smtp-security = self.current-index == 1 ? "tls" : self.current-index == 2 ? "starttls" : "auto"; }
+                model: ["SSL/TLS", "STARTTLS"];
+                current-index: root.smtp-security == "starttls" ? 1 : 0;
+                selected(value) => { root.choose-smtp-security(self.current-index == 1 ? "starttls" : "tls"); }
             }
         }
-    }
-    Text {
-        text: @tr("Automatic: IMAP uses STARTTLS on 143, SSL/TLS otherwise. SMTP uses SSL/TLS on 465, STARTTLS otherwise.");
-        color: AppTheme.secondary; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height;
     }
     Button {
         height: 36px;

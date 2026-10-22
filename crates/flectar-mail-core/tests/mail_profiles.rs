@@ -54,13 +54,13 @@ async fn seeded_core() -> (tempfile::TempDir, Core) {
         .write(|conn| {
             conn.execute_batch(
                 "INSERT INTO accounts
-                    (id,email,provider,auth_kind,username,imap_host,imap_port,
-                     smtp_host,smtp_port,created_at)
+                    (id,email,provider,auth_kind,username,incoming_host,incoming_port,
+                     smtp_host,smtp_port,created_at,mail_protocol,settings_json)
                  VALUES
-                    (1,'alice@example.org','imap','password','alice',
-                     'imap.example.org',993,'smtp.example.org',465,0),
-                    (2,'bob@example.org','imap','password','bob',
-                     'imap.example.org',993,'smtp.example.org',465,0)",
+                    (1,'alice@example.org','generic','password','alice',
+                     'imap.example.org',993,'smtp.example.org',465,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}'),
+                    (2,'bob@example.org','generic','password','bob',
+                     'imap.example.org',993,'smtp.example.org',465,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             )?;
             Ok(())
         })

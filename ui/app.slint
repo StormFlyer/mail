@@ -459,6 +459,7 @@ export global I18n {
         if (key == "Email template is no longer available.") { return @tr("Email template is no longer available."); }
         if (key == "Email template inserted.") { return @tr("Email template inserted."); }
         if (key == "Email template inserted, but its usage could not be saved: {}") { return @tr("Email template inserted, but its usage could not be saved: {}", argument); }
+        if (key == "Choose a supported account type and connection security.") { return @tr("Choose a supported account type and connection security."); }
         if (key == "IMAP port must be between 1 and 65535.") { return @tr("IMAP port must be between 1 and 65535."); }
         if (key == "SMTP port must be between 1 and 65535.") { return @tr("SMTP port must be between 1 and 65535."); }
         if (key == "Local mail data is unavailable. Retry startup.") { return @tr("Local mail data is unavailable. Retry startup."); }
@@ -938,8 +939,8 @@ export component AppWindow inherits Window {
     in-out property <string> carddav_username: "";
     in-out property <string> carddav_password: "";
     in-out property <bool> carddav_manage_existing: false;
-    in-out property <string> imap_security: "auto";
-    in-out property <string> smtp_security: "auto";
+    in-out property <string> incoming_security: "tls";
+    in-out property <string> smtp_security: "tls";
     in-out property <string> trusted_certificate_pem;
     in property <string> oauth_authorization_url;
     in property <bool> oauth_browser_error;
@@ -961,8 +962,8 @@ export component AppWindow inherits Window {
     }
 
     callback import_mail_certificate();
-    in-out property <string> imap_host: "";
-    in-out property <string> imap_port: "993";
+    in-out property <string> incoming_host: "";
+    in-out property <string> incoming_port: "993";
     in-out property <string> smtp_host: "";
     in-out property <string> smtp_port: "465";
     in-out property <string> google_client_id: "";
@@ -1734,7 +1735,7 @@ export component AppWindow inherits Window {
             account-transfer-supported: root.document_apis_supported;
             sync_in_progress: root.sync_in_progress;
             account_setup_in_progress: root.account_setup_in_progress;
-            imap_form_open <=> root.account_form_open;
+            account_form_open <=> root.account_form_open;
             oauth_in_progress: root.oauth_in_progress;
             oauth_settings_saving: root.oauth_settings_saving;
             sync_status: root.sync_status;
@@ -1798,7 +1799,7 @@ export component AppWindow inherits Window {
             carddav_username <=> root.carddav_username;
             carddav_password <=> root.carddav_password;
             carddav_manage_existing <=> root.carddav_manage_existing;
-            imap_security <=> root.imap_security;
+            incoming_security <=> root.incoming_security;
             smtp_security <=> root.smtp_security;
             trusted_certificate_pem <=> root.trusted_certificate_pem;
             oauth_authorization_url: root.oauth_authorization_url;
@@ -1807,8 +1808,8 @@ export component AppWindow inherits Window {
             copy_oauth_link => { root.copy_oauth_link(); }
             submit_oauth_redirect(address) => { root.submit_oauth_redirect(address); }
             import_mail_certificate => { root.import_mail_certificate(); }
-            imap_host <=> root.imap_host;
-            imap_port <=> root.imap_port;
+            incoming_host <=> root.incoming_host;
+            incoming_port <=> root.incoming_port;
             smtp_host <=> root.smtp_host;
             smtp_port <=> root.smtp_port;
             google_client_id <=> root.google_client_id;
@@ -1877,8 +1878,8 @@ export component AppWindow inherits Window {
             sync_mail => { root.sync_mail(); }
             sync_account(account-id) => { root.sync_account(account-id); }
             delete_account(account-id) => { root.delete_account(account-id); }
-            add_password_account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port) => {
-                root.add_password_account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port);
+            add_password_account(protocol, email, username, password, jmap-url, incoming-host, incoming-port, smtp-host, smtp-port) => {
+                root.add_password_account(protocol, email, username, password, jmap-url, incoming-host, incoming-port, smtp-host, smtp-port);
             }
             suggest_account_settings(email) => { root.suggest_account_settings(email); }
             start_oauth(provider) => { root.start_oauth(provider); }
@@ -2152,7 +2153,7 @@ export component AppWindow inherits Window {
         account-password <=> root.account_password;
         account-protocol <=> root.account_protocol;
         jmap-url <=> root.jmap_url;
-        imap-security <=> root.imap_security;
+        incoming-security <=> root.incoming_security;
         smtp-security <=> root.smtp_security;
         trusted-certificate-pem <=> root.trusted_certificate_pem;
         account-username <=> root.account_username;
@@ -2162,12 +2163,12 @@ export component AppWindow inherits Window {
         copy-oauth-link => { root.copy_oauth_link(); }
         submit-oauth-redirect(address) => { root.submit_oauth_redirect(address); }
         import-mail-certificate => { root.import_mail_certificate(); }
-        imap-host <=> root.imap_host;
-        imap-port <=> root.imap_port;
+        incoming-host <=> root.incoming_host;
+        incoming-port <=> root.incoming_port;
         smtp-host <=> root.smtp_host;
         smtp-port <=> root.smtp_port;
-        add-password-account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port) => {
-            root.add_password_account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port);
+        add-password-account(protocol, email, username, password, jmap-url, incoming-host, incoming-port, smtp-host, smtp-port) => {
+            root.add_password_account(protocol, email, username, password, jmap-url, incoming-host, incoming-port, smtp-host, smtp-port);
         }
         suggest-account-settings(email) => { root.suggest_account_settings(email); }
         start-oauth(provider) => {

@@ -263,7 +263,7 @@ mod tests {
             email: format!("{id}@example.test"),
             display_name: Some("Work / Unified Folder:1".into()),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             sync_state: "idle".into(),

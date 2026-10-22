@@ -79,9 +79,9 @@ impl Core {
             .read(move |conn| repo::accounts::get_config(conn, account_id))
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
-        let identities = match (account.provider, account.mail_protocol) {
-            (Provider::Gmail, _) => self.gmail_sender_identities(&account).await?,
-            (_, MailProtocol::Jmap) => {
+        let identities = match account.mail_protocol {
+            MailProtocol::Gmail => self.gmail_sender_identities(&account).await?,
+            MailProtocol::Jmap => {
                 let secret = crate::accounts::credentials::load_async(
                     self.credentials.clone(),
                     account.id,
@@ -91,9 +91,7 @@ impl Core {
                 let connected = crate::jmap::client::connect(&account, &secret).await?;
                 jmap_sender_identities(&account, &connected).await?
             }
-            (Provider::Microsoft | Provider::Imap, MailProtocol::Imap) => {
-                vec![primary_identity(&account)]
-            }
+            MailProtocol::Imap => vec![primary_identity(&account)],
         };
         self.db
             .write(move |conn| {
@@ -383,17 +381,14 @@ pub(crate) fn manual_identity_fields(
 }
 
 pub fn manual_identity_policy(account: &AccountConfig) -> ManualIdentityPolicy {
-    manual_identity_policy_for(account.provider, account.mail_protocol)
+    manual_identity_policy_for(account.mail_protocol)
 }
 
-pub(crate) fn manual_identity_policy_for(
-    provider: Provider,
-    protocol: MailProtocol,
-) -> ManualIdentityPolicy {
-    match (provider, protocol) {
-        (Provider::Gmail, _) => ManualIdentityPolicy::Never,
-        (_, MailProtocol::Jmap) => ManualIdentityPolicy::WithinWildcard,
-        (Provider::Imap | Provider::Microsoft, MailProtocol::Imap) => ManualIdentityPolicy::Any,
+pub(crate) fn manual_identity_policy_for(protocol: MailProtocol) -> ManualIdentityPolicy {
+    match protocol {
+        MailProtocol::Gmail => ManualIdentityPolicy::Never,
+        MailProtocol::Jmap => ManualIdentityPolicy::WithinWildcard,
+        MailProtocol::Imap => ManualIdentityPolicy::Any,
     }
 }
 
@@ -691,7 +686,7 @@ fn valid_email(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AccountSettings, AuthKind, MailProtocol};
+    use crate::models::{AuthKind, MailProtocol};
     #[test]
     fn retained_optional_fields_reuse_storage_without_whitespace_capacity() {
         let value = "  Display name  ".to_owned();
@@ -713,15 +708,15 @@ mod tests {
             avatar_url: None,
             provider: Provider::Gmail,
             auth_kind: AuthKind::Oauth2,
-            mail_protocol: MailProtocol::Imap,
+            mail_protocol: MailProtocol::Gmail,
             username: "primary@example.com".into(),
             jmap_url: String::new(),
             jmap_account_id: None,
-            imap_host: String::new(),
-            imap_port: 993,
+            incoming_host: String::new(),
+            incoming_port: 993,
             smtp_host: String::new(),
             smtp_port: 465,
-            settings: AccountSettings::default(),
+            settings: crate::db::testutil::account_settings(),
         }
     }
 

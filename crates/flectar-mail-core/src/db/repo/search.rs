@@ -708,7 +708,7 @@ mod tests {
         testutil::seed_account(&c);
         // A Trash folder to move the message into.
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (5,1,'Trash','trash')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (5,1,'Trash','trash')",
             [],
         )
         .unwrap();
@@ -778,13 +778,13 @@ mod tests {
         // Account 2 with its own inbox folder and a thread also matching "sharedterm".
         c.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
-             VALUES (2,'me2@test.dev','imap','password','me2','h',993,'h',587,0)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+             VALUES (2,'me2@test.dev','generic','password','me2','h',993,'h',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (2,2,'INBOX','inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (2,2,'INBOX','inbox')",
             [],
         )
         .unwrap();

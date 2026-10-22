@@ -34,7 +34,6 @@ fn build_transport(
     let implicit = match cfg.settings.connection.smtp_security {
         ConnectionSecurity::Tls => true,
         ConnectionSecurity::Starttls => false,
-        ConnectionSecurity::Auto => cfg.smtp_port == 465,
     };
     let mut params = TlsParameters::builder(cfg.smtp_host.clone());
     if crate::imap::tls_insecure() && cfg.settings.connection.trusted_certificate_pem.is_empty() {
@@ -226,7 +225,6 @@ async fn imported_certificate_connection(
         let starttls = match cfg.settings.connection.smtp_security {
             ConnectionSecurity::Tls => false,
             ConnectionSecurity::Starttls => true,
-            ConnectionSecurity::Auto => cfg.smtp_port != 465,
         };
         if starttls {
             let greeting = read_smtp_response(&mut tcp, "greeting").await?;

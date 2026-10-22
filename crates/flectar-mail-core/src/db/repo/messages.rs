@@ -1398,7 +1398,7 @@ mod tests {
         // Generic IMAP accounts intentionally skip a special-use All folder;
         // rows left there by an older build must not hold progress open.
         c.execute_batch(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'All', 'all');
              INSERT INTO messages (account_id, subject, date, folder_id, uid)
              VALUES (1, 'Skipped duplicate', 3, 2, 9)",
@@ -1563,7 +1563,7 @@ mod tests {
         // Generic IMAP accounts must not download duplicate content from the
         // special-use All folder. Gmail keeps All Mail as its canonical copy.
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'All', 'all')",
             [],
         )
@@ -1575,8 +1575,13 @@ mod tests {
         )
         .unwrap();
         assert!(missing_bodies_at(&c, 2, 20, NOW, None).unwrap().is_empty());
-        c.execute("UPDATE accounts SET provider = 'gmail' WHERE id = 1", [])
-            .unwrap();
+        c.execute(
+            "UPDATE accounts SET provider = 'gmail', auth_kind = 'oauth2',
+                    mail_protocol = 'gmail'
+             WHERE id = 1",
+            [],
+        )
+        .unwrap();
         assert_eq!(missing_bodies_at(&c, 2, 20, NOW, None).unwrap().len(), 1);
     }
 

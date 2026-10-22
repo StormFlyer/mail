@@ -318,12 +318,14 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
     }
 }
 
+/// Connect with TLS from the first byte, trusting only the system roots.
 pub async fn connect(host: &str, port: u16, creds: ImapCredentials) -> Result<Session> {
+    use crate::models::{ConnectionSecurity, MailConnectionSettings};
     connect_with_settings(
         host,
         port,
         creds,
-        &crate::models::MailConnectionSettings::default(),
+        &MailConnectionSettings::new(ConnectionSecurity::Tls, ConnectionSecurity::Tls),
     )
     .await
 }
@@ -358,10 +360,9 @@ async fn connect_inner(
         .await
         .map_err(|e| CoreError::Imap(format!("connect {host}:{port}: {e}")))?;
     tcp.set_nodelay(true).ok();
-    let starttls = match settings.imap_security {
+    let starttls = match settings.incoming_security {
         ConnectionSecurity::Starttls => true,
         ConnectionSecurity::Tls => false,
-        ConnectionSecurity::Auto => port == 143,
     };
     let tcp = if starttls {
         let mut client = async_imap::Client::new(tcp);

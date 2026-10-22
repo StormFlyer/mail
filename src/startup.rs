@@ -35,8 +35,9 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
-// Version 4 keys account mailboxes by id instead of display name.
-const WARM_START_FORMAT_VERSION: u32 = 4;
+// Version 4 keys account mailboxes by id instead of display name. Version 5
+// stores the provider and mail protocol names of the current account model.
+const WARM_START_FORMAT_VERSION: u32 = 5;
 const MAX_WARM_START_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_WARM_START_ACCOUNTS: usize = 64;
 const MAX_WARM_START_MESSAGES: usize = 25;
@@ -1095,7 +1096,7 @@ mod warm_start_tests {
             email: "person@example.com".into(),
             display_name: Some("Person".into()),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             sync_state: "idle".into(),
@@ -1251,7 +1252,7 @@ mod warm_start_tests {
     #[test]
     fn benchmark_warm_cache_fixture_matches_the_current_format() {
         let snapshot: WarmStartSnapshot = serde_json::from_str(include_str!(
-            "../resources/benchmarks/warm-cache/warm-start-mailbox-v4.json"
+            "../resources/benchmarks/warm-cache/warm-start-mailbox-v5.json"
         ))
         .unwrap();
 

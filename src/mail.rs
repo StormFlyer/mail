@@ -9,10 +9,10 @@ use flectar_mail_core::{
         Account, AccountConfig, ActionKind, ActionParams, AddPasswordAccountArgs, Address,
         CalendarConnection, CalendarEvent, CardDavConnection, ConnectCalendarArgs,
         ConnectCardDavArgs, ContactRecordCursor, ContactRecordPage, CreateEventArgs, CustomTheme,
-        DraftAttachmentIn, FolderInfo, Label, MailHistory, MailProfile, MailboxBadgeCounts,
-        MessageDetail, PerformActionArgs, PortableAccountConfig, Provider, QueueSendArgs,
-        QueueSendResult, SaveDraftArgs, SearchCursor, Settings, Snippet, ThreadCursor,
-        ThreadSummary, View, normalized_workspace_list_pane_width,
+        DraftAttachmentIn, FolderInfo, Label, MailHistory, MailProfile, MailProtocol,
+        MailboxBadgeCounts, MessageDetail, PerformActionArgs, PortableAccountConfig, Provider,
+        QueueSendArgs, QueueSendResult, SaveDraftArgs, SearchCursor, Settings, Snippet,
+        ThreadCursor, ThreadSummary, View, normalized_workspace_list_pane_width,
     },
 };
 #[cfg(test)]
@@ -1537,7 +1537,7 @@ impl CoreMailSource {
                 .connect_microsoft_calendar(account_id, open_url)
                 .await
                 .map_err(|error| error.to_string())?,
-            Provider::Imap => return Err("use CalDAV for an IMAP account".into()),
+            Provider::Generic => return Err("use CalDAV for an IMAP account".into()),
         };
         Ok(())
     }
@@ -1868,7 +1868,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
             .into_iter()
             .filter(|folder| {
                 role_folder_ids.contains(&folder.id)
-                    || (account.provider != Provider::Gmail && !is_standard_folder(folder))
+                    || (account.mail_protocol != MailProtocol::Gmail && !is_standard_folder(folder))
             })
             .collect::<Vec<_>>();
         tree_folders.sort_by_key(|folder| (folder.display_name.to_lowercase(), folder.id));
@@ -1878,7 +1878,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
         // authoritative provider discovery populates those new ids.
         let ids_by_name = tree_folders
             .iter()
-            .map(|folder| (folder.imap_name.as_str(), folder.id))
+            .map(|folder| (folder.path.as_str(), folder.id))
             .collect::<std::collections::HashMap<_, _>>();
         let folder_ids = tree_folders
             .iter()
@@ -1892,7 +1892,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
                     .then_some(" / ")
                     .or(folder.delimiter.as_deref())
                     .filter(|delimiter| !delimiter.is_empty())
-                    .and_then(|delimiter| folder.imap_name.rsplit_once(delimiter))
+                    .and_then(|delimiter| folder.path.rsplit_once(delimiter))
                     .and_then(|(parent, _)| ids_by_name.get(parent).copied());
                 let parent_id = folder
                     .parent_id
@@ -2617,7 +2617,7 @@ mod tests {
             email: "person@example.com".into(),
             display_name: Some("Person".into()),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             sync_state: "idle".into(),
@@ -2628,9 +2628,14 @@ mod tests {
 
     #[test]
     fn single_account_scopes_preserve_every_standard_view() {
-        for provider in [Provider::Imap, Provider::Gmail, Provider::Microsoft] {
+        for (provider, mail_protocol) in [
+            (Provider::Generic, MailProtocol::Imap),
+            (Provider::Gmail, MailProtocol::Gmail),
+            (Provider::Microsoft, MailProtocol::Imap),
+        ] {
             let mut account = test_account();
             account.provider = provider;
+            account.mail_protocol = mail_protocol;
             account.display_name = Some("Work / Personal".into());
             let accounts = [account];
             let entries = mailbox_entries(&accounts, &[]);
@@ -2674,7 +2679,7 @@ mod tests {
             parent_id: None,
             display_name: "Receipts".into(),
             is_jmap: false,
-            imap_name: "Receipts".into(),
+            path: "Receipts".into(),
             delimiter: Some("/".into()),
             role: None,
             selectable: true,
@@ -2919,7 +2924,7 @@ mod tests {
                 parent_id: None,
                 display_name: "☺ Projects".into(),
                 is_jmap: false,
-                imap_name: "&Jjo- Projects".into(),
+                path: "&Jjo- Projects".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2933,7 +2938,7 @@ mod tests {
                 parent_id: Some(10),
                 display_name: "☺ Projects/2026".into(),
                 is_jmap: false,
-                imap_name: "&Jjo- Projects/2026".into(),
+                path: "&Jjo- Projects/2026".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2947,7 +2952,7 @@ mod tests {
                 parent_id: None,
                 display_name: "Archive copy/2026".into(),
                 is_jmap: false,
-                imap_name: "Archive copy/2026".into(),
+                path: "Archive copy/2026".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2961,7 +2966,7 @@ mod tests {
                 parent_id: None,
                 display_name: "Inbox".into(),
                 is_jmap: false,
-                imap_name: "Inbox".into(),
+                path: "Inbox".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2991,13 +2996,15 @@ mod tests {
     fn gmail_user_labels_are_not_duplicated_as_account_folders() {
         let mut account = test_account();
         account.provider = Provider::Gmail;
+        account.auth_kind = AuthKind::Oauth2;
+        account.mail_protocol = MailProtocol::Gmail;
         let folders = vec![FolderInfo {
             id: 10,
             account_id: account.id,
             parent_id: None,
             display_name: "Travel".into(),
             is_jmap: false,
-            imap_name: "Travel".into(),
+            path: "Travel".into(),
             delimiter: Some("/".into()),
             role: None,
             selectable: true,
@@ -3023,7 +3030,7 @@ mod tests {
             parent_id,
             display_name: name.into(),
             is_jmap: false,
-            imap_name: name.into(),
+            path: name.into(),
             delimiter: Some("/".into()),
             role: role.clone(),
             selectable,
@@ -3178,12 +3185,12 @@ mod search_pagination_adapter_tests {
             .db
             .write(|conn| {
                 conn.execute(
-                    "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
-                     VALUES (1,'fixture@example.test','imap','password','fixture','imap.example.test',993,'smtp.example.test',465,0)",
+                    "INSERT INTO accounts (id,email,provider,auth_kind,username,incoming_host,incoming_port,smtp_host,smtp_port,created_at,mail_protocol,settings_json)
+                     VALUES (1,'fixture@example.test','generic','password','fixture','imap.example.test',993,'smtp.example.test',465,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
                     [],
                 )?;
                 conn.execute(
-                    "INSERT INTO folders (id,account_id,imap_name,role) VALUES (1,1,'INBOX','inbox')",
+                    "INSERT INTO folders (id,account_id,path,role) VALUES (1,1,'INBOX','inbox')",
                     [],
                 )?;
                 for id in 1..=27_i64 {
@@ -3248,12 +3255,12 @@ mod search_pagination_adapter_tests {
             .write(|conn| {
                 for account in [1_i64, 2] {
                     conn.execute(
-                        "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
-                         VALUES (?1,'fixture'||?1||'@example.test','imap','password','fixture','imap.example.test',993,'smtp.example.test',465,0)",
+                        "INSERT INTO accounts (id,email,provider,auth_kind,username,incoming_host,incoming_port,smtp_host,smtp_port,created_at,mail_protocol,settings_json)
+                         VALUES (?1,'fixture'||?1||'@example.test','generic','password','fixture','imap.example.test',993,'smtp.example.test',465,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
                         [account],
                     )?;
                     conn.execute(
-                        "INSERT INTO folders (id,account_id,imap_name,role) VALUES (?1,?1,'INBOX','inbox')",
+                        "INSERT INTO folders (id,account_id,path,role) VALUES (?1,?1,'INBOX','inbox')",
                         [account],
                     )?;
                 }
@@ -3411,8 +3418,8 @@ mod account_removal_snapshot_tests {
     }
     async fn seed(source: &CoreMailSource) {
         source.core.db.write(|conn| {
-            conn.execute("INSERT INTO accounts (id, email, provider, auth_kind, username, imap_host, imap_port, smtp_host, smtp_port, created_at)
-                VALUES (1, 'fixture@example.test', 'imap', 'password', 'fixture', 'imap.example.test', 993, 'smtp.example.test', 465, 0)", [])?;
+            conn.execute("INSERT INTO accounts (id, email, provider, auth_kind, username, incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+                VALUES (1, 'fixture@example.test', 'generic', 'password', 'fixture', 'imap.example.test', 993, 'smtp.example.test', 465, 0, 'imap', '{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')", [])?;
             Ok(())
         }).await.unwrap();
     }

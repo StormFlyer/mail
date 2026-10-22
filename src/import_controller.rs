@@ -124,7 +124,7 @@ fn account_row(plan: &AccountPlan, selected: bool) -> ImportAccountRow {
         server: plan
             .draft
             .as_ref()
-            .map(|draft| draft.config.imap_host.as_str())
+            .map(|draft| draft.config.incoming_host.as_str())
             .unwrap_or_default()
             .into(),
         status: match plan.status {
