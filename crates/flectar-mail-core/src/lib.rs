@@ -27,6 +27,7 @@ pub mod mime;
 pub mod models;
 pub mod net;
 pub mod oauth;
+pub mod pop3;
 pub mod queue;
 pub mod route;
 pub mod scheduler;
