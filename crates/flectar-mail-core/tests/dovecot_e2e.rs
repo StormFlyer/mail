@@ -348,9 +348,13 @@ async fn full_sync_triage_and_search() {
     .await
     .unwrap();
 
-    // 9. Contacts were harvested for autocomplete.
+    // 9. Backfilled history never becomes compose suggestions; incoming
+    // senders are learned only from mail that arrives after opting in.
     let contacts = core.list_contacts("ali".into(), None, 5).await.unwrap();
-    assert!(contacts.iter().any(|c| c.email == "alice@example.com"));
+    assert!(!contacts.iter().any(|c| c.email == "alice@example.com"));
+    let mut settings = core.get_settings().await.unwrap();
+    settings.collect_incoming_contacts = true;
+    core.set_settings(settings).await.unwrap();
 
     // 9b. Attachment: parsed during body sync and extractable to disk.
     let eve = page
@@ -495,6 +499,8 @@ async fn full_sync_triage_and_search() {
         inbox.threads.iter().any(|t| t.subject == "Pushed via IDLE"),
         "IDLE-pushed message should appear in the inbox"
     );
+    let contacts = core.list_contacts("gra".into(), None, 5).await.unwrap();
+    assert!(contacts.iter().any(|c| c.email == "grace@example.com"));
 
     eprintln!(
         "e2e OK: sync, threading, splits, bodies, FTS, archive+undo, snooze, contacts, remote replay, IDLE push"
