@@ -34,7 +34,7 @@ pub(crate) async fn local_outgoing() -> (
     tokio::fs::write(&path, RAW).await.unwrap();
     let (config, action) = core.db.write(move |conn| {
         testutil::seed_account(conn);
-        conn.execute("UPDATE folders SET role='sent', imap_name='Sent', uidvalidity=7", [])?;
+        conn.execute("UPDATE folders SET role='sent', path='Sent', uidvalidity=7", [])?;
         let (thread, id) = testutil::seed_message(conn, "me@test.dev", "Status", false);
         conn.execute("UPDATE messages SET is_outgoing=1, uid=NULL, message_id='submission@test.dev', raw_path=?1 WHERE id=?2", rusqlite::params![path.to_str().unwrap(), id])?;
         repo::actions::enqueue(conn, 1, "append_sent", Some(id), Some(thread), &serde_json::json!({}), None)?;
@@ -294,7 +294,7 @@ async fn sent_receipt_does_not_undo_moves_or_use_stale_uidvalidity() {
         let action_copy = action.clone();
         core.db.write(move |c| {
             if moved {
-                c.execute("INSERT INTO folders (id, account_id, imap_name, role) VALUES (2,1,'Trash','trash')", [])?;
+                c.execute("INSERT INTO folders (id, account_id, path, role) VALUES (2,1,'Trash','trash')", [])?;
                 c.execute("UPDATE messages SET folder_id=2", [])?;
             } else { c.execute("UPDATE folders SET uidvalidity=8", [])?; }
             finish_sent_filing_in_db(c, &action_copy, 1, Some(7), Some(99))

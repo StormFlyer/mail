@@ -135,7 +135,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             "INSERT INTO accounts
              (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
              VALUES (2,'second@example.test','imap','password','second','localhost',993,'localhost',587,0);
-             INSERT INTO folders (id,account_id,imap_name,role)
+             INSERT INTO folders (id,account_id,path,role)
              VALUES (2,2,'INBOX','inbox');",
         )?;
         for (thread_id, account_id, folder_id, date) in [

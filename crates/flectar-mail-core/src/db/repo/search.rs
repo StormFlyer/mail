@@ -708,7 +708,7 @@ mod tests {
         testutil::seed_account(&c);
         // A Trash folder to move the message into.
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (5,1,'Trash','trash')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (5,1,'Trash','trash')",
             [],
         )
         .unwrap();
@@ -784,7 +784,7 @@ mod tests {
         )
         .unwrap();
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (2,2,'INBOX','inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (2,2,'INBOX','inbox')",
             [],
         )
         .unwrap();

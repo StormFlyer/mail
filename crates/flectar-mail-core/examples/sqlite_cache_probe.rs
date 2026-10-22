@@ -140,7 +140,7 @@ async fn add_rich_fixture(
                         *size as i64, format!("<fixture-{index}@local>"), path],
                 )?;
             }
-            tx.execute("INSERT INTO folders(id,account_id,imap_name,role) VALUES(2,1,'Drafts','drafts')", [])?;
+            tx.execute("INSERT INTO folders(id,account_id,path,role) VALUES(2,1,'Drafts','drafts')", [])?;
             let draft_thread_id: i64 = tx.query_row("SELECT MAX(id) + 1 FROM threads", [], |row| row.get(0))?;
             tx.execute(
                 "INSERT INTO threads(id,account_id,subject_norm,last_message_at,message_count,snippet)
@@ -311,7 +311,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tx.execute_batch(
             "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
              VALUES (1,'probe@example.test','imap','password','probe','localhost',993,'localhost',587,0);
-             INSERT INTO folders (id,account_id,imap_name,role) VALUES (1,1,'INBOX','inbox');
+             INSERT INTO folders (id,account_id,path,role) VALUES (1,1,'INBOX','inbox');
              INSERT INTO route_cache (sender_domain,route_key)
              VALUES ('__routing_backfill__','1');",
         )?;

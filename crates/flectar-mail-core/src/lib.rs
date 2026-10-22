@@ -2888,7 +2888,7 @@ impl Core {
             }
             let full_name = parent
                 .as_ref()
-                .map(|parent| format!("{}/{}", parent.imap_name, name))
+                .map(|parent| format!("{}/{}", parent.path, name))
                 .unwrap_or(name);
             sync::gmail::create_user_folder(&self.sync_ctx(), &config, &full_name).await?;
         } else if config.mail_protocol == MailProtocol::Jmap {
@@ -2919,7 +2919,7 @@ impl Core {
                 .to_owned();
             let display_path = parent
                 .as_ref()
-                .map(|parent| format!("{} / {name}", parent.imap_name))
+                .map(|parent| format!("{} / {name}", parent.path))
                 .unwrap_or(name);
             self.db
                 .write(move |conn| {
@@ -2960,7 +2960,7 @@ impl Core {
             let parent_local_id = parent.as_ref().map(|folder| folder.id);
             let remote_name = parent
                 .as_ref()
-                .map(|parent| format!("{}{delimiter}{encoded_leaf}", parent.imap_name))
+                .map(|parent| format!("{}{delimiter}{encoded_leaf}", parent.path))
                 .unwrap_or(encoded_leaf);
             let mut session = self.connect_folder_imap(&config).await?;
             imap::create_folder(&mut session, &remote_name).await?;
@@ -3010,7 +3010,7 @@ impl Core {
                 "folder names cannot contain the hierarchy separator {delimiter:?}"
             )));
         }
-        let old_name = folder.imap_name.clone();
+        let old_name = folder.path.clone();
         let parent_prefix = old_name.rsplit_once(&delimiter).map(|(parent, _)| parent);
         if config.provider == Provider::Gmail {
             let full_name = parent_prefix
@@ -3078,19 +3078,19 @@ impl Core {
         } else {
             folder.delimiter.clone().unwrap_or_else(|| "/".into())
         };
-        let prefix = format!("{}{delimiter}", folder.imap_name);
+        let prefix = format!("{}{delimiter}", folder.path);
         let mut tree = self
             .db
             .read(move |conn| {
                 Ok(repo::folders::list(conn, Some(account_id))?
                     .into_iter()
                     .filter(|candidate| {
-                        candidate.id == folder_id || candidate.imap_name.starts_with(&prefix)
+                        candidate.id == folder_id || candidate.path.starts_with(&prefix)
                     })
                     .collect::<Vec<_>>())
             })
             .await?;
-        tree.sort_by_key(|candidate| std::cmp::Reverse(candidate.imap_name.len()));
+        tree.sort_by_key(|candidate| std::cmp::Reverse(candidate.path.len()));
         if config.provider == Provider::Gmail {
             for candidate in &tree {
                 sync::gmail::delete_user_folder(&self.sync_ctx(), &config, candidate.id).await?;
@@ -3109,7 +3109,7 @@ impl Core {
                     .await
                     .map_err(jmap::client::map_error)?;
             }
-            let root_name = folder.imap_name;
+            let root_name = folder.path;
             self.db
                 .write(move |conn| {
                     repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
@@ -3118,10 +3118,10 @@ impl Core {
         } else {
             let mut session = self.connect_folder_imap(&config).await?;
             for candidate in &tree {
-                imap::delete_folder(&mut session, &candidate.imap_name).await?;
+                imap::delete_folder(&mut session, &candidate.path).await?;
             }
             imap::logout(session).await;
-            let root_name = folder.imap_name;
+            let root_name = folder.path;
             self.db
                 .write(move |conn| {
                     repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
@@ -8142,7 +8142,7 @@ mod move_action_validation_tests {
             .write(|conn| {
                 db::testutil::seed_account(conn);
                 conn.execute(
-                    "INSERT INTO folders (id, account_id, imap_name, role)
+                    "INSERT INTO folders (id, account_id, path, role)
                      VALUES (2, 1, 'Trash', 'trash')",
                     [],
                 )?;
@@ -8201,7 +8201,7 @@ mod move_action_validation_tests {
             .write(move |conn| {
                 db::testutil::seed_account(conn);
                 conn.execute(
-                    "INSERT INTO folders (id, account_id, imap_name, role)
+                    "INSERT INTO folders (id, account_id, path, role)
                      VALUES (2, 1, 'Trash', 'trash')",
                     [],
                 )?;
@@ -8277,7 +8277,7 @@ mod move_action_validation_tests {
         let mut conn = db::testutil::conn();
         db::testutil::seed_account(&conn);
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
                       VALUES (2, 1, 'Trash', 'trash')",
             [],
         )
@@ -8319,7 +8319,7 @@ mod move_action_validation_tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 2, 'Archive', 'archive')",
             [],
         )

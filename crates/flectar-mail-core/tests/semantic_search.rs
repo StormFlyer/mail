@@ -19,7 +19,7 @@ fn seed() -> Connection {
     conn.execute_batch(
         "INSERT INTO accounts (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
            VALUES (1,'me@example.com','imap','password','me','h',993,'h',465,0);
-         INSERT INTO folders (id,account_id,imap_name,role) VALUES (1,1,'INBOX','inbox');
+         INSERT INTO folders (id,account_id,path,role) VALUES (1,1,'INBOX','inbox');
          INSERT INTO threads (id,account_id,subject_norm,last_message_at) VALUES (10,1,'apple pie recipe',100),(20,1,'quarterly earnings',200);
          INSERT INTO messages (id,account_id,thread_id,folder_id,uid,subject,from_name,from_addr,date,is_read,body_state,snippet)
            VALUES (100,1,10,1,1,'apple pie recipe','Chef','chef@example.com',100,1,'cached','apple pie'),

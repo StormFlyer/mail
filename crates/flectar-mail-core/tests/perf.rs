@@ -28,7 +28,7 @@ async fn hundred_k_messages_stay_instant() {
             [],
         )?;
         tx.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (1, 1, 'INBOX', 'inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (1, 1, 'INBOX', 'inbox')",
             [],
         )?;
 

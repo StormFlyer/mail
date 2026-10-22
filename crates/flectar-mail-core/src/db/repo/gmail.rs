@@ -213,7 +213,7 @@ mod tests {
         testutil::seed_account(&conn);
         let (_, message_id) = testutil::seed_message(&conn, "a@test.dev", "one", false);
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'Archive', 'archive')",
             [],
         )

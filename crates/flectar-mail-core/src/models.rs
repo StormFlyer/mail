@@ -1126,11 +1126,11 @@ pub struct FolderInfo {
     /// Stable local id of the parent mailbox. `None` means a top-level mailbox
     /// or an older cached row whose hierarchy has not been rediscovered yet.
     pub parent_id: Option<i64>,
-    /// Unicode name suitable for display. `imap_name` remains the exact remote
+    /// Unicode name suitable for display. `path` remains the exact remote
     /// identifier used in SELECT and other protocol commands.
     pub display_name: String,
     pub is_jmap: bool,
-    pub imap_name: String,
+    pub path: String,
     /// IMAP hierarchy delimiter (e.g. "/" or "."), for nesting user folders.
     pub delimiter: Option<String>,
     pub role: Option<String>,

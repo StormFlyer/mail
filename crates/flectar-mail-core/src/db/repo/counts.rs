@@ -318,7 +318,7 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (1,1,'INBOX','inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (1,1,'INBOX','inbox')",
             [],
         )
         .unwrap();
@@ -397,7 +397,7 @@ mod tests {
         conn.execute("UPDATE threads SET starred_count = 1 WHERE id = 1", [])
             .unwrap();
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2,1,'Drafts','drafts')",
             [],
         )
@@ -454,7 +454,7 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES
+            "INSERT INTO folders (id, account_id, path, role) VALUES
              (2,2,'All Mail','all'), (3,2,'INBOX','inbox'), (4,2,'Drafts','drafts')",
             [],
         )

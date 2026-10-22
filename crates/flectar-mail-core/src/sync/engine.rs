@@ -654,10 +654,10 @@ async fn select_folder_for_remote_read(
     session: &mut Session,
     folder: &Folder,
 ) -> Result<()> {
-    let selected = imap::select(session, &folder.imap_name).await?;
+    let selected = imap::select(session, &folder.path).await?;
     if selected.uid_validity != folder.uidvalidity {
         let folder_id = folder.id;
-        let folder_name = folder.imap_name.clone();
+        let folder_name = folder.path.clone();
         let expected_uidvalidity = folder.uidvalidity;
         let remote_uidvalidity = selected.uid_validity;
         let remote_uidnext = selected.uid_next;
@@ -666,7 +666,7 @@ async fn select_folder_for_remote_read(
                 let tx = conn.transaction()?;
                 let current = repo::folders::get(&tx, folder_id)?;
                 if current.as_ref().is_some_and(|current| {
-                    current.imap_name == folder_name && current.uidvalidity == expected_uidvalidity
+                    current.path == folder_name && current.uidvalidity == expected_uidvalidity
                 }) {
                     repo::folders::reset_uid_mappings(&tx, folder_id)?;
                     tx.execute(
@@ -693,13 +693,13 @@ async fn select_folder_for_remote_read(
     }
 
     let folder_id = folder.id;
-    let folder_name = folder.imap_name.clone();
+    let folder_name = folder.path.clone();
     let uidvalidity = folder.uidvalidity;
     let still_current = ctx
         .db
         .read(move |conn| {
             Ok(repo::folders::get(conn, folder_id)?.is_some_and(|current| {
-                current.imap_name == folder_name && current.uidvalidity == uidvalidity
+                current.path == folder_name && current.uidvalidity == uidvalidity
             }))
         })
         .await?;
@@ -974,7 +974,7 @@ async fn run_actor(
                         supports_idle = None;
                         continue;
                     };
-                    match imap::select(&mut s, &inbox.imap_name).await {
+                    match imap::select(&mut s, &inbox.path).await {
                         Ok(_) => {
                             // Cap IDLE at the next full cycle so the selected
                             // correctness backstop is preserved (a message that
@@ -1369,7 +1369,7 @@ async fn run_cycle(
         if let Err(e) =
             sync_folder(ctx, config, session, folder, heavy, hist_tx, inbox_baseline).await
         {
-            tracing::warn!(folder = %folder.imap_name, "folder sync failed: {e}");
+            tracing::warn!(folder = %folder.path, "folder sync failed: {e}");
             return Err(e); // connection likely broken; reconnect
         }
     }
@@ -1482,14 +1482,14 @@ async fn sync_folder(
     inbox_baseline: &mut Option<InboxBaseline>,
 ) -> Result<bool> {
     let account_id = config.id;
-    let selected = imap::select(session, &folder.imap_name).await?;
+    let selected = imap::select(session, &folder.path).await?;
     let is_inbox = folder.role.as_deref() == Some(roles::INBOX);
 
     // UIDVALIDITY handling.
     if let (Some(stored), Some(remote)) = (folder.uidvalidity, selected.uid_validity)
         && stored != remote
     {
-        tracing::warn!(folder = %folder.imap_name, "UIDVALIDITY changed; resetting uid map");
+        tracing::warn!(folder = %folder.path, "UIDVALIDITY changed; resetting uid map");
         let fid = folder.id;
         ctx.db
             .write(move |conn| repo::folders::reset_uid_mappings(conn, fid))
@@ -1579,7 +1579,7 @@ async fn sync_folder(
             if !new.is_empty() {
                 tracing::info!(
                     account_id,
-                    folder = %folder.imap_name,
+                    folder = %folder.path,
                     count = new.len(),
                     since_uid = last_seen,
                     "receive: new mail on server",
@@ -1784,7 +1784,7 @@ async fn run_history_backfill(
                     break 'work;
                 };
                 let step = async {
-                    imap::select(s, &folder.imap_name).await?;
+                    imap::select(s, &folder.path).await?;
                     // Re-read: the sync actor may have advanced this folder.
                     let fid = folder.id;
                     let fresh = ctx
@@ -1819,7 +1819,7 @@ async fn run_history_backfill(
                     Err(e) => {
                         tracing::warn!(
                             account_id,
-                            folder = %folder.imap_name,
+                            folder = %folder.path,
                             error = %e,
                             "history backfill: step failed; dropping session",
                         );
@@ -1893,7 +1893,7 @@ async fn retry_one_header_failure(
     let s = session
         .as_mut()
         .ok_or_else(|| CoreError::Other("header retry lost its IMAP session".into()))?;
-    imap::select(s, &folder.imap_name).await?;
+    imap::select(s, &folder.path).await?;
     let headers = imap::fetch_headers(s, &uid.to_string()).await?;
     if headers.is_empty() {
         let error = "server no longer returns this UID";
@@ -1986,7 +1986,7 @@ async fn bounded_history_backfill(
     let already_present = total.saturating_sub(missing.len() as u64);
     ctx.bus.emit(CoreEvent::SyncProgress(SyncProgress {
         account_id,
-        folder: folder.imap_name.clone(),
+        folder: folder.path.clone(),
         phase: "headers".into(),
         done: already_present.saturating_add(fetched).min(total),
         total,
@@ -2028,7 +2028,7 @@ async fn extend_history(
         .await?;
     ctx.bus.emit(CoreEvent::SyncProgress(SyncProgress {
         account_id: config.id,
-        folder: folder.imap_name.clone(),
+        folder: folder.path.clone(),
         phase: "history".into(),
         done: 0,
         total: 0,
@@ -3051,7 +3051,7 @@ async fn drain_missing_bodies(
             for chunk in missing.chunks(BODY_FETCH_CHUNK) {
                 chunks.push_back(BodyChunk {
                     folder_id: folder.id,
-                    folder_name: folder.imap_name.clone(),
+                    folder_name: folder.path.clone(),
                     uid_validity: folder.uidvalidity,
                     items: chunk.to_vec(),
                 });
@@ -3299,7 +3299,7 @@ async fn fetch_body_chunk(
             let uid_validity = chunk.uid_validity;
             move |conn| {
                 Ok(repo::folders::get(conn, folder_id)?.is_some_and(|folder| {
-                    folder.imap_name == folder_name && folder.uidvalidity == uid_validity
+                    folder.path == folder_name && folder.uidvalidity == uid_validity
                 }))
             }
         })
@@ -4171,7 +4171,7 @@ mod sent_identity_tests {
         let (_temp, core, config, action) = local_outgoing().await;
         let id = action.message_id.unwrap();
         core.db.write(move |c| {
-            c.execute("INSERT INTO folders(id,account_id,imap_name,role) VALUES (2,1,'Drafts','drafts')", [])?;
+            c.execute("INSERT INTO folders(id,account_id,path,role) VALUES (2,1,'Drafts','drafts')", [])?;
             c.execute("UPDATE messages SET is_outgoing=0, is_draft=1, folder_id=2, uid=12 WHERE id=?1", [id])?;
             c.execute("UPDATE pending_actions SET kind='send', state='inflight'", [])?;
             Ok(())

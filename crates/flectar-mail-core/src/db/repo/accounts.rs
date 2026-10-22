@@ -714,7 +714,7 @@ mod tests {
             "JMAP creation controls stay hidden until the session advertises permission"
         );
         conn.execute(
-            "INSERT INTO folders(account_id,imap_name,jmap_id) VALUES(?1,'Inbox','mailbox-a')",
+            "INSERT INTO folders(account_id,path,jmap_id) VALUES(?1,'Inbox','mailbox-a')",
             params![id],
         )
         .unwrap();

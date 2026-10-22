@@ -23,7 +23,7 @@ async fn empty_trash_queues_each_provider_mailbox_even_without_cached_messages()
              imap_host,imap_port,smtp_host,smtp_port,created_at) VALUES
              (1,'a@example.com','imap','password','a','127.0.0.1',1,'127.0.0.1',1,0),
              (2,'b@example.com','imap','password','b','127.0.0.1',1,'127.0.0.1',1,0);
-             INSERT INTO folders (id,account_id,imap_name,role) VALUES
+             INSERT INTO folders (id,account_id,path,role) VALUES
              (11,1,'Trash','trash'),(22,2,'Trash','trash');",
             )?;
             Ok(())

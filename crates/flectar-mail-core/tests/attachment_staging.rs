@@ -65,7 +65,7 @@ async fn save_draft_stages_external_file_into_app_dir() {
                 "INSERT INTO accounts
                    (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
                    VALUES (1,'me@example.com','imap','password','me','h',993,'h',465,0);
-                 INSERT INTO folders (id,account_id,imap_name,role)
+                 INSERT INTO folders (id,account_id,path,role)
                    VALUES (1,1,'Drafts','drafts');",
             )?;
             Ok(())
@@ -117,7 +117,7 @@ async fn save_draft_neutralizes_traversal_filename_and_is_idempotent() {
                 "INSERT INTO accounts
                    (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
                    VALUES (1,'me@example.com','imap','password','me','h',993,'h',465,0);
-                 INSERT INTO folders (id,account_id,imap_name,role)
+                 INSERT INTO folders (id,account_id,path,role)
                    VALUES (1,1,'Drafts','drafts');",
             )?;
             Ok(())

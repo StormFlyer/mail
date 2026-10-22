@@ -16,6 +16,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/011_pending_body_page.sql"),
     include_str!("migrations/012_sender_identity_sources.sql"),
     include_str!("migrations/013_contact_entries.sql"),
+    include_str!("migrations/014_folder_paths.sql"),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -96,9 +97,15 @@ mod tests {
             [],
         )
         .unwrap();
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        let folder_path = if version >= 14 { "path" } else { "imap_name" };
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
-             VALUES (1, 1, 'INBOX', 'inbox'), (2, 1, 'STARRED', NULL)",
+            &format!(
+                "INSERT INTO folders (id, account_id, {folder_path}, role)
+                 VALUES (1, 1, 'INBOX', 'inbox'), (2, 1, 'STARRED', NULL)"
+            ),
             [],
         )
         .unwrap();

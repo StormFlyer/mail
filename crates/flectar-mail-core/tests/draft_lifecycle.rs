@@ -14,7 +14,7 @@ async fn setup() -> (tempfile::TempDir, Core) {
                 "INSERT INTO accounts
                    (id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at)
                  VALUES (1,'me@example.com','imap','password','me','127.0.0.1',1,'127.0.0.1',1,0);
-                 INSERT INTO folders (id,account_id,imap_name,role) VALUES
+                 INSERT INTO folders (id,account_id,path,role) VALUES
                    (1,1,'Drafts','drafts'),
                    (2,1,'Archive','archive'),
                    (3,1,'Trash','trash');",

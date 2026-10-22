@@ -576,7 +576,7 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (2,2,'INBOX','inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (2,2,'INBOX','inbox')",
             [],
         )
         .unwrap();

@@ -1878,7 +1878,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
         // authoritative provider discovery populates those new ids.
         let ids_by_name = tree_folders
             .iter()
-            .map(|folder| (folder.imap_name.as_str(), folder.id))
+            .map(|folder| (folder.path.as_str(), folder.id))
             .collect::<std::collections::HashMap<_, _>>();
         let folder_ids = tree_folders
             .iter()
@@ -1892,7 +1892,7 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
                     .then_some(" / ")
                     .or(folder.delimiter.as_deref())
                     .filter(|delimiter| !delimiter.is_empty())
-                    .and_then(|delimiter| folder.imap_name.rsplit_once(delimiter))
+                    .and_then(|delimiter| folder.path.rsplit_once(delimiter))
                     .and_then(|(parent, _)| ids_by_name.get(parent).copied());
                 let parent_id = folder
                     .parent_id
@@ -2674,7 +2674,7 @@ mod tests {
             parent_id: None,
             display_name: "Receipts".into(),
             is_jmap: false,
-            imap_name: "Receipts".into(),
+            path: "Receipts".into(),
             delimiter: Some("/".into()),
             role: None,
             selectable: true,
@@ -2919,7 +2919,7 @@ mod tests {
                 parent_id: None,
                 display_name: "☺ Projects".into(),
                 is_jmap: false,
-                imap_name: "&Jjo- Projects".into(),
+                path: "&Jjo- Projects".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2933,7 +2933,7 @@ mod tests {
                 parent_id: Some(10),
                 display_name: "☺ Projects/2026".into(),
                 is_jmap: false,
-                imap_name: "&Jjo- Projects/2026".into(),
+                path: "&Jjo- Projects/2026".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2947,7 +2947,7 @@ mod tests {
                 parent_id: None,
                 display_name: "Archive copy/2026".into(),
                 is_jmap: false,
-                imap_name: "Archive copy/2026".into(),
+                path: "Archive copy/2026".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2961,7 +2961,7 @@ mod tests {
                 parent_id: None,
                 display_name: "Inbox".into(),
                 is_jmap: false,
-                imap_name: "Inbox".into(),
+                path: "Inbox".into(),
                 delimiter: Some("/".into()),
                 role: None,
                 selectable: true,
@@ -2997,7 +2997,7 @@ mod tests {
             parent_id: None,
             display_name: "Travel".into(),
             is_jmap: false,
-            imap_name: "Travel".into(),
+            path: "Travel".into(),
             delimiter: Some("/".into()),
             role: None,
             selectable: true,
@@ -3023,7 +3023,7 @@ mod tests {
             parent_id,
             display_name: name.into(),
             is_jmap: false,
-            imap_name: name.into(),
+            path: name.into(),
             delimiter: Some("/".into()),
             role: role.clone(),
             selectable,
@@ -3183,7 +3183,7 @@ mod search_pagination_adapter_tests {
                     [],
                 )?;
                 conn.execute(
-                    "INSERT INTO folders (id,account_id,imap_name,role) VALUES (1,1,'INBOX','inbox')",
+                    "INSERT INTO folders (id,account_id,path,role) VALUES (1,1,'INBOX','inbox')",
                     [],
                 )?;
                 for id in 1..=27_i64 {
@@ -3253,7 +3253,7 @@ mod search_pagination_adapter_tests {
                         [account],
                     )?;
                     conn.execute(
-                        "INSERT INTO folders (id,account_id,imap_name,role) VALUES (?1,?1,'INBOX','inbox')",
+                        "INSERT INTO folders (id,account_id,path,role) VALUES (?1,?1,'INBOX','inbox')",
                         [account],
                     )?;
                 }
