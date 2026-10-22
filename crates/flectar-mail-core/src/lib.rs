@@ -2007,7 +2007,8 @@ impl Core {
         self.db
             .write(|conn| {
                 conn.execute_batch(
-                    "DELETE FROM contacts;
+                    "DELETE FROM contact_entries;
+                     DELETE FROM contacts;
                      DELETE FROM snippets;
                      DELETE FROM split_rules;
                      DELETE FROM route_cache;
@@ -4309,28 +4310,46 @@ impl Core {
         Ok(removed)
     }
 
+    pub async fn contact_photo(&self, hash: String) -> Result<Option<Vec<u8>>> {
+        self.db
+            .read(move |conn| repo::contact_entries::photo_bytes(conn, &hash))
+            .await
+    }
+
+    pub async fn resolve_contact_conflict(
+        &self,
+        id: i64,
+        revision: i64,
+        keep_local: bool,
+    ) -> Result<()> {
+        self.db
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                repo::carddav::resolve_conflict(&tx, id, revision, keep_local)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
+        self.bus.emit(CoreEvent::ContactsUpdated { account_id: 0 });
+        self.nudge_card(None).await;
+        Ok(())
+    }
+
+    /// Save a contact. A new contact, or a promoted suggestion, created for a
+    /// single account is also uploaded to that account's address book.
     pub async fn save_contact(&self, record: ContactRecord) -> Result<ContactRecord> {
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let account_ids = record.account_ids.clone();
-        let was_new = record.id <= 0;
         let saved = self
             .db
             .write(move |conn| {
                 let tx = conn.transaction()?;
-                let was_saved = if was_new {
-                    false
-                } else {
-                    repo::contacts::get_record(&tx, record.id)?
-                        .is_some_and(|existing| existing.is_managed)
-                };
-                let saved = repo::contacts::save_record(&tx, &record, now_ms)?;
-                if was_new || !was_saved {
-                    if account_ids.len() == 1 {
-                        repo::carddav::attach_new_contact(&tx, account_ids[0], saved.id)?;
-                    }
-                } else {
-                    repo::carddav::mark_saved_contact_dirty(&tx, saved.id)?;
+                let id = repo::contact_entries::save(&tx, &record)?;
+                if let [account_id] = record.account_ids[..]
+                    && record.id <= 0
+                {
+                    repo::carddav::attach_new_contact(&tx, account_id, id)?;
                 }
+                let saved = repo::contacts::get_record(&tx, id)?
+                    .ok_or_else(|| CoreError::Other("Contact no longer exists".into()))?;
                 tx.commit()?;
                 Ok(saved)
             })
@@ -4339,12 +4358,12 @@ impl Core {
         Ok(saved)
     }
 
-    pub async fn delete_contact(&self, id: i64) -> Result<()> {
+    /// Delete a saved contact as of `revision`, or forget a suggestion.
+    pub async fn delete_contact(&self, id: i64, revision: i64) -> Result<()> {
         self.db
             .write(move |conn| {
                 let tx = conn.transaction()?;
-                repo::carddav::mark_deleted_contact(&tx, id)?;
-                repo::contacts::delete_record(&tx, id)?;
+                repo::contact_entries::delete(&tx, id, revision)?;
                 tx.commit()?;
                 Ok(())
             })
@@ -9037,7 +9056,7 @@ mod thread_read_tests {
                 )?;
                 repo::threads::recompute(conn, thread_id)?;
                 conn.execute(
-                    "INSERT INTO contacts (email, name, is_managed)
+                    "INSERT INTO contacts (email, name, send_count)
                      VALUES ('person@example.com', 'Person', 1)",
                     [],
                 )?;

@@ -15,10 +15,11 @@
 use flectar_mail::{
     AccountImport, AccountRow, AppTheme, AppWindow, CalendarAgendaRow, CalendarDay,
     CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ContactAccountRow, ContactRow,
-    ContactSidebarRow, ContactSidebarRowKind, EmailRow, ImportAccountRow, ImportFailureRow,
-    ImportFindingRow, ImportProfileRow, LocalizedMessage, MailAttachment, MailAttachments,
-    MailLabelRow, MailListEntry, MailProfileRow, MailboxRow, MotionSettings, ProfileMemberRow,
-    SidebarRow, SidebarRowKind, StorageUsageRow, ThreadMessageRow,
+    ContactSidebarRow, ContactSidebarRowKind, ContactSyncState, ContactValueRow, EmailRow,
+    ImportAccountRow, ImportFailureRow, ImportFindingRow, ImportProfileRow, LocalizedMessage,
+    MailAttachment, MailAttachments, MailLabelRow, MailListEntry, MailProfileRow, MailboxRow,
+    MotionSettings, ProfileMemberRow, SidebarRow, SidebarRowKind, StorageUsageRow,
+    ThreadMessageRow,
 };
 use i_slint_core::accessibility::{
     AccessibilityAction, AccessibleStringProperty, SupportedAccessibilityAction,
@@ -588,8 +589,29 @@ fn apply_fixture(app: &AppWindow) {
     app.set_contact_has_selection(true);
     app.set_contact_id(1);
     app.set_contact_name("Jamie Rivera".into());
-    app.set_contact_email("jamie.rivera@example.com".into());
-    app.set_contact_phone("+1 555 0100".into());
+    app.set_contact_emails(model(vec![
+        ContactValueRow {
+            value: "jamie.rivera@example.com".into(),
+            label: "WORK".into(),
+            preference: 1,
+            ..Default::default()
+        },
+        ContactValueRow {
+            value: "jamie@example.net".into(),
+            label: "HOME".into(),
+            preference: 100,
+            ..Default::default()
+        },
+    ]));
+    app.set_contact_phones(model(vec![ContactValueRow {
+        value: "+1 555 0100".into(),
+        label: "CELL".into(),
+        preference: 100,
+        ..Default::default()
+    }]));
+    app.set_contact_source("Personal · jamie.rivera@example.com".into());
+    app.set_contact_sync(ContactSyncState::Pending);
+    app.on_usable_contact_email(|email| flectar_mail_core::carddav::vcard::usable_email(&email));
     app.set_contact_company("Northwind".into());
     app.set_contact_job_title("Product lead".into());
     app.set_contact_notes("Prefers morning meetings.".into());
@@ -600,6 +622,11 @@ fn apply_fixture(app: &AppWindow) {
 
 // Each state starts from the populated mail window.
 fn reset(app: &AppWindow) {
+    // The phone editor stays open when switching workspaces. Return to the
+    // contact list so each scenario starts from the same navigation state.
+    if app.get_active_view() == "contacts" {
+        app.invoke_system_back_requested();
+    }
     if app.get_connected_accounts().row_count() == 0 {
         app.set_connected_accounts(model(accounts()));
     }
@@ -610,6 +637,8 @@ fn reset(app: &AppWindow) {
     app.set_mail_sidebar_collapsed(false);
     app.set_active_mail_profile(MailProfileRow::default());
     app.set_settings_open(false);
+    app.set_contact_source("Personal · jamie.rivera@example.com".into());
+    app.set_contact_sync(ContactSyncState::Pending);
     app.set_settings_tab("General".into());
     app.set_compose_open(false);
     app.set_calendar_editor_open(false);
@@ -914,6 +943,31 @@ fn states() -> Vec<State> {
             })
         },
         state("contacts", |app| app.set_active_view("contacts".into())),
+        state("contact editor", |app| {
+            app.set_active_view("contacts".into());
+            // The host callback is unset, so this opens the phone editor
+            // while retaining the populated fixture for layout checks.
+            press(app, "New contact");
+        }),
+        state("contact conflict", |app| {
+            app.set_active_view("contacts".into());
+            app.set_contact_sync(ContactSyncState::Conflict);
+            press(app, "New contact");
+        }),
+        state("contact kept after removal", |app| {
+            app.set_active_view("contacts".into());
+            app.set_contact_source("".into());
+            app.set_contact_sync(ContactSyncState::Detached);
+            press(app, "New contact");
+        }),
+        state("contact sync failure", |app| {
+            app.set_active_view("contacts".into());
+            app.set_contact_sync(ContactSyncState::Failed);
+            app.set_contact_sync_detail(
+                "Server returned no ETag after saving; waiting to reconcile".into(),
+            );
+            press(app, "New contact");
+        }),
         state("files", |app| app.set_active_view("files".into())),
         state("compose", |app| {
             app.set_compose_to("jamie.rivera@example.com".into());

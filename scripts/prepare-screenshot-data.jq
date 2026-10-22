@@ -47,7 +47,14 @@ def favicon_path(address):
 | if $email == null then . else . + $email end
 | .selected_favicon = favicon_path(.selected_address)
 | .selected_has_favicon = true
-| .contacts |= map(.suggested = (.suggested // false))
+| .contacts |= map(.suggested = (.suggested // false)
+    | .["has-avatar"] = false
+    | .source = "Personal")
+| .["contact-source"] = "Personal"
+| .["contact-sync"] = "synced"
+| .["contact-emails"] = [{key: "", value: .contact_email, label: "WORK", preference: 1}]
+| .["contact-phones"] = [{key: "", value: .contact_phone, label: "CELL", preference: 100}]
+| del(.contact_email, .contact_phone)
 | .connected_accounts |= map(
     .mail_protocol = (.mail_protocol // "")
     | .profile_id = (if .id == 2 then "support" else "work" end)

@@ -708,6 +708,7 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
     }
     // Releasing a product must retain the source record of an edited contact.
     let contact = ContactRecord {
+        details: Default::default(),
         id: 1,
         name: "Original name".into(),
         email: "contact@example.com".into(),
