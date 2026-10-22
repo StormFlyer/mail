@@ -2570,6 +2570,7 @@ fn classify_body_chunk_error(error: CoreError) -> BodyChunkError {
         error @ (CoreError::Imap(_)
         | CoreError::ImapParse(_)
         | CoreError::Network(_)
+        | CoreError::ResponseTooLarge { .. }
         | CoreError::Offline) => BodyChunkError::Reconnect(error),
         error => BodyChunkError::Fatal(error),
     }

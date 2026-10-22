@@ -17,7 +17,7 @@ export { AppTheme, MotionSettings, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
 import { LoadingSkeletonBlock } from "components/loading-skeleton.slint";
-import { AccountRow, CalendarAgendaRow, CalendarAgendaFilterRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, MailListEntry, MailProfileRow, ProfileMemberRow, SidebarRow, MailLabelRow, StorageUsageRow, ThreadMessageRow } from "models.slint";
+import { AccountRow, CalendarAgendaRow, CalendarAgendaFilterRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, ContactSyncState, ContactValueRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, MailListEntry, MailProfileRow, ProfileMemberRow, SidebarRow, MailLabelRow, StorageUsageRow, ThreadMessageRow } from "models.slint";
 export { EmailReader, ReaderCaret, ReaderImage, ReaderItem, MailDragApi } from "models.slint";
 export { MailListNavigation, MailNavigationTarget } from "models.slint";
 export { ThreadMessageRow, StorageUsageRow } from "models.slint";
@@ -320,8 +320,7 @@ export global I18n {
     }
 
     ui-message-contacts(key, argument, second-argument, third-argument) => {
-        if (key == "Add an email address, then save the contact.") { return @tr("Add an email address, then save the contact."); }
-        if (key == "Enter a valid email address before saving.") { return @tr("Enter a valid email address before saving."); }
+        if (key == "Enter a name, email address, or phone number, then save.") { return @tr("Enter a name, email address, or phone number, then save."); }
         if (key == "Could not save: contact storage is unavailable.") { return @tr("Could not save: contact storage is unavailable."); }
         if (key == "Could not save contact: {}") { return @tr("Could not save contact: {}", argument); }
         if (key == "Contact saved.") { return @tr("Contact saved."); }
@@ -639,7 +638,13 @@ export component AppWindow inherits Window {
     callback select-contact-scope(string);
     callback toggle-contact-section(string, bool);
     callback new-contact();
-    callback save-contact(int, string, string, string, string, string, string, string, string, string, string, bool);
+    callback resolve-contact-conflict(bool);
+    pure callback usable-contact-email(string) -> bool;
+    usable-contact-email(email) => { false }
+    callback add-contact-value(string);
+    callback prefer-contact-value(string,int);
+    callback remove-contact-value(string,int);
+    callback save-contact(int, string, string, string, string, string, string, string, string, bool);
     callback delete-contact(int);
     callback load-contacts();
     callback load-more-contacts();
@@ -709,6 +714,14 @@ export component AppWindow inherits Window {
     in property <string> calendar_timezone: "";
     in property <[CalendarSourceRow]> calendar_sources: [];
     in property <[ContactRow]> contacts: [];
+    in-out property <[ContactValueRow]> contact-emails;
+    in-out property <[ContactValueRow]> contact-phones;
+    in property <bool> contact-read-only;
+    in property <string> contact-source;
+    in property <ContactSyncState> contact-sync;
+    in property <string> contact-sync-detail;
+    in property <image> contact-photo;
+    in property <bool> contact-has-photo;
     in property <[ContactSidebarRow]> contact_sidebar_rows: [];
     in-out property <string> contact_scope: "All contacts";
     in-out property <string> contact_search_query: "";
@@ -720,8 +733,6 @@ export component AppWindow inherits Window {
     in property <bool> contact_has_selection: false;
     in-out property <int> contact_id: -1;
     in-out property <string> contact_name: "";
-    in-out property <string> contact_email: "";
-    in-out property <string> contact_phone: "";
     in-out property <string> contact_company: "";
     in-out property <string> contact_job_title: "";
     in-out property <string> contact_website: "";
@@ -1559,8 +1570,6 @@ export component AppWindow inherits Window {
             has-selected: root.contact_has_selection;
             selected-id <=> root.contact_id;
             edit-name <=> root.contact_name;
-            edit-email <=> root.contact_email;
-            edit-phone <=> root.contact_phone;
             edit-company <=> root.contact_company;
             edit-job-title <=> root.contact_job_title;
             edit-website <=> root.contact_website;
@@ -1571,6 +1580,18 @@ export component AppWindow inherits Window {
             edit-favorite <=> root.contact_favorite;
             is-suggested: root.contact_is_suggested;
             edit-initials: root.contact_initials;
+            email-values <=> root.contact-emails;
+            phone-values <=> root.contact-phones;
+            add-value(kind) => { root.add-contact-value(kind); }
+            prefer-value(kind,index) => { root.prefer-contact-value(kind,index); }
+            remove-value(kind,index) => { root.remove-contact-value(kind,index); }
+            read-only: root.contact-read-only;
+            source-name: root.contact-source;
+            sync: root.contact-sync;
+            sync-detail: root.contact-sync-detail;
+            photo: root.contact-photo;
+            has-photo: root.contact-has-photo;
+            resolve-conflict(keep-local) => { root.resolve-contact-conflict(keep-local); }
             interaction-label: root.contact_interactions + (root.contact_last_interacted != "" ? " · " + root.contact_last_interacted : "");
             accent: root.accent;
             accent-soft: root.accent-soft;
@@ -1598,16 +1619,18 @@ export component AppWindow inherits Window {
                     : filter == "all" ? "All contacts" : filter);
             }
             new-contact => { root.new-contact(); }
-            save-contact(id, name, email, phone, company, job-title, website, birthday, address, notes, tags, favorite) => {
+            save-contact(id, name, company, job-title, website, birthday, address, notes, tags, favorite) => {
                 root.save-contact(
-                    id, name, email, phone, company, job-title, website,
-                    birthday, address, notes, tags, favorite
+                    id, name, company, job-title, website, birthday, address, notes, tags, favorite
                 );
             }
             delete-contact(id) => { root.delete-contact(id); }
+            usable-email(email) => { root.usable-contact-email(email) }
             compose-to-contact(email) => {
-                root.compose_to = email;
-                root.open_compose();
+                if root.usable-contact-email(email) {
+                    root.compose_to = email;
+                    root.open_compose();
+                }
             }
         }
         }

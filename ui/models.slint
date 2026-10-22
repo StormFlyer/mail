@@ -370,7 +370,20 @@ export struct ComposeContact {
     initials: string,
 }
 
+// Mirrors flectar_mail_core::models::ContactSync.
+export enum ContactSyncState { local, detached, synced, pending, conflict, unavailable, failed }
+
+export struct ContactValueRow {
+    key: string,
+    value: string,
+    label: string,
+    preference: int,
+}
+
 export struct ContactRow {
+    avatar: image,
+    has-avatar: bool,
+    source: string,
     id: int,
     name: string,
     email: string,

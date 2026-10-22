@@ -583,13 +583,73 @@ pub struct ContactSuggestion {
     pub interactions: i64,
 }
 
+/// One email address or phone number of a saved contact. `key` is the
+/// property's position in the vCard revision the record was read from, so an
+/// edit can replace exactly that property; values added in the editor have an
+/// empty key.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContactValue {
+    pub key: String,
+    pub value: String,
+    pub label: String,
+    /// 1 is most preferred. 100 means no stated preference.
+    pub preference: u8,
+}
+
+impl ContactValue {
+    pub const NO_PREFERENCE: u8 = 100;
+}
+
+/// Where a saved contact stands relative to its address book.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ContactSync {
+    /// Stored only on this device.
+    #[default]
+    Local,
+    /// Stored only on this device because its address book was removed
+    /// before local changes reached the server.
+    Detached,
+    Synced,
+    /// Saved locally and waiting to upload.
+    Pending,
+    /// The server changed the contact while a local change was pending. Both
+    /// versions are kept until the user chooses one.
+    Conflict,
+    /// The address book no longer exists on the server.
+    Unavailable,
+    /// The server rejected or could not provide this contact.
+    Failed(String),
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContactDetails {
+    /// Changes whenever the stored contact changes. Saving or resolving a
+    /// conflict from an older revision is rejected.
+    pub revision: i64,
+    pub emails: Vec<ContactValue>,
+    pub phones: Vec<ContactValue>,
+    /// Address book name and account, or None for a contact stored only on
+    /// this device.
+    pub source: Option<String>,
+    pub read_only: bool,
+    pub sync: ContactSync,
+    pub photo_hash: Option<String>,
+}
+
 /// A complete address-book entry. Mail sync owns the interaction metadata;
 /// the remaining fields can be edited directly from the contacts workspace.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContactRecord {
+    #[serde(default)]
+    pub details: ContactDetails,
+    /// Positive for saved contacts. A mail-derived suggestion uses the
+    /// negated id of its mail history row, and 0 is a contact not yet saved.
     pub id: i64,
     pub name: String,
+    /// Most preferred entry of `details.emails`, shown in lists. Saving reads
+    /// the value lists, not this field.
     pub email: String,
+    /// Most preferred entry of `details.phones`, shown in lists.
     pub phone: String,
     pub company: String,
     pub job_title: String,
@@ -608,6 +668,22 @@ pub struct ContactRecord {
     /// by CardDAV. False identifies a mail-derived suggestion.
     #[serde(default)]
     pub is_managed: bool,
+}
+
+impl ContactRecord {
+    /// Derive `email` and `phone` from the value lists. Ties keep the order
+    /// the values appear in.
+    pub fn refresh_primary_values(&mut self) {
+        let primary = |values: &[ContactValue]| {
+            values
+                .iter()
+                .min_by_key(|value| value.preference)
+                .map(|value| value.value.trim().to_owned())
+                .unwrap_or_default()
+        };
+        self.email = primary(&self.details.emails).to_lowercase();
+        self.phone = primary(&self.details.phones);
+    }
 }
 
 /// One bounded page for the contacts workspace. Counts are scalar metadata;

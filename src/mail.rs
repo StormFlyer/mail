@@ -1218,6 +1218,37 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn contact_destination(&self, account_id: i64) -> Result<Option<String>, String> {
+        self.core
+            .list_addressbooks(Some(account_id))
+            .await
+            .map(|books| {
+                books
+                    .into_iter()
+                    .find(|book| book.enabled && !book.read_only)
+                    .map(|book| book.display_name.unwrap_or(book.url))
+            })
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn contact_photo(&self, hash: String) -> Result<Option<Vec<u8>>, String> {
+        self.core
+            .contact_photo(hash)
+            .await
+            .map_err(|e| e.to_string())
+    }
+    pub async fn resolve_contact_conflict(
+        &self,
+        id: i64,
+        revision: i64,
+        keep_local: bool,
+    ) -> Result<(), String> {
+        self.core
+            .resolve_contact_conflict(id, revision, keep_local)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn save_contact(
         &self,
         contact: flectar_mail_core::models::ContactRecord,
@@ -1228,9 +1259,9 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
-    pub async fn delete_contact(&self, id: i64) -> Result<(), String> {
+    pub async fn delete_contact(&self, id: i64, revision: i64) -> Result<(), String> {
         self.core
-            .delete_contact(id)
+            .delete_contact(id, revision)
             .await
             .map_err(|error| error.to_string())
     }

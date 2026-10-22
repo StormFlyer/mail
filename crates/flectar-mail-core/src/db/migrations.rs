@@ -15,22 +15,41 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/010_folder_hierarchy.sql"),
     include_str!("migrations/011_pending_body_page.sql"),
     include_str!("migrations/012_sender_identity_sources.sql"),
+    include_str!("migrations/013_contact_entries.sql"),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
+/// Data conversions SQL cannot express, run after a migration's SQL in the
+/// same transaction.
+fn convert(conn: &Connection, version: i64) -> Result<()> {
+    match version {
+        13 => super::repo::contact_entries::migrate(conn),
+        _ => Ok(()),
+    }
+}
+
 pub fn run(conn: &mut Connection) -> Result<()> {
+    upgrade_to(conn, LATEST_VERSION)
+}
+
+fn upgrade_to(conn: &mut Connection, latest: i64) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    let latest = LATEST_VERSION;
-    if version > latest {
+    if version > LATEST_VERSION {
         return Err(CoreError::Other(format!(
             "mail database schema {version} requires a newer application; open this profile with a compatible version. Existing data has not been changed."
         )));
     }
 
-    for (index, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
+    for (index, sql) in MIGRATIONS
+        .iter()
+        .enumerate()
+        .take(latest as usize)
+        .skip(version as usize)
+    {
         let target = (index + 1) as i64;
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
+        convert(&tx, target)?;
         tx.pragma_update(None, "user_version", target)?;
         tx.commit()?;
         tracing::info!("applied mail db migration {target}");
@@ -112,6 +131,9 @@ mod tests {
             "attachment_text_fts",
             "attachments",
             "contact_accounts",
+            "contact_entries",
+            "contact_values",
+            "contact_photos",
             "carddav_addressbooks",
             "carddav_config",
             "carddav_objects",
@@ -347,7 +369,8 @@ mod tests {
         .unwrap();
 
         let before = crate::models::now_ms();
-        run(&mut conn).unwrap();
+        // Migration 13 moves the profile columns checked here into entries.
+        upgrade_to(&mut conn, 12).unwrap();
         let after = crate::models::now_ms();
 
         let contacts = conn
@@ -776,7 +799,7 @@ mod tests {
         seed_mail_graph(&conn);
         for id in 1..=600 {
             conn.execute(
-                "INSERT INTO contacts(id, name, email, is_managed)
+                "INSERT INTO contacts(id, name, email, send_count)
                  VALUES(?1, 'Café', ?2, 1)",
                 params![id, format!("person-{id}@example.com")],
             )
@@ -909,5 +932,187 @@ mod tests {
             28
         );
         assert!(application_tables(&conn).is_empty());
+    }
+    #[test]
+    fn contact_upgrade_converts_every_saved_contact_and_pending_change() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        for sql in &MIGRATIONS[..12] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 12).unwrap();
+        crate::db::testutil::seed_account(&conn);
+        conn.execute_batch(
+            "INSERT INTO contacts(id,email,name,phone,company,is_managed,is_favorite,send_count) VALUES
+               (1,'shared@example.test','Unsynced name','','',1,1,7),
+               (2,'solo@example.test','Solo edited','555','',1,0,0),
+               (3,'local@example.test','Local person','','Acme',1,0,0),
+               (4,'gone@example.test','Gone','','',1,0,0),
+               (5,'history@example.test','History','','',0,0,2),
+               (6,'linked@example.test','Saved before sync','','',1,1,3);
+             INSERT INTO carddav_addressbooks(id,account_id,url) VALUES
+               (1,1,'https://dav.example/one/'),(2,1,'https://dav.example/two/');",
+        )
+        .unwrap();
+        let card = |uid: &str, extra: &str| {
+            format!(
+                "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{uid}\r\nFN:Server {uid}\r\n{extra}END:VCARD\r\n"
+            )
+        };
+        let objects = [
+            // One unsent edit shared by two cards cannot be assigned to either.
+            (
+                1,
+                Some(1),
+                "/shared.vcf",
+                card("one", "EMAIL:shared@example.test\r\n"),
+                1,
+                0,
+            ),
+            (
+                2,
+                Some(1),
+                "/shared.vcf",
+                card("two", "EMAIL:shared@example.test\r\n"),
+                1,
+                0,
+            ),
+            (
+                1,
+                Some(2),
+                "/solo.vcf",
+                card(
+                    "solo",
+                    "EMAIL:solo@example.test\r\nTEL;TYPE=CELL:111\r\nTEL;TYPE=WORK,PREF:222\r\nX-CUSTOM:kept\r\n",
+                ),
+                1,
+                0,
+            ),
+            (
+                1,
+                Some(4),
+                "/gone.vcf",
+                card("gone", "EMAIL:gone@example.test\r\n"),
+                1,
+                1,
+            ),
+            // A contact saved before the card that matched it was synced.
+            (
+                2,
+                Some(6),
+                "/linked.vcf",
+                card("linked", "EMAIL:linked@example.test\r\n"),
+                0,
+                0,
+            ),
+            // The old directory hid cards without an email address.
+            (1, None, "/hidden.vcf", card("hidden", "TEL:123\r\n"), 0, 0),
+            (
+                1,
+                None,
+                "/broken.vcf",
+                "BEGIN:VCARD\r\nEND:VCARD\r\n".into(),
+                0,
+                0,
+            ),
+        ];
+        for (book, contact, href, vcard, dirty, deleted) in objects {
+            conn.execute(
+                "INSERT INTO carddav_objects(addressbook_id,contact_id,href,etag,vcard_raw,dirty,deleted,owns_contact)
+                 VALUES (?1,?2,?3,'v1',?4,?5,?6,?7)",
+                params![book, contact, href, vcard, dirty, deleted, href != "/linked.vcf"],
+            )
+            .unwrap();
+        }
+        run(&mut conn).unwrap();
+
+        use crate::db::repo::{carddav, contacts};
+        use crate::models::ContactSync;
+        let entries = contacts::list_records(&conn, "", 20).unwrap();
+        let names = entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                "Server linked",
+                "Unsynced name",
+                "Unsynced name",
+                "Local person",
+                "Server hidden",
+                "Solo edited"
+            ]
+        );
+        // Linked to a card, so it is that card's entry and not also local.
+        assert!(entries[0].is_favorite);
+        assert_eq!(entries[0].details.sync, ContactSync::Synced);
+        for shared in &entries[1..3] {
+            assert!(shared.is_favorite);
+            assert_eq!(shared.details.sync, ContactSync::Conflict);
+        }
+        assert_eq!(entries[3].company, "Acme");
+        assert_eq!(entries[3].details.sync, ContactSync::Local);
+        assert_eq!(entries[4].phone, "123");
+        assert_eq!(entries[4].details.sync, ContactSync::Synced);
+        let solo = &entries[5];
+        assert_eq!(solo.phone, "222");
+        assert_eq!(solo.details.sync, ContactSync::Pending);
+        let pending = carddav::pending_uploads(&conn, 1).unwrap();
+        assert_eq!(pending.len(), 2);
+        let solo_document = pending[0].document.as_deref().unwrap();
+        assert!(solo_document.contains("UID:solo\r\nFN:Solo edited\r\n"));
+        // The old version showed the first TEL, so the edit replaces that one.
+        assert!(
+            solo_document
+                .contains("TEL;TYPE=CELL:555\r\nTEL;TYPE=WORK,PREF:222\r\nX-CUSTOM:kept\r\n")
+        );
+        assert!(pending[1].deleted);
+        assert!(
+            conn.query_row(
+                "SELECT last_error IS NOT NULL FROM carddav_objects WHERE href='/broken.vcf'",
+                [],
+                |r| r.get::<_, bool>(0)
+            )
+            .unwrap()
+        );
+
+        // Mail history keeps its counts; profile-only rows and columns are gone.
+        let history = conn
+            .prepare("SELECT email,send_count FROM contacts ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            history,
+            [
+                ("shared@example.test".into(), 7),
+                ("history@example.test".into(), 2),
+                ("linked@example.test".into(), 3)
+            ]
+        );
+        assert!(
+            !conn
+                .prepare("SELECT name FROM pragma_table_info('contacts')")
+                .unwrap()
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .any(|name| name.unwrap() == "is_managed")
+        );
+        assert_eq!(entries[1].interactions, 21);
+        let suggestions =
+            contacts::list_record_page(&conn, "", None, false, true, None, 20).unwrap();
+        assert_eq!(suggestions.records[0].email, "history@example.test");
+
+        run(&mut conn).unwrap();
+        assert_eq!(contacts::list_records(&conn, "", 20).unwrap().len(), 6);
+        assert!(
+            conn.prepare("PRAGMA foreign_key_check")
+                .unwrap()
+                .query([])
+                .unwrap()
+                .next()
+                .unwrap()
+                .is_none()
+        );
     }
 }

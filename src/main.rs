@@ -421,6 +421,7 @@ struct ContactLoadUpdate {
     cursor: Option<ContactRecordCursor>,
     generation: u64,
     result: Result<ContactRecordPage, String>,
+    photos: HashMap<String, ProfileAvatarImages>,
 }
 
 fn spawn_contact_page(
@@ -441,6 +442,21 @@ fn spawn_contact_page(
                 PAGE_SIZE as i64,
             )
             .await;
+        let mut photos = HashMap::new();
+        if let Ok(page) = &result {
+            for record in &page.records {
+                if let Some(hash) = &record.details.photo_hash {
+                    if photos.contains_key(hash) {
+                        continue;
+                    }
+                    if let Ok(Some(bytes)) = core.contact_photo(hash.clone()).await
+                        && let Ok(images) = favicon::decode_profile_avatars(bytes, 88, 104).await
+                    {
+                        photos.insert(hash.clone(), images);
+                    }
+                }
+            }
+        }
         let _ = updates
             .send(ContactLoadUpdate {
                 scope,
@@ -448,6 +464,7 @@ fn spawn_contact_page(
                 cursor,
                 generation,
                 result,
+                photos,
             })
             .await;
     });
@@ -2015,6 +2032,26 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             app.set_contact_loading_more(false);
             match update.result {
                 Ok(page) => {
+                    {
+                        let mut directory = contact_load_state.borrow_mut();
+                        if update.cursor.is_none() {
+                            directory.photos.clear();
+                        }
+                        for (hash, images) in update.photos {
+                            let image = |data: FaviconImage| {
+                                Image::from_rgba8(
+                                    SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                                        &data.pixels,
+                                        data.width,
+                                        data.height,
+                                    ),
+                                )
+                            };
+                            directory
+                                .photos
+                                .insert(hash, (image(images.small), image(images.regular)));
+                        }
+                    }
                     if contact_load_state
                         .borrow_mut()
                         .apply_core_page(update.cursor.as_ref(), page)
@@ -2204,6 +2241,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let contacts_for_new = Rc::clone(&contact_state);
+    let inbox_for_new_contact = Rc::clone(&state);
+    let runtime_for_new_contact = Rc::clone(&runtime);
     app.on_new_contact(move || {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -2213,11 +2252,113 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         directory.editing_new = true;
         drop(directory);
         clear_contact_form(&app);
+        if let Some(account_id) = contacts_for_new
+            .borrow()
+            .scope
+            .strip_prefix("Account:")
+            .and_then(|id| id.parse().ok())
+            && let Some(core) = inbox_for_new_contact.borrow().core.clone()
+            && let Ok(Some(destination)) =
+                runtime_for_new_contact.block_on(core.contact_destination(account_id))
+        {
+            app.set_contact_source(destination.into());
+        }
         app.set_contact_has_selection(true);
         app.set_contact_save_status(UiMessage::plain(
-            "Add an email address, then save the contact.",
+            "Enter a name, email address, or phone number, then save.",
         ));
         apply_contact_rows(&app, &contacts_for_new);
+    });
+
+    app.on_usable_contact_email(|email| flectar_mail_core::carddav::vcard::usable_email(&email));
+    let values_app = app.as_weak();
+    app.on_add_contact_value(move |kind| {
+        let Some(app) = values_app.upgrade() else {
+            return;
+        };
+        let model = if kind == "email" {
+            app.get_contact_emails()
+        } else {
+            app.get_contact_phones()
+        };
+        if let Some(rows) = model.as_any().downcast_ref::<VecModel<ContactValueRow>>() {
+            rows.push(ContactValueRow::default());
+        }
+    });
+    let values_app = app.as_weak();
+    app.on_remove_contact_value(move |kind, index| {
+        let Some(app) = values_app.upgrade() else {
+            return;
+        };
+        let model = if kind == "email" {
+            app.get_contact_emails()
+        } else {
+            app.get_contact_phones()
+        };
+        if let Some(rows) = model.as_any().downcast_ref::<VecModel<ContactValueRow>>()
+            && index >= 0
+            && (index as usize) < rows.row_count()
+        {
+            rows.remove(index as usize);
+        }
+    });
+
+    let values_app = app.as_weak();
+    app.on_prefer_contact_value(move |kind, index| {
+        let Some(app) = values_app.upgrade() else {
+            return;
+        };
+        let model = if kind == "email" {
+            app.get_contact_emails()
+        } else {
+            app.get_contact_phones()
+        };
+        if index < 0 || index as usize >= model.row_count() {
+            return;
+        }
+        for row in 0..model.row_count() {
+            if let Some(mut value) = model.row_data(row) {
+                value.preference = if row == index as usize { 1 } else { 100 };
+                model.set_row_data(row, value);
+            }
+        }
+    });
+
+    let conflict_app = app.as_weak();
+    let conflict_contacts = Rc::clone(&contact_state);
+    let conflict_inbox = Rc::clone(&state);
+    let conflict_runtime = Rc::clone(&runtime);
+    let conflict_loaded = Rc::clone(&contacts_loaded);
+    app.on_resolve_contact_conflict(move |keep_local| {
+        let Some(app) = conflict_app.upgrade() else {
+            return;
+        };
+        let selected = {
+            let state = conflict_contacts.borrow();
+            state
+                .selected_id
+                .and_then(|id| state.contacts.iter().find(|c| c.id == id))
+                .cloned()
+        };
+        let Some(contact) = selected else {
+            return;
+        };
+        let Some(core) = conflict_inbox.borrow().core.clone() else {
+            return;
+        };
+        match conflict_runtime.block_on(core.resolve_contact_conflict(
+            contact.id,
+            contact.details.revision,
+            keep_local,
+        )) {
+            Ok(()) => {
+                conflict_loaded.set(false);
+                app.invoke_load_contacts();
+            }
+            Err(error) => {
+                app.set_contact_save_status(UiMessage::detail("Could not save contact: {}", error))
+            }
+        }
     });
 
     let app_weak = app.as_weak();
@@ -2230,8 +2371,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     app.on_save_contact(
         move |id,
               name,
-              email,
-              phone,
               company,
               job_title,
               website,
@@ -2243,13 +2382,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            let email = email.trim().to_lowercase();
-            if email.is_empty() || !email.contains('@') {
-                app.set_contact_save_status(UiMessage::plain(
-                    "Enter a valid email address before saving.",
-                ));
-                return;
-            }
             let previous = contacts_for_save
                 .borrow()
                 .contacts
@@ -2266,11 +2398,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 .and_then(|value| value.parse::<i64>().ok())
                 .into_iter()
                 .collect::<Vec<_>>();
-            let record = ContactRecord {
+            let mut record = ContactRecord {
+                details: previous
+                    .as_ref()
+                    .map(|c| c.details.clone())
+                    .unwrap_or_default(),
                 id: i64::from(id),
                 name: name.trim().to_owned(),
-                email,
-                phone: phone.trim().to_owned(),
+                email: String::new(),
+                phone: String::new(),
                 company: company.trim().to_owned(),
                 job_title: job_title.trim().to_owned(),
                 website: website.trim().to_owned(),
@@ -2289,6 +2425,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     .unwrap_or(new_contact_accounts),
                 is_managed: true,
             };
+            record.details.emails = contacts::contact_values(app.get_contact_emails());
+            record.details.phones = contacts::contact_values(app.get_contact_phones());
+            record.refresh_primary_values();
             let using_core = contacts_for_save.borrow().using_core;
             let core = if using_core {
                 let Some(core) = inbox_for_contact_save.borrow().core.clone() else {
@@ -2394,7 +2533,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 ));
                 return;
             };
-            if let Err(error) = runtime_for_delete.block_on(core.delete_contact(i64::from(id))) {
+            let revision = contacts_for_delete
+                .borrow()
+                .contacts
+                .iter()
+                .find(|contact| contact.id == i64::from(id))
+                .map_or(0, |contact| contact.details.revision);
+            if let Err(error) =
+                runtime_for_delete.block_on(core.delete_contact(i64::from(id), revision))
+            {
                 app.set_contact_save_status(UiMessage::detail(
                     "Could not delete contact: {}",
                     error,
