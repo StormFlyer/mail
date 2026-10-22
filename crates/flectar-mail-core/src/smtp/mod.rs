@@ -255,6 +255,12 @@ async fn start_tls(cfg: &AccountConfig, mut tcp: TcpStream) -> Result<MailStream
 
 /// Open an authenticated SMTP session as the account's security requires.
 async fn connect(cfg: &AccountConfig, auth: &SmtpAuth) -> Result<AsyncSmtpConnection> {
+    let security = cfg.settings.connection.smtp_security;
+    if !security.is_encrypted() && matches!(auth, SmtpAuth::XOAuth2(_)) {
+        return Err(CoreError::Tls(
+            "OAuth sign-in needs an encrypted connection.".into(),
+        ));
+    }
     let open = async {
         let tcp = net::connect_tcp(&cfg.smtp_host, cfg.smtp_port)
             .await
@@ -264,13 +270,15 @@ async fn connect(cfg: &AccountConfig, auth: &SmtpAuth) -> Result<AsyncSmtpConnec
                     cfg.smtp_host, cfg.smtp_port
                 ))
             })?;
-        let (stream, greeting) = match cfg.settings.connection.smtp_security {
+        let (stream, greeting) = match security {
             ConnectionSecurity::Tls => (tls_handshake(cfg, tcp).await?, b"".as_slice()),
             ConnectionSecurity::Starttls => (
                 start_tls(cfg, tcp).await?,
                 b"220 Flectar STARTTLS ready\r\n".as_slice(),
             ),
+            ConnectionSecurity::None => (MailStream::Plain(tcp), b"".as_slice()),
         };
+        let encrypted = stream.is_encrypted();
         let mut connection = AsyncSmtpConnection::connect_with_transport(
             Box::new(SmtpStream::new(stream, greeting)),
             &ClientId::default(),
@@ -278,6 +286,19 @@ async fn connect(cfg: &AccountConfig, auth: &SmtpAuth) -> Result<AsyncSmtpConnec
         .await
         .map_err(|error| map_smtp_error(cfg, error))?;
         let (credentials, mechanisms) = smtp_auth(auth, &cfg.username);
+        // Servers commonly offer sign-in only after STARTTLS. Say so instead
+        // of reporting a failed sign-in.
+        if !encrypted
+            && !mechanisms
+                .iter()
+                .any(|mechanism| connection.server_info().supports_auth_mechanism(*mechanism))
+        {
+            connection.abort().await;
+            return Err(CoreError::Smtp(format!(
+                "{}:{} accepts passwords only over an encrypted connection. Choose STARTTLS or SSL/TLS.",
+                cfg.smtp_host, cfg.smtp_port
+            )));
+        }
         connection
             .auth(&mechanisms, &credentials)
             .await

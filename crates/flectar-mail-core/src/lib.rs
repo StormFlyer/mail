@@ -218,6 +218,14 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
             "unsupported sign-in type for {email}"
         )));
     }
+    let connection = &config.settings.connection;
+    if config.auth_kind == AuthKind::Oauth2
+        && !(connection.incoming_security.is_encrypted() && connection.smtp_security.is_encrypted())
+    {
+        return Err(CoreError::Other(format!(
+            "{email} signs in with OAuth, which needs encrypted connections"
+        )));
+    }
     let complete = match config.mail_protocol {
         // Provider presets own the server settings of OAuth accounts.
         MailProtocol::Gmail => true,
@@ -9195,6 +9203,21 @@ mod account_backup_import_tests {
             smtp_port: 465,
             settings: crate::db::testutil::account_settings(),
         }
+    }
+
+    #[test]
+    fn only_password_accounts_may_connect_without_encryption() {
+        let mut plain = portable_imap("plain@example.com");
+        plain.settings.connection.incoming_security = ConnectionSecurity::None;
+        plain.settings.connection.smtp_security = ConnectionSecurity::None;
+        validate_portable_account(&plain).unwrap();
+
+        let mut microsoft = portable_imap("oauth@example.com");
+        microsoft.provider = Provider::Microsoft;
+        microsoft.auth_kind = AuthKind::Oauth2;
+        validate_portable_account(&microsoft).unwrap();
+        microsoft.settings.connection.smtp_security = ConnectionSecurity::None;
+        assert!(validate_portable_account(&microsoft).is_err());
     }
 
     #[tokio::test]

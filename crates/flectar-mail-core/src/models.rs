@@ -221,6 +221,9 @@ pub enum ConnectionSecurity {
     /// A plaintext greeting upgraded with STARTTLS before any credentials
     /// are sent. A server that refuses the upgrade is never used.
     Starttls,
+    /// No encryption: the password and every message cross the network in
+    /// the clear. Only password sign-in is allowed this way.
+    None,
 }
 
 impl ConnectionSecurity {
@@ -228,6 +231,7 @@ impl ConnectionSecurity {
         match self {
             Self::Tls => "tls",
             Self::Starttls => "starttls",
+            Self::None => "none",
         }
     }
 
@@ -235,7 +239,15 @@ impl ConnectionSecurity {
         match value {
             "tls" => Some(Self::Tls),
             "starttls" => Some(Self::Starttls),
+            "none" => Some(Self::None),
             _ => None,
+        }
+    }
+
+    pub const fn is_encrypted(self) -> bool {
+        match self {
+            Self::Tls | Self::Starttls => true,
+            Self::None => false,
         }
     }
 }
@@ -386,7 +398,11 @@ mod account_settings_tests {
             .is_err()
         );
         assert_eq!(ConnectionSecurity::parse("auto"), None);
-        for security in [ConnectionSecurity::Tls, ConnectionSecurity::Starttls] {
+        for security in [
+            ConnectionSecurity::Tls,
+            ConnectionSecurity::Starttls,
+            ConnectionSecurity::None,
+        ] {
             assert_eq!(ConnectionSecurity::parse(security.as_str()), Some(security));
         }
     }

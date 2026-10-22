@@ -129,11 +129,16 @@ async fn connect_inner(
     settings: &crate::models::MailConnectionSettings,
 ) -> Result<Session> {
     use crate::models::ConnectionSecurity;
+    let security = settings.incoming_security;
+    if !security.is_encrypted() && matches!(creds, ImapCredentials::XOAuth2 { .. }) {
+        return Err(CoreError::Tls(
+            "OAuth sign-in needs an encrypted connection.".into(),
+        ));
+    }
     let connector = net::tls::connector(&settings.trusted_certificate_pem)?;
     let tcp = net::connect_tcp(host, port)
         .await
         .map_err(|e| CoreError::Imap(format!("connect {host}:{port}: {e}")))?;
-    let security = settings.incoming_security;
     let stream = match security {
         ConnectionSecurity::Tls => tls_handshake(&connector, tcp, host, port).await?,
         ConnectionSecurity::Starttls => {
@@ -150,11 +155,17 @@ async fn connect_inner(
                 })?;
             tls_handshake(&connector, client.into_inner(), host, port).await?
         }
+        ConnectionSecurity::None => MailStream::Plain(tcp),
     };
     let mut client = async_imap::Client::new(stream);
     // STARTTLS has already consumed the greeting; no second greeting follows.
     if security != ConnectionSecurity::Starttls {
         read_greeting(&mut client).await?;
+    }
+    if !security.is_encrypted() && login_disabled(&mut client).await? {
+        return Err(CoreError::Imap(format!(
+            "{host} accepts passwords only over an encrypted connection. Choose STARTTLS or SSL/TLS."
+        )));
     }
 
     let mut session = match creds {
@@ -190,6 +201,58 @@ async fn tls_handshake(
         ))
     })?;
     Ok(MailStream::Tls(Box::new(tls)))
+}
+
+/// Whether the server refuses LOGIN on this connection (RFC 9051
+/// LOGINDISABLED). Asked before any credentials are sent, so a server that
+/// only accepts passwords over TLS is reported as such rather than as a
+/// failed sign-in.
+async fn login_disabled(client: &mut async_imap::Client<MailStream>) -> Result<bool> {
+    use async_imap::imap_proto::{Capability, Response, Status};
+    use tokio::io::AsyncWriteExt;
+    // async-imap has no CAPABILITY command before sign-in, so send it with a
+    // tag its own counter (a1, a2, ...) never produces. Nothing else has been
+    // sent yet, so no buffered command can interleave with it.
+    const TAG: &str = "flectar0";
+    let stream = client.get_mut();
+    stream
+        .write_all(format!("{TAG} CAPABILITY\r\n").as_bytes())
+        .await
+        .map_err(|e| CoreError::Imap(format!("CAPABILITY: {e}")))?;
+    stream
+        .flush()
+        .await
+        .map_err(|e| CoreError::Imap(format!("CAPABILITY: {e}")))?;
+    let mut disabled = false;
+    loop {
+        let response = client
+            .read_response()
+            .await
+            .map_err(|e| CoreError::Imap(e.to_string()))?
+            .ok_or_else(|| CoreError::Imap("Server closed during CAPABILITY.".into()))?;
+        match response.parsed() {
+            Response::Capabilities(capabilities) => {
+                disabled |= capabilities.iter().any(|capability| {
+                    matches!(capability, Capability::Atom(name) if name.eq_ignore_ascii_case("LOGINDISABLED"))
+                });
+            }
+            Response::Done {
+                tag,
+                status,
+                information,
+                ..
+            } if tag.0 == TAG => {
+                return match status {
+                    Status::Ok => Ok(disabled),
+                    _ => Err(CoreError::Imap(format!(
+                        "CAPABILITY failed: {}",
+                        information.as_deref().unwrap_or_default()
+                    ))),
+                };
+            }
+            _ => {}
+        }
+    }
 }
 
 async fn read_greeting<T>(client: &mut async_imap::Client<T>) -> Result<()>
