@@ -8,6 +8,13 @@ pub enum CoreError {
     Io(#[from] std::io::Error),
     #[error("network error: {0}")]
     Network(String),
+    /// A response body exceeded the size the caller accepts. Classified like
+    /// other network errors, but distinguishable so a caller can request less.
+    #[error("network error: {context} exceeded the {max_bytes}-byte response limit")]
+    ResponseTooLarge {
+        context: &'static str,
+        max_bytes: usize,
+    },
     #[error("imap error: {0}")]
     Imap(String),
     /// A selective FETCH response could not be parsed. Its session must be
@@ -54,7 +61,7 @@ impl CoreError {
         match self {
             CoreError::Db(_) => "db",
             CoreError::Io(_) => "io",
-            CoreError::Network(_) => "network",
+            CoreError::Network(_) | CoreError::ResponseTooLarge { .. } => "network",
             CoreError::Imap(_) | CoreError::ImapParse(_) => "imap",
             CoreError::Jmap(_) => "jmap",
             CoreError::SendUncertain(_) => "send_uncertain",

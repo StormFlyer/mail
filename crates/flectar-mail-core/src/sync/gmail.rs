@@ -2994,7 +2994,10 @@ async fn send_remote_draft(
         Err(error) => {
             let ambiguous = matches!(
                 &error,
-                CoreError::Offline | CoreError::Network(_) | CoreError::NotFound(_)
+                CoreError::Offline
+                    | CoreError::Network(_)
+                    | CoreError::ResponseTooLarge { .. }
+                    | CoreError::NotFound(_)
             );
             if ambiguous {
                 if let Some(sent) = api.find_sent_by_message_id(&prepared.message_id).await? {
@@ -3624,7 +3627,12 @@ async fn execute_actions(ctx: &SyncCtx, config: &AccountConfig, api: &GmailApi) 
                             repo::actions::bump_attempt(conn, action_id, retry_at, &saved)
                         })
                         .await?;
-                    if matches!(error, CoreError::Offline | CoreError::Network(_)) {
+                    if matches!(
+                        error,
+                        CoreError::Offline
+                            | CoreError::Network(_)
+                            | CoreError::ResponseTooLarge { .. }
+                    ) {
                         return Err(error);
                     }
                 }
