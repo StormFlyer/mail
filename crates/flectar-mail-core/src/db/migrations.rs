@@ -34,6 +34,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::TableRebuild(include_str!("migrations/015_account_protocols.sql")),
     Migration::Plain(include_str!("migrations/016_pop3.sql")),
     Migration::Plain(include_str!("migrations/017_jmap_attachment_listing.sql")),
+    Migration::Plain(include_str!("migrations/018_jmap_full_sync_progress.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -236,6 +237,7 @@ mod tests {
             "folders",
             "gmail_labels",
             "gmail_sync_state",
+            "jmap_full_sync_stored",
             "jmap_sync_state",
             "labels",
             "message_bodies",
@@ -382,6 +384,39 @@ mod tests {
         conn.execute("UPDATE messages SET body_state = 'cached' WHERE id = 1", [])
             .unwrap();
         assert_eq!(queued(&conn), 0);
+    }
+
+    #[test]
+    fn jmap_full_sync_progress_upgrade_keeps_sync_states() {
+        let mut conn = staged(17);
+        seed_mail_graph(&conn);
+        conn.execute(
+            "INSERT INTO jmap_sync_state(account_id,mailbox_state,email_state)
+             VALUES(1,'mailboxes','emails')",
+            [],
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+        let states: (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT mailbox_state,email_state,full_sync_state FROM jmap_sync_state",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(states, ("mailboxes".into(), "emails".into(), None));
+        conn.execute(
+            "INSERT INTO jmap_full_sync_stored(account_id,email_id) VALUES(1,'email-a')",
+            [],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM accounts WHERE id=1", []).unwrap();
+        let progress: i64 = conn
+            .query_row("SELECT COUNT(*) FROM jmap_full_sync_stored", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(progress, 0);
     }
 
     #[test]

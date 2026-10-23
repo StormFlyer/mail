@@ -1034,3 +1034,53 @@ async fn attachment_listings_that_time_out_shrink_and_skip_what_never_answers() 
     );
     mock.task.abort();
 }
+
+#[tokio::test]
+async fn interrupted_full_sync_resumes_where_it_stopped() {
+    let (_dir, ctx, config) = fixture().await;
+    let fail = Arc::new(AtomicBool::new(true));
+    let mock = MockJmap {
+        emails: vec![
+            email("email-a", "thread-a"),
+            email("email-b", "thread-b"),
+            email("email-c", "thread-c"),
+        ],
+        fail_on: Some(("email-c", fail.clone())),
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    assert!(run_sync(&ctx, &config, &mock.connected).await.is_err());
+    assert_eq!(saved_email_state(&ctx, 1).await.unwrap(), None);
+    let first_attempt = mock.calls("Email/get").len();
+
+    fail.store(false, Ordering::SeqCst);
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    // Only what is still missing is fetched, and the state the full sync
+    // started from becomes the checkpoint.
+    let resumed = mock.calls("Email/get").split_off(first_attempt);
+    assert_eq!(
+        resumed.iter().map(listed_ids).collect::<Vec<_>>(),
+        [vec!["email-c"]]
+    );
+    assert_eq!(
+        saved_email_state(&ctx, 1).await.unwrap(),
+        Some("state-0".into())
+    );
+    assert_eq!(unfinished_full_sync(&ctx, 1).await.unwrap(), None);
+    ctx.db
+        .read(|conn| {
+            let stored: i64 =
+                conn.query_row("SELECT COUNT(*) FROM jmap_full_sync_stored", [], |r| {
+                    r.get(0)
+                })?;
+            assert_eq!(stored, 0);
+            let messages: i64 =
+                conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?;
+            assert_eq!(messages, 3);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    mock.task.abort();
+}

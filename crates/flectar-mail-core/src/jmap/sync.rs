@@ -440,6 +440,60 @@ fn mailbox_path(id: &str, hierarchy: &HashMap<String, (String, Option<String>)>)
     }
 }
 
+/// The Email state an unfinished full sync started from.
+async fn unfinished_full_sync(ctx: &SyncCtx, id: i64) -> Result<Option<String>> {
+    ctx.db
+        .read(move |conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT full_sync_state FROM jmap_sync_state WHERE account_id=?1",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .flatten())
+        })
+        .await
+}
+
+/// Starts a full sync from the server's current Email state. Recording the
+/// state first lets an interrupted run resume: checkpointing that older state
+/// at the end is safe because Email/changes then repeats whatever changed
+/// meanwhile.
+async fn begin_full_sync(ctx: &SyncCtx, id: i64, c: &ConnectedClient) -> Result<String> {
+    let state = current_email_state(c).await?;
+    let started = state.clone();
+    ctx.db
+        .write(move |conn| {
+            let tx = conn.transaction()?;
+            tx.execute(
+                "INSERT INTO jmap_sync_state(account_id,full_sync_state) VALUES(?1,?2)
+                 ON CONFLICT(account_id) DO UPDATE SET full_sync_state=excluded.full_sync_state",
+                params![id, started],
+            )?;
+            tx.execute(
+                "DELETE FROM jmap_full_sync_stored WHERE account_id=?1",
+                params![id],
+            )?;
+            tx.commit()?;
+            Ok(())
+        })
+        .await?;
+    Ok(state)
+}
+
+async fn full_sync_stored(ctx: &SyncCtx, id: i64) -> Result<HashSet<String>> {
+    ctx.db
+        .read(move |conn| {
+            let mut stmt =
+                conn.prepare("SELECT email_id FROM jmap_full_sync_stored WHERE account_id=?1")?;
+            Ok(stmt
+                .query_map(params![id], |r| r.get(0))?
+                .collect::<rusqlite::Result<HashSet<String>>>()?)
+        })
+        .await
+}
+
 async fn saved_email_state(ctx: &SyncCtx, id: i64) -> Result<Option<String>> {
     ctx.db
         .read(move |conn| {
@@ -618,26 +672,38 @@ fn automated_email(email: &Email) -> bool {
 }
 
 async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient) -> Result<()> {
-    let previous = saved_email_state(ctx, config.id).await?;
-    let (ids, mut destroyed, checkpoint_state, full) = match previous {
-        Some(state) => match changes(c, state).await {
-            Ok((ids, destroyed, state)) => (ids, destroyed, state, false),
-            Err(CoreError::Jmap(value)) if value == "cannotCalculateChanges" => {
-                let state = current_email_state(c).await?;
-                (query_ids(config, c).await?, Vec::new(), state, true)
-            }
-            Err(error) => return Err(error),
-        },
-        None => {
-            let state = current_email_state(c).await?;
-            (query_ids(config, c).await?, Vec::new(), state, true)
-        }
+    let account_id = config.id;
+    let (ids, mut destroyed, checkpoint_state, full) =
+        match unfinished_full_sync(ctx, account_id).await? {
+            Some(state) => (query_ids(config, c).await?, Vec::new(), state, true),
+            None => match saved_email_state(ctx, account_id).await? {
+                Some(state) => match changes(c, state).await {
+                    Ok((ids, destroyed, state)) => (ids, destroyed, state, false),
+                    Err(CoreError::Jmap(value)) if value == "cannotCalculateChanges" => {
+                        let state = begin_full_sync(ctx, account_id, c).await?;
+                        (query_ids(config, c).await?, Vec::new(), state, true)
+                    }
+                    Err(error) => return Err(error),
+                },
+                None => {
+                    let state = begin_full_sync(ctx, account_id, c).await?;
+                    (query_ids(config, c).await?, Vec::new(), state, true)
+                }
+            },
+        };
+    // A full sync that stopped midway skips what it already stored.
+    let stored = if full {
+        full_sync_stored(ctx, account_id).await?
+    } else {
+        HashSet::new()
     };
+    let (skipped, ids): (Vec<_>, Vec<_>) = ids.into_iter().partition(|id| stored.contains(id));
     // Each Email/get page is committed on its own while the next one is in
     // flight: a first sync fills the mailbox newest first instead of showing
     // nothing until the whole history is downloaded. The email state is only
-    // checkpointed once every page is stored, so an interrupted run restarts.
-    let mut remote_ids = HashSet::with_capacity(ids.len());
+    // checkpointed once every page is stored.
+    let mut remote_ids = skipped.into_iter().collect::<HashSet<_>>();
+    remote_ids.reserve(ids.len());
     let mut pages = HeaderPages {
         ids: &ids,
         position: 0,
@@ -651,7 +717,8 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
                 .iter()
                 .filter_map(|email| email.id().map(str::to_owned)),
         );
-        let (next, persisted) = tokio::join!(pages.next(c), persist_emails(ctx, config, emails));
+        let (next, persisted) =
+            tokio::join!(pages.next(c), persist_emails(ctx, config, emails, full));
         persisted?;
         fetched = next?;
     }
@@ -735,7 +802,14 @@ fn first(values: Option<&[String]>) -> Option<String> {
     values.and_then(|values| values.first()).cloned()
 }
 
-async fn persist_emails(ctx: &SyncCtx, config: &AccountConfig, emails: Vec<Email>) -> Result<()> {
+/// Stores a page of headers. A full sync also records each message as
+/// stored, so an interrupted run need not fetch it again.
+async fn persist_emails(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    emails: Vec<Email>,
+    full_sync: bool,
+) -> Result<()> {
     let account_id = config.id;
     let (thread_ids, stale_paths) = ctx
         .db
@@ -753,6 +827,12 @@ async fn persist_emails(ctx: &SyncCtx, config: &AccountConfig, emails: Vec<Email
                     .id()
                     .map(str::to_owned)
                     .ok_or_else(|| CoreError::Jmap("Email/get returned an object without id".into()))?;
+                if full_sync {
+                    tx.execute(
+                        "INSERT OR IGNORE INTO jmap_full_sync_stored(account_id,email_id) VALUES(?1,?2)",
+                        params![account_id, remote_id],
+                    )?;
+                }
                 let mut folders = Vec::new();
                 for mailbox_id in email.mailbox_ids() {
                     let folder = repo::folders::by_jmap_id(&tx, account_id, mailbox_id)?
@@ -1095,8 +1175,13 @@ async fn finish_email_sync(
                 "INSERT INTO jmap_sync_state(account_id,email_state,last_full_sync)
                  VALUES(?1,?2,CASE WHEN ?3 THEN ?4 ELSE NULL END)
                  ON CONFLICT(account_id) DO UPDATE SET email_state=excluded.email_state,
-                   last_full_sync=CASE WHEN ?3 THEN ?4 ELSE jmap_sync_state.last_full_sync END",
+                   last_full_sync=CASE WHEN ?3 THEN ?4 ELSE jmap_sync_state.last_full_sync END,
+                   full_sync_state=NULL",
                 params![account_id, state, full as i64, now_ms()],
+            )?;
+            tx.execute(
+                "DELETE FROM jmap_full_sync_stored WHERE account_id=?1",
+                params![account_id],
             )?;
             tx.commit()?;
             Ok((changed_threads.into_iter().collect::<Vec<_>>(), stale_paths))
