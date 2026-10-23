@@ -15,7 +15,8 @@
 use flectar_mail_core::accounts::credentials::DevelopmentFileCredentialStore;
 use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::{
-    AddPasswordAccountArgs, ConnectionSecurity, MailConnectionSettings, MailProtocol, View,
+    AddPasswordAccountArgs, ConnectionSecurity, KeepOnServer, MailConnectionSettings, MailProtocol,
+    View,
 };
 use flectar_mail_core::{Core, imap, pop3};
 use std::sync::Arc;
@@ -197,4 +198,28 @@ async fn account_against_dovecot() {
     let mut session = connect(10995, ConnectionSecurity::Tls).await;
     assert_eq!(session.unique_ids().await.unwrap().len(), 3);
     session.quit().await.unwrap();
+
+    // Choosing to keep mail only until it's downloaded empties the server,
+    // and the mail stays here.
+    core.set_account_keep_on_server(account.id, KeepOnServer::UntilDownloaded)
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let mut session = connect(10995, ConnectionSecurity::Tls).await;
+            let left = session.unique_ids().await.unwrap().len();
+            session.quit().await.unwrap();
+            if left == 0 {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    })
+    .await
+    .expect("mail removed from the server");
+    let page = core
+        .list_threads(View::Inbox, None, Some(account.id), None, None, (None, 50))
+        .await
+        .unwrap();
+    assert_eq!(page.threads.len(), 3);
 }
