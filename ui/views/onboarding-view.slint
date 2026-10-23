@@ -265,28 +265,26 @@ export component OnboardingView inherits Rectangle {
                     height: 60px;
                     label: @tr("Email address");
                     label-color: root.muted-text;
-                    value: root.account-email;
+                    value <=> root.account-email;
                     placeholder: @tr("Email address");
-                    edited(value) => { root.account-email = value; root.suggest-account-settings(value); }
+                    edited(value) => { root.suggest-account-settings(value); }
                 }
                 FormField {
                     enabled: !root.account-setup-in-progress;
                     height: 60px;
                     label: @tr("Username (defaults to email)");
                     label-color: root.muted-text;
-                    value: root.account-username;
+                    value <=> root.account-username;
                     placeholder: @tr("Username (defaults to email)");
-                    edited(value) => { root.account-username = value; }
                 }
                 FormField {
                     enabled: !root.account-setup-in-progress;
                     height: 60px;
                     label: root.account-protocol == "jmap" ? @tr("Password, app password, or API token") : @tr("Password or app password");
                     label-color: root.muted-text;
-                    value: root.account-password;
+                    value <=> root.account-password;
                     input-type: password;
                     placeholder: root.account-protocol == "jmap" ? @tr("Password, app password, or API token") : @tr("Password or app password");
-                    edited(value) => { root.account-password = value; }
                 }
                 HorizontalBox {
                     height: 42px;
@@ -319,9 +317,8 @@ export component OnboardingView inherits Rectangle {
                 }
                 if root.account-protocol == "jmap" : LineEdit {
                     height: 42px;
-                    text: root.jmap-url;
+                    text <=> root.jmap-url;
                     placeholder-text: @tr("Server address (optional)");
-                    edited(value) => { root.jmap-url = value; }
                 }
                 if root.account-protocol == "jmap" : Text {
                     text: @tr("Leave blank to discover /.well-known/jmap from your email domain.");
@@ -338,19 +335,17 @@ export component OnboardingView inherits Rectangle {
                         horizontal-stretch: 1;
                         label: root.account-protocol == "pop3" ? @tr("POP3 server") : @tr("IMAP server");
                         label-color: root.muted-text;
-                        value: root.incoming-host;
+                        value <=> root.incoming-host;
                         placeholder: root.account-protocol == "pop3" ? @tr("POP3 server") : @tr("IMAP server");
-                        edited(value) => { root.incoming-host = value; }
                     }
                     FormField {
                         enabled: !root.account-setup-in-progress;
                         width: max(82px, self.preferred-width);
                         label: @tr("Port");
                         label-color: root.muted-text;
-                        value: root.incoming-port;
+                        value <=> root.incoming-port;
                         input-type: number;
                         placeholder: MailPorts.incoming(root.account-protocol, root.incoming-security);
-                        edited(value) => { root.incoming-port = value; }
                     }
                 }
                 if root.account-protocol != "jmap" : HorizontalBox {
@@ -362,19 +357,17 @@ export component OnboardingView inherits Rectangle {
                         horizontal-stretch: 1;
                         label: @tr("SMTP server");
                         label-color: root.muted-text;
-                        value: root.smtp-host;
+                        value <=> root.smtp-host;
                         placeholder: @tr("SMTP server");
-                        edited(value) => { root.smtp-host = value; }
                     }
                     FormField {
                         enabled: !root.account-setup-in-progress;
                         width: max(82px, self.preferred-width);
                         label: @tr("Port");
                         label-color: root.muted-text;
-                        value: root.smtp-port;
+                        value <=> root.smtp-port;
                         input-type: number;
                         placeholder: MailPorts.smtp(root.smtp-security);
-                        edited(value) => { root.smtp-port = value; }
                     }
                 }
                 if root.account-protocol == "imap" : Text {
