@@ -310,12 +310,25 @@ impl MockJmap {
                     "destroyed": changes["destroyed"]
                 })
             }
-            "Email/query" => json!({
-                "accountId": "mail-account", "queryState": "query-0",
-                "canCalculateChanges": false, "position": 0,
-                "ids": self.emails.iter().map(|email| &email["id"]).collect::<Vec<_>>(),
-                "total": self.emails.len()
-            }),
+            "Email/query" => {
+                let received = |value: &Value| {
+                    chrono::DateTime::parse_from_rfc3339(value.as_str().unwrap()).unwrap()
+                };
+                let after = args["filter"].get("after").map(received);
+                let ids = self
+                    .emails
+                    .iter()
+                    .filter(|email| {
+                        after.is_none_or(|after| received(&email["receivedAt"]) > after)
+                    })
+                    .map(|email| &email["id"])
+                    .collect::<Vec<_>>();
+                json!({
+                    "accountId": "mail-account", "queryState": "query-0",
+                    "canCalculateChanges": false, "position": 0,
+                    "total": ids.len(), "ids": ids
+                })
+            }
             "Email/get" => {
                 let ids = args["ids"].as_array().unwrap();
                 if self.fail_on.as_ref().is_some_and(|(id, fail)| {
@@ -1078,6 +1091,134 @@ async fn interrupted_full_sync_resumes_where_it_stopped() {
             let messages: i64 =
                 conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?;
             assert_eq!(messages, 3);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    mock.task.abort();
+}
+
+fn received(email: Value, at: chrono::DateTime<chrono::Utc>) -> Value {
+    let mut email = email;
+    email["receivedAt"] = json!(at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+    email
+}
+
+#[tokio::test]
+async fn full_sync_after_a_server_change_keeps_only_mail_on_the_new_server() {
+    let (_dir, ctx, mut config) = fixture().await;
+    config.settings.mail_history = MailHistory::OneMonth;
+    let now = chrono::Utc::now();
+    let day = chrono::Duration::days(1);
+    let (recent, old, unmatched_old, ancient_local, ancient) = (
+        now - day,
+        now - day * 60,
+        now - day * 70,
+        now - day * 90,
+        now - day * 200,
+    );
+    // What the account kept from its IMAP server, next to the folders its
+    // first JMAP mailbox sync created.
+    let (gone_action, draft) = ctx
+        .db
+        .write(move |conn| {
+            conn.execute_batch(
+                "UPDATE folders SET jmap_id = NULL WHERE id = 1;
+                 INSERT INTO folders (id, account_id, path, role, jmap_id) VALUES
+                   (2, 1, 'Inbox', 'inbox', 'inbox-remote'),
+                   (3, 1, 'Archive', 'archive', NULL),
+                   (4, 1, 'Drafts', 'drafts', NULL),
+                   (5, 1, 'Drafts on the server', 'drafts', 'drafts-remote');",
+            )?;
+            let imap_copy =
+                |folder: i64, uid: i64, message_id: &str, at: chrono::DateTime<chrono::Utc>| {
+                    let (_, message) = crate::db::testutil::seed_message(
+                        conn,
+                        "sender@mail.example",
+                        "Conversation",
+                        false,
+                    );
+                    conn.execute(
+                        "UPDATE messages SET folder_id=?2, uid=?3, message_id=?4, size=100,
+                            date=?5, internal_date=?5
+                     WHERE id=?1",
+                        params![message, folder, uid, message_id, at.timestamp_millis()],
+                    )
+                    .map(|_| message)
+                };
+            imap_copy(1, 7, "email-recent@mail.example", recent)?;
+            let gone = imap_copy(3, 7, "gone@mail.example", recent)?;
+            imap_copy(1, 8, "email-old@mail.example", old)?;
+            imap_copy(1, 9, "ancient-gone@mail.example", ancient_local)?;
+            let draft = imap_copy(4, 3, "draft@mail.example", recent)?;
+            conn.execute("UPDATE messages SET is_draft=1 WHERE id=?1", [draft])?;
+            conn.execute("INSERT INTO drafts_meta (message_id) VALUES (?1)", [draft])?;
+            let gone_action =
+                repo::actions::enqueue(conn, 1, "trash", Some(gone), None, &json!({}), None)?;
+            Ok((gone_action, draft))
+        })
+        .await
+        .unwrap();
+    let mock = MockJmap {
+        emails: vec![
+            received(email("email-new", "thread-new"), recent),
+            received(email("email-recent", "thread-recent"), recent),
+            received(email("email-old", "thread-old"), old),
+            received(
+                email("email-unmatched-old", "thread-unmatched"),
+                unmatched_old,
+            ),
+            received(email("email-ancient", "thread-ancient"), ancient),
+        ],
+        max_objects_in_get: 500,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+
+    // The query reaches back to the oldest message left here, past the
+    // account's month of history, so that message could be matched.
+    let query = mock.calls("Email/query").pop().unwrap();
+    let after =
+        chrono::DateTime::parse_from_rfc3339(query["filter"]["after"].as_str().unwrap()).unwrap();
+    assert!(after < ancient_local && after > ancient, "{after}");
+    let listed = mock.calls("Email/get").pop().unwrap();
+    assert_eq!(listed_ids(&listed).len(), 4);
+    ctx.db
+        .read(move |conn| {
+            let messages = conn
+                .prepare(
+                    "SELECT COALESCE(jmap_id, message_id), folder_id, uid FROM messages
+                     ORDER BY 1",
+                )?
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            assert_eq!(
+                messages,
+                [
+                    ("draft@mail.example".to_owned(), 5, None),
+                    ("email-new".to_owned(), 2, None),
+                    ("email-old".to_owned(), 2, None),
+                    ("email-recent".to_owned(), 2, None),
+                ]
+            );
+            assert!(repo::messages::get_row(conn, draft)?.is_some());
+            let folders = conn
+                .prepare("SELECT id FROM folders ORDER BY id")?
+                .query_map([], |row| row.get::<_, i64>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            assert_eq!(folders, [2, 5]);
+            assert_eq!(
+                repo::actions::get(conn, gone_action)?.unwrap().state,
+                "cancelled"
+            );
             Ok(())
         })
         .await

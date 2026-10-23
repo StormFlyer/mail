@@ -145,6 +145,45 @@ pub fn jmap_adoption_candidate(
     Ok(if ambiguous { None } else { candidate })
 }
 
+/// A message of a JMAP account that no message on the server stands for:
+/// mail that an earlier server or protocol of the account left behind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JmapLeftover {
+    pub id: i64,
+    pub thread_id: Option<i64>,
+    pub raw_path: Option<String>,
+    /// When it was received, as far as the earlier server said.
+    pub received_at: i64,
+}
+
+/// The account's own drafts and queued sends are not leftovers: they are
+/// created on the server later.
+pub fn jmap_leftovers(conn: &Connection, account_id: i64) -> Result<Vec<JmapLeftover>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT m.id, m.thread_id, m.raw_path, COALESCE(m.internal_date, m.date)
+         FROM messages m
+         WHERE m.account_id = ?1 AND m.jmap_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM drafts_meta d WHERE d.message_id = m.id)",
+    )?;
+    let rows = stmt
+        .query_map(params![account_id], |row| {
+            Ok(JmapLeftover {
+                id: row.get(0)?,
+                thread_id: row.get(1)?,
+                raw_path: row.get(2)?,
+                received_at: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut leftovers = Vec::with_capacity(rows.len());
+    for row in rows {
+        if !super::actions::has_pending_remote_creation(conn, row.id)? {
+            leftovers.push(row);
+        }
+    }
+    Ok(leftovers)
+}
+
 /// A JMAP message whose attachments haven't been listed for its current blob.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JmapAttachmentListing {

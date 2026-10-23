@@ -440,6 +440,34 @@ fn mailbox_path(id: &str, hierarchy: &HashMap<String, (String, Option<String>)>)
     }
 }
 
+/// The Emails a full sync goes through: the account's mail history, reaching
+/// back to the oldest message an earlier server or protocol of the account
+/// left here, so it can be matched with its copy on this server.
+async fn full_sync_ids(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    c: &ConnectedClient,
+) -> Result<Vec<String>> {
+    let Some(cutoff) = config.settings.mail_history.cutoff_ms_at(now_ms()) else {
+        return query_ids(c, None).await;
+    };
+    let account_id = config.id;
+    let oldest_leftover = ctx
+        .db
+        .read(move |conn| {
+            Ok(repo::messages::jmap_leftovers(conn, account_id)?
+                .into_iter()
+                .map(|leftover| leftover.received_at)
+                .min())
+        })
+        .await?;
+    // A day's margin covers servers recording slightly different times.
+    let received_after = oldest_leftover.map_or(cutoff, |oldest| {
+        cutoff.min(oldest.saturating_sub(24 * 60 * 60 * 1000))
+    });
+    query_ids(c, Some(received_after)).await
+}
+
 /// The Email state an unfinished full sync started from.
 async fn unfinished_full_sync(ctx: &SyncCtx, id: i64) -> Result<Option<String>> {
     ctx.db
@@ -509,12 +537,9 @@ async fn saved_email_state(ctx: &SyncCtx, id: i64) -> Result<Option<String>> {
         .await
 }
 
-async fn query_ids(config: &AccountConfig, c: &ConnectedClient) -> Result<Vec<String>> {
-    let cutoff = config
-        .settings
-        .mail_history
-        .cutoff_ms_at(now_ms())
-        .map(|v| v / 1000);
+/// Every Email received after `received_after` (ms), newest first.
+async fn query_ids(c: &ConnectedClient, received_after: Option<i64>) -> Result<Vec<String>> {
+    let cutoff = received_after.map(|v| v / 1000);
     'restart: for _ in 0..MAX_QUERY_RESTARTS {
         let mut ids = Vec::new();
         let mut query_state: Option<String> = None;
@@ -675,22 +700,44 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
     let account_id = config.id;
     let (ids, mut destroyed, checkpoint_state, full) =
         match unfinished_full_sync(ctx, account_id).await? {
-            Some(state) => (query_ids(config, c).await?, Vec::new(), state, true),
+            Some(state) => (
+                full_sync_ids(ctx, config, c).await?,
+                Vec::new(),
+                state,
+                true,
+            ),
             None => match saved_email_state(ctx, account_id).await? {
                 Some(state) => match changes(c, state).await {
                     Ok((ids, destroyed, state)) => (ids, destroyed, state, false),
                     Err(CoreError::Jmap(value)) if value == "cannotCalculateChanges" => {
                         let state = begin_full_sync(ctx, account_id, c).await?;
-                        (query_ids(config, c).await?, Vec::new(), state, true)
+                        (
+                            full_sync_ids(ctx, config, c).await?,
+                            Vec::new(),
+                            state,
+                            true,
+                        )
                     }
                     Err(error) => return Err(error),
                 },
                 None => {
                     let state = begin_full_sync(ctx, account_id, c).await?;
-                    (query_ids(config, c).await?, Vec::new(), state, true)
+                    (
+                        full_sync_ids(ctx, config, c).await?,
+                        Vec::new(),
+                        state,
+                        true,
+                    )
                 }
             },
         };
+    // A full sync downloads the account's mail history. Older mail it lists
+    // only replaces what an earlier server left here.
+    let insert_after = if full {
+        config.settings.mail_history.cutoff_ms_at(now_ms())
+    } else {
+        None
+    };
     // A full sync that stopped midway skips what it already stored.
     let stored = if full {
         full_sync_stored(ctx, account_id).await?
@@ -717,8 +764,10 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
                 .iter()
                 .filter_map(|email| email.id().map(str::to_owned)),
         );
-        let (next, persisted) =
-            tokio::join!(pages.next(c), persist_emails(ctx, config, emails, full));
+        let (next, persisted) = tokio::join!(
+            pages.next(c),
+            persist_emails(ctx, config, emails, full, insert_after)
+        );
         persisted?;
         fetched = next?;
     }
@@ -803,12 +852,14 @@ fn first(values: Option<&[String]>) -> Option<String> {
 }
 
 /// Stores a page of headers. A full sync also records each message as
-/// stored, so an interrupted run need not fetch it again.
+/// stored, so an interrupted run need not fetch it again. An Email received
+/// before `insert_after` only updates a message already here.
 async fn persist_emails(
     ctx: &SyncCtx,
     config: &AccountConfig,
     emails: Vec<Email>,
     full_sync: bool,
+    insert_after: Option<i64>,
 ) -> Result<()> {
     let account_id = config.id;
     let (thread_ids, stale_paths) = ctx
@@ -876,6 +927,9 @@ async fn persist_emails(
                         None => None,
                     },
                 };
+                if existing.is_none() && insert_after.is_some_and(|after| date < after) {
+                    continue;
+                }
                 let remote_thread = email
                     .thread_id()
                     .ok_or_else(|| {
@@ -992,8 +1046,10 @@ async fn persist_emails(
                             stale_paths.push(path);
                         }
                     }
+                    // JMAP messages carry no IMAP UID; an adopted one drops
+                    // the UID its earlier copy had in another folder.
                     tx.execute(
-                        "UPDATE messages SET thread_id=?2, folder_id=CASE WHEN ?21 THEN folder_id ELSE ?3 END,
+                        "UPDATE messages SET uid=NULL, thread_id=?2, folder_id=CASE WHEN ?21 THEN folder_id ELSE ?3 END,
                            message_id=?4, subject=?5, from_name=?6, from_addr=?7, to_json=?8,
                            cc_json=?9, bcc_json=?10, date=?11, internal_date=?11,
                            is_read=CASE WHEN ?22 THEN is_read ELSE ?12 END,
@@ -1167,6 +1223,21 @@ async fn finish_email_sync(
                         repo::messages::delete(&tx, id)?;
                     }
                 }
+                // Mail an earlier server or protocol of the account left here
+                // had this full sync to be matched with its copy on this
+                // server. What wasn't matched is not on the account's server.
+                for leftover in repo::messages::jmap_leftovers(&tx, account_id)? {
+                    tx.execute(
+                        "UPDATE pending_actions SET state='cancelled', finished_at=?2,
+                           last_error='the message is not on the account''s server'
+                         WHERE message_id=?1 AND state IN ('pending','inflight')",
+                        params![leftover.id, now_ms()],
+                    )?;
+                    changed_threads.extend(leftover.thread_id);
+                    stale_paths.extend(leftover.raw_path);
+                    repo::messages::delete(&tx, leftover.id)?;
+                }
+                repo::folders::drop_jmap_leftovers(&tx, account_id)?;
             }
             for thread_id in &changed_threads {
                 repo::threads::recompute(&tx, *thread_id)?;
