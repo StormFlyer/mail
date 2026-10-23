@@ -1096,6 +1096,40 @@ impl Core {
         Ok(())
     }
 
+    /// Choose how long a POP3 account leaves downloaded mail on its server.
+    /// The account's next sync applies the choice.
+    pub async fn set_account_keep_on_server(
+        &self,
+        account_id: i64,
+        keep: KeepOnServer,
+    ) -> Result<()> {
+        let settings = self
+            .db
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                let mut config = repo::accounts::get_config(&tx, account_id)?
+                    .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
+                match config.mail_protocol {
+                    MailProtocol::Pop3 => {}
+                    MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
+                        return Err(CoreError::Other(
+                            "only POP3 accounts remove downloaded mail from their server".into(),
+                        ));
+                    }
+                }
+                config.settings.keep_on_server = keep;
+                repo::accounts::set_settings(&tx, account_id, &config.settings)?;
+                tx.commit()?;
+                Ok(config.settings)
+            })
+            .await?;
+        if let Some(handle) = self.handles.read().await.get(&account_id).cloned() {
+            handle.update_settings(settings);
+        }
+        self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
+        Ok(())
+    }
+
     pub async fn test_connection(&self, args: &AddPasswordAccountArgs) -> ConnectionTestResult {
         let mut args = args.clone();
         args.password = normalize_account_password(args.password);

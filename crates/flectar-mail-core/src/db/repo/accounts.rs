@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::models::*;
+use crate::pop3::Expire;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::parse_json_column;
@@ -18,6 +19,12 @@ fn account_from_row(row: &Row) -> rusqlite::Result<Account> {
         sync_state: row.get("sync_state")?,
         sync_error: row.get("sync_error")?,
         can_create_top_level_mailbox: row.get::<_, i64>("can_create_top_level_mailbox")? != 0,
+        server_keeps_mail_days: row.get::<_, Option<String>>("expire")?.and_then(|value| {
+            match super::pop3::parse_expire(&value)? {
+                Expire::Days(days) => Some(days),
+                Expire::Never => None,
+            }
+        }),
     })
 }
 
@@ -45,11 +52,12 @@ fn config_from_row(row: &Row) -> rusqlite::Result<AccountConfig> {
 
 pub fn list(conn: &Connection) -> Result<Vec<Account>> {
     let mut stmt = conn.prepare(
-        "SELECT id, email, display_name, avatar_url, provider, auth_kind,
-                mail_protocol, sync_state, sync_error, can_create_top_level_mailbox
-         FROM accounts
-         WHERE sync_state <> ?1
-         ORDER BY sort_order, id",
+        "SELECT a.id, a.email, a.display_name, a.avatar_url, a.provider, a.auth_kind,
+                a.mail_protocol, a.sync_state, a.sync_error, a.can_create_top_level_mailbox,
+                s.expire
+         FROM accounts a LEFT JOIN pop3_sync_state s ON s.account_id = a.id
+         WHERE a.sync_state <> ?1
+         ORDER BY a.sort_order, a.id",
     )?;
     let rows = stmt
         .query_map(params![CREDENTIAL_SETUP_STATE], account_from_row)?
@@ -84,19 +92,22 @@ pub fn get_config(conn: &Connection, id: i64) -> Result<Option<AccountConfig>> {
 
 pub fn get(conn: &Connection, id: i64) -> Result<Option<Account>> {
     let mut stmt = conn.prepare(
-        "SELECT id, email, display_name, avatar_url, provider, auth_kind,
-                mail_protocol, sync_state, sync_error, can_create_top_level_mailbox
-         FROM accounts WHERE id = ?1",
+        "SELECT a.id, a.email, a.display_name, a.avatar_url, a.provider, a.auth_kind,
+                a.mail_protocol, a.sync_state, a.sync_error, a.can_create_top_level_mailbox,
+                s.expire
+         FROM accounts a LEFT JOIN pop3_sync_state s ON s.account_id = a.id
+         WHERE a.id = ?1",
     )?;
     Ok(stmt.query_row(params![id], account_from_row).optional()?)
 }
 
 pub fn find_by_email(conn: &Connection, email: &str) -> Result<Option<Account>> {
     let mut stmt = conn.prepare(
-        "SELECT id, email, display_name, avatar_url, provider, auth_kind,
-                mail_protocol, sync_state, sync_error, can_create_top_level_mailbox
-         FROM accounts
-         WHERE email = ?1 COLLATE NOCASE
+        "SELECT a.id, a.email, a.display_name, a.avatar_url, a.provider, a.auth_kind,
+                a.mail_protocol, a.sync_state, a.sync_error, a.can_create_top_level_mailbox,
+                s.expire
+         FROM accounts a LEFT JOIN pop3_sync_state s ON s.account_id = a.id
+         WHERE a.email = ?1 COLLATE NOCASE
          LIMIT 1",
     )?;
     Ok(stmt

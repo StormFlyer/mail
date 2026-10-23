@@ -19,7 +19,8 @@ struct Stored {
 }
 
 /// A POP3 server whose maildrop and behavior tests change between sessions.
-/// Every session's commands are recorded.
+/// Every session's commands are recorded. Messages marked with DELE leave
+/// the maildrop when their session ends with QUIT.
 struct Server {
     capabilities: Vec<&'static str>,
     maildrop: Vec<Stored>,
@@ -27,6 +28,10 @@ struct Server {
     pass_reply: Option<&'static str>,
     /// UIDLs whose RETR is refused.
     refused: HashSet<String>,
+    /// UIDLs whose DELE is refused.
+    kept: HashSet<String>,
+    /// The connection drops instead of answering this DELE of a session.
+    drop_at_delete: Option<usize>,
     sessions: Vec<Vec<String>>,
 }
 
@@ -37,6 +42,8 @@ impl Server {
             maildrop,
             pass_reply: None,
             refused: HashSet::new(),
+            kept: HashSet::new(),
+            drop_at_delete: None,
             sessions: Vec::new(),
         }
     }
@@ -95,7 +102,7 @@ async fn serve(server: Shared) -> u16 {
 async fn session(tcp: tokio::net::TcpStream, server: Shared) {
     let (read, mut write) = tcp.into_split();
     let mut reader = BufReader::new(read);
-    let (maildrop, capabilities, pass_reply, refused) = {
+    let (maildrop, capabilities, pass_reply, refused, kept, drop_at_delete) = {
         let mut server = server.lock().unwrap();
         server.sessions.push(Vec::new());
         (
@@ -103,8 +110,12 @@ async fn session(tcp: tokio::net::TcpStream, server: Shared) {
             server.capabilities.clone(),
             server.pass_reply,
             server.refused.clone(),
+            server.kept.clone(),
+            server.drop_at_delete,
         )
     };
+    let mut deleted = vec![false; maildrop.len()];
+    let mut deletes = 0;
     write.write_all(b"+OK ready\r\n").await.unwrap();
     loop {
         let mut line = String::new();
@@ -121,9 +132,15 @@ async fn session(tcp: tokio::net::TcpStream, server: Shared) {
             .push(line.clone());
         let mut words = line.split(' ');
         let command = words.next().unwrap_or_default().to_ascii_uppercase();
-        let number = |word: Option<&str>| {
+        let index = |word: Option<&str>| {
             word.and_then(|value| value.parse::<usize>().ok())
-                .and_then(|value| maildrop.get(value.checked_sub(1)?))
+                .and_then(|value| value.checked_sub(1))
+                .filter(|&index| index < maildrop.len())
+        };
+        let number = |word: Option<&str>| {
+            index(word)
+                .filter(|&index| !deleted[index])
+                .map(|index| &maildrop[index])
         };
         let reply: Vec<u8> = match command.as_str() {
             "CAPA" => {
@@ -140,7 +157,9 @@ async fn session(tcp: tokio::net::TcpStream, server: Shared) {
             "UIDL" => {
                 let mut reply = String::from("+OK\r\n");
                 for (index, message) in maildrop.iter().enumerate() {
-                    reply.push_str(&format!("{} {}\r\n", index + 1, message.uidl));
+                    if !deleted[index] {
+                        reply.push_str(&format!("{} {}\r\n", index + 1, message.uidl));
+                    }
                 }
                 reply.push_str(".\r\n");
                 reply.into_bytes()
@@ -148,7 +167,9 @@ async fn session(tcp: tokio::net::TcpStream, server: Shared) {
             "LIST" => {
                 let mut reply = String::from("+OK\r\n");
                 for (index, message) in maildrop.iter().enumerate() {
-                    reply.push_str(&format!("{} {}\r\n", index + 1, message.raw.len()));
+                    if !deleted[index] {
+                        reply.push_str(&format!("{} {}\r\n", index + 1, message.raw.len()));
+                    }
                 }
                 reply.push_str(".\r\n");
                 reply.into_bytes()
@@ -168,7 +189,31 @@ async fn session(tcp: tokio::net::TcpStream, server: Shared) {
                 Some(message) => [b"+OK\r\n".to_vec(), dot_stuffed(&message.raw)].concat(),
                 None => b"-ERR no such message\r\n".to_vec(),
             },
+            "DELE" => match index(words.next()) {
+                Some(index) if deleted[index] => b"-ERR message already deleted\r\n".to_vec(),
+                Some(index) if kept.contains(&maildrop[index].uidl) => {
+                    b"-ERR [SYS/PERM] message can't be deleted\r\n".to_vec()
+                }
+                Some(index) => {
+                    deletes += 1;
+                    if drop_at_delete == Some(deletes) {
+                        return;
+                    }
+                    deleted[index] = true;
+                    b"+OK marked\r\n".to_vec()
+                }
+                None => b"-ERR no such message\r\n".to_vec(),
+            },
             "QUIT" => {
+                {
+                    let mut server = server.lock().unwrap();
+                    assert_eq!(server.maildrop.len(), deleted.len());
+                    let mut index = 0;
+                    server.maildrop.retain(|_| {
+                        index += 1;
+                        !deleted[index - 1]
+                    });
+                }
                 let _ = write.write_all(b"+OK bye\r\n").await;
                 return;
             }
@@ -295,6 +340,90 @@ impl Fixture {
             .unwrap()
     }
 
+    /// The Sent copy of the message `recent("self", ...)` delivers.
+    async fn sent_to_self(&self) -> i64 {
+        let account_id = self.config.id;
+        let original = self._dir.path().join("sent-to-self.eml");
+        tokio::fs::write(&original, recent("self", "Note to self").raw)
+            .await
+            .unwrap();
+        let original = original.to_string_lossy().into_owned();
+        self.ctx
+            .db
+            .write(move |conn| {
+                let sent = repo::folders::by_role(conn, account_id, roles::SENT)?.unwrap();
+                let thread = conn.query_row(
+                    "INSERT INTO threads (account_id, subject_norm, last_message_at)
+                     VALUES (?1, 'note to self', 1) RETURNING id",
+                    [account_id],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                Ok(conn.query_row(
+                    "INSERT INTO messages (thread_id, account_id, folder_id, message_id, subject,
+                       from_addr, date, is_read, is_outgoing, raw_path)
+                     VALUES (?1, ?2, ?3, 'self@example.com', 'Note to self', 'me@example.com',
+                             1, 1, 1, ?4)
+                     RETURNING id",
+                    rusqlite::params![thread, account_id, sent.id, original],
+                    |row| row.get::<_, i64>(0),
+                )?)
+            })
+            .await
+            .unwrap()
+    }
+
+    /// The UIDLs left on the server.
+    fn maildrop(&self) -> Vec<String> {
+        let server = self.server.lock().unwrap();
+        server
+            .maildrop
+            .iter()
+            .map(|message| message.uidl.clone())
+            .collect()
+    }
+
+    /// The last session's DELE commands, in order.
+    fn removed(&self) -> Vec<String> {
+        self.last_session()
+            .into_iter()
+            .filter(|command| command.starts_with("DELE"))
+            .collect()
+    }
+
+    async fn message_id(&self, subject: &str) -> i64 {
+        let account_id = self.config.id;
+        let subject = subject.to_owned();
+        self.ctx
+            .db
+            .read(move |conn| {
+                Ok(conn.query_row(
+                    "SELECT id FROM messages WHERE account_id = ?1 AND subject = ?2",
+                    rusqlite::params![account_id, subject],
+                    |row| row.get(0),
+                )?)
+            })
+            .await
+            .unwrap()
+    }
+
+    /// Delete a message the way emptying the Trash does.
+    async fn delete_here(&self, subject: &str) {
+        let message_id = self.message_id(subject).await;
+        crate::sync::finish_permanent_delete(&self.ctx, Some(message_id))
+            .await
+            .unwrap();
+    }
+
+    async fn original(&self, subject: &str) -> String {
+        let message_id = self.message_id(subject).await;
+        self.ctx
+            .db
+            .read(move |conn| Ok(repo::messages::get_row(conn, message_id)?.unwrap().raw_path))
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
     async fn originals(&self) -> Vec<std::path::PathBuf> {
         let mut found = Vec::new();
         if let Ok(mut entries) = tokio::fs::read_dir(self.ctx.paths.mail_dir(self.config.id)).await
@@ -400,29 +529,7 @@ async fn a_repeated_uidl_downloads_only_its_newest_message() {
 async fn mail_sent_to_yourself_stays_in_sent() {
     let fixture = fixture(vec![recent("self", "Note to self")]).await;
     let account_id = fixture.config.id;
-    let sent_id = fixture
-        .ctx
-        .db
-        .write(move |conn| {
-            let sent = repo::folders::by_role(conn, account_id, roles::SENT)?.unwrap();
-            let thread = conn.query_row(
-                "INSERT INTO threads (account_id, subject_norm, last_message_at)
-                 VALUES (?1, 'note to self', 1) RETURNING id",
-                [account_id],
-                |row| row.get::<_, i64>(0),
-            )?;
-            Ok(conn.query_row(
-                "INSERT INTO messages (thread_id, account_id, folder_id, message_id, subject,
-                   from_addr, date, is_read, is_outgoing)
-                 VALUES (?1, ?2, ?3, 'self@example.com', 'Note to self', 'me@example.com',
-                         1, 1, 1)
-                 RETURNING id",
-                rusqlite::params![thread, account_id, sent.id],
-                |row| row.get::<_, i64>(0),
-            )?)
-        })
-        .await
-        .unwrap();
+    let sent_id = fixture.sent_to_self().await;
     fixture.sync().await.unwrap();
     assert!(fixture.inbox().await.is_empty());
     let (known, downloaded_as) = fixture
@@ -709,4 +816,160 @@ fn plans_list_the_newest_first_and_skip_what_is_settled() {
         .map(|candidate| candidate.uidl)
         .collect();
     assert_eq!(planned, ["new", "due", "recent", "old"]);
+}
+
+#[tokio::test]
+async fn mail_stays_on_the_server_unless_the_setting_removes_it() {
+    let fixture = fixture(vec![recent("a", "First"), recent("b", "Second")]).await;
+    fixture.sync().await.unwrap();
+    fixture.delete_here("First").await;
+    assert!(matches!(fixture.sync().await, Ok(Synced::Complete)));
+    assert!(fixture.removed().is_empty());
+    assert_eq!(fixture.maildrop(), ["uidl-a", "uidl-b"]);
+}
+
+#[tokio::test]
+async fn until_downloaded_removes_mail_in_the_session_that_stored_it() {
+    let mut fixture = fixture(vec![recent("a", "First"), recent("b", "Second")]).await;
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+    assert!(matches!(fixture.sync().await, Ok(Synced::Complete)));
+    assert_eq!(fixture.inbox().await, ["Second", "First"]);
+    let session = fixture.last_session();
+    let retrieved = session
+        .iter()
+        .rposition(|command| command.starts_with("RETR"));
+    let first_removal = session
+        .iter()
+        .position(|command| command.starts_with("DELE"));
+    assert!(retrieved < first_removal);
+    let mut removed = fixture.removed();
+    removed.sort();
+    assert_eq!(removed, ["DELE 1", "DELE 2"]);
+    assert_eq!(session.last().unwrap(), "QUIT");
+    assert!(fixture.maildrop().is_empty());
+
+    assert!(matches!(fixture.sync().await, Ok(Synced::Complete)));
+    assert!(fixture.retrieved().is_empty() && fixture.removed().is_empty());
+    assert_eq!(fixture.inbox().await.len(), 2);
+}
+
+#[tokio::test]
+async fn mail_deleted_here_is_removed_from_the_server() {
+    let mut fixture = fixture(vec![recent("a", "First"), recent("b", "Second")]).await;
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDeleted;
+    fixture.sync().await.unwrap();
+    assert!(fixture.removed().is_empty());
+
+    fixture.delete_here("First").await;
+    assert!(matches!(fixture.sync().await, Ok(Synced::Complete)));
+    assert_eq!(fixture.removed(), ["DELE 1"]);
+    assert_eq!(fixture.maildrop(), ["uidl-b"]);
+    assert_eq!(fixture.inbox().await, ["Second"]);
+}
+
+#[tokio::test]
+async fn mail_leaves_the_server_once_it_is_older_than_the_setting_keeps_it() {
+    let mut fixture = fixture(vec![recent("a", "Older"), recent("b", "Newer")]).await;
+    fixture.config.settings.keep_on_server = KeepOnServer::SevenDays;
+    fixture.sync().await.unwrap();
+    assert!(fixture.removed().is_empty());
+
+    let account_id = fixture.config.id;
+    fixture
+        .ctx
+        .db
+        .write(move |conn| {
+            conn.execute(
+                "UPDATE pop3_uidls SET stored_at = stored_at - 8 * 86400000
+                 WHERE account_id = ?1 AND uidl = 'uidl-a'",
+                [account_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    fixture.sync().await.unwrap();
+    assert_eq!(fixture.removed(), ["DELE 1"]);
+    assert_eq!(fixture.maildrop(), ["uidl-b"]);
+    // Mail the setting keeps a while longer still goes once deleted here.
+    fixture.delete_here("Newer").await;
+    fixture.sync().await.unwrap();
+    assert_eq!(fixture.removed(), ["DELE 1"]);
+    assert!(fixture.maildrop().is_empty());
+    assert_eq!(fixture.inbox().await, ["Older"]);
+}
+
+#[tokio::test]
+async fn a_message_whose_original_is_missing_stays_on_the_server() {
+    let mut fixture = fixture(vec![recent("a", "Lost file"), recent("b", "Kept file")]).await;
+    fixture.sync().await.unwrap();
+    tokio::fs::remove_file(fixture.original("Lost file").await)
+        .await
+        .unwrap();
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+    fixture.sync().await.unwrap();
+    assert_eq!(fixture.removed(), ["DELE 2"]);
+    assert_eq!(fixture.maildrop(), ["uidl-a"]);
+}
+
+#[tokio::test]
+async fn mail_the_account_already_had_stays_on_the_server() {
+    let mut fixture = fixture(vec![recent("self", "Note to self")]).await;
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+    fixture.sent_to_self().await;
+    fixture.sync().await.unwrap();
+    assert_eq!(fixture.known().await["uidl-self"].state, UidlState::Matched);
+    assert!(fixture.removed().is_empty());
+    assert_eq!(fixture.maildrop(), ["uidl-self"]);
+}
+
+#[tokio::test]
+async fn a_reused_or_repeated_uidl_keeps_its_messages_on_the_server() {
+    let mut fixture = fixture(vec![recent("a", "First"), recent("b", "Second")]).await;
+    fixture.sync().await.unwrap();
+    {
+        let mut server = fixture.server.lock().unwrap();
+        // Another message under a UIDL that was downloaded before, and a
+        // second message under the other one.
+        let mut reused = recent("other", "Another message entirely");
+        reused.uidl = "uidl-a".into();
+        server.maildrop[0] = reused;
+        let mut repeated = recent("c", "Third");
+        repeated.uidl = "uidl-b".into();
+        server.maildrop.push(repeated);
+    }
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+    fixture.sync().await.unwrap();
+    assert!(fixture.removed().is_empty());
+    assert_eq!(fixture.maildrop(), ["uidl-a", "uidl-b", "uidl-b"]);
+}
+
+#[tokio::test]
+async fn a_removal_the_server_refuses_is_tried_again_later() {
+    let mut fixture = fixture(vec![recent("a", "First"), recent("b", "Second")]).await;
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+    fixture.server.lock().unwrap().kept.insert("uidl-a".into());
+    assert!(matches!(fixture.sync().await, Ok(Synced::Complete)));
+    assert_eq!(fixture.maildrop(), ["uidl-a"]);
+
+    fixture.server.lock().unwrap().kept.clear();
+    fixture.sync().await.unwrap();
+    assert_eq!(fixture.removed(), ["DELE 1"]);
+    assert!(fixture.maildrop().is_empty());
+}
+
+#[tokio::test]
+async fn removals_take_effect_only_when_the_session_ends_with_quit() {
+    let mut fixture = fixture(vec![recent("a", "First"), recent("b", "Second")]).await;
+    fixture.config.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+    fixture.server.lock().unwrap().drop_at_delete = Some(2);
+    assert!(matches!(fixture.sync().await, Err(Failure::Other(_))));
+    // The downloads were kept, and the server kept everything.
+    assert_eq!(fixture.inbox().await, ["Second", "First"]);
+    assert_eq!(fixture.maildrop(), ["uidl-a", "uidl-b"]);
+
+    fixture.server.lock().unwrap().drop_at_delete = None;
+    assert!(matches!(fixture.sync().await, Ok(Synced::Complete)));
+    assert!(fixture.retrieved().is_empty());
+    assert!(fixture.maildrop().is_empty());
 }

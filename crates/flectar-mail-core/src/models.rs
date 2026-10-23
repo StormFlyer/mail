@@ -316,6 +316,63 @@ impl SentCopyPolicy {
     }
 }
 
+/// How long a POP3 account leaves downloaded mail on its server. Mail is
+/// removed from the server only once this device has stored it, and every
+/// choice but `Always` also removes mail deleted here.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KeepOnServer {
+    #[default]
+    Always,
+    UntilDeleted,
+    SevenDays,
+    FourteenDays,
+    ThirtyDays,
+    UntilDownloaded,
+}
+
+impl KeepOnServer {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Always => "always",
+            Self::UntilDeleted => "untilDeleted",
+            Self::SevenDays => "sevenDays",
+            Self::FourteenDays => "fourteenDays",
+            Self::ThirtyDays => "thirtyDays",
+            Self::UntilDownloaded => "untilDownloaded",
+        }
+    }
+
+    pub fn from_storage(value: &str) -> Option<Self> {
+        match value {
+            "always" => Some(Self::Always),
+            "untilDeleted" => Some(Self::UntilDeleted),
+            "sevenDays" => Some(Self::SevenDays),
+            "fourteenDays" => Some(Self::FourteenDays),
+            "thirtyDays" => Some(Self::ThirtyDays),
+            "untilDownloaded" => Some(Self::UntilDownloaded),
+            _ => None,
+        }
+    }
+
+    /// How many days downloaded mail stays on the server, when that's
+    /// limited.
+    pub const fn days(self) -> Option<u32> {
+        match self {
+            Self::Always | Self::UntilDeleted => None,
+            Self::SevenDays => Some(7),
+            Self::FourteenDays => Some(14),
+            Self::ThirtyDays => Some(30),
+            Self::UntilDownloaded => Some(0),
+        }
+    }
+
+    /// Whether mail deleted here is removed from the server.
+    pub const fn removes_deleted(self) -> bool {
+        !matches!(self, Self::Always)
+    }
+}
+
 /// Typed contents of `accounts.settings_json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -334,6 +391,9 @@ pub struct AccountSettings {
     pub default_sender_email: Option<String>,
     #[serde(default)]
     pub sent_copy_policy: SentCopyPolicy,
+    /// POP3 accounts only.
+    #[serde(default)]
+    pub keep_on_server: KeepOnServer,
 }
 
 impl AccountSettings {
@@ -346,6 +406,7 @@ impl AccountSettings {
             connection,
             default_sender_email: None,
             sent_copy_policy: SentCopyPolicy::Auto,
+            keep_on_server: KeepOnServer::Always,
         }
     }
 }
@@ -360,6 +421,30 @@ mod account_settings_tests {
 
     const MINIMAL_SETTINGS: &str =
         r#"{"connection":{"incomingSecurity":"tls","smtpSecurity":"starttls"}}"#;
+
+    #[test]
+    fn keep_on_server_defaults_to_always_and_survives_serialization() {
+        let mut settings: AccountSettings = serde_json::from_str(MINIMAL_SETTINGS).unwrap();
+        assert_eq!(settings.keep_on_server, KeepOnServer::Always);
+        for keep in [
+            KeepOnServer::Always,
+            KeepOnServer::UntilDeleted,
+            KeepOnServer::SevenDays,
+            KeepOnServer::FourteenDays,
+            KeepOnServer::ThirtyDays,
+            KeepOnServer::UntilDownloaded,
+        ] {
+            settings.keep_on_server = keep;
+            let restored: AccountSettings =
+                serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+            assert_eq!(restored.keep_on_server, keep);
+            assert_eq!(KeepOnServer::from_storage(keep.as_str()), Some(keep));
+        }
+        assert!(!KeepOnServer::Always.removes_deleted());
+        assert_eq!(KeepOnServer::UntilDeleted.days(), None);
+        assert_eq!(KeepOnServer::FourteenDays.days(), Some(14));
+        assert_eq!(KeepOnServer::UntilDownloaded.days(), Some(0));
+    }
 
     #[test]
     fn sent_copy_defaults_and_overrides_survive_serialization() {
@@ -443,6 +528,12 @@ pub struct Account {
     /// Whether the provider currently permits creating a root mailbox.
     #[serde(default = "default_true")]
     pub can_create_top_level_mailbox: bool,
+    /// The days a POP3 server keeps downloaded mail before removing it on
+    /// its own, as it announced at the last sign-in (RFC 2449 EXPIRE). Zero
+    /// removes it when the session ends. `None` when it keeps mail or hasn't
+    /// said.
+    #[serde(default)]
+    pub server_keeps_mail_days: Option<u32>,
 }
 
 /// Full account row including server config; internal to the native application.

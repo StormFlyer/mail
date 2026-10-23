@@ -2634,6 +2634,7 @@ mod tests {
             sync_state: "idle".into(),
             sync_error: None,
             can_create_top_level_mailbox: true,
+            server_keeps_mail_days: None,
         }
     }
 
