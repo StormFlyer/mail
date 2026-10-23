@@ -844,6 +844,14 @@ export component SettingsDialog inherits Rectangle {
         root.delete_account_confirmation = true;
     }
 
+    // Servers are suggested for new accounts only; an edit keeps the
+    // account's own.
+    function suggest-servers(email: string) {
+        if !root.account_editing {
+            root.suggest_account_settings(email);
+        }
+    }
+
     function choose-protocol(protocol: string) {
         if MailPorts.is-standard-incoming(root.incoming_port) {
             root.incoming_port = MailPorts.incoming(protocol, root.incoming_security);
@@ -2728,14 +2736,14 @@ export component SettingsDialog inherits Rectangle {
                                     padding: 0px;
                                     height: 57px;
                                     spacing: 10px;
-                                    FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("Email address"); value <=> root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.suggest_account_settings(value); } }
+                                    FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("Email address"); value <=> root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.suggest-servers(value); } }
                                     FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("Username"); value <=> root.account_username; placeholder: @tr("Usually your email address"); label-color: root.secondary-text; }
                                 }
                                 if root.compact : VerticalBox {
                                     padding: 0px;
                                     height: 124px;
                                     spacing: 10px;
-                                    FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Email address"); value <=> root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.suggest_account_settings(value); } }
+                                    FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Email address"); value <=> root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.suggest-servers(value); } }
                                     FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Username"); value <=> root.account_username; placeholder: @tr("Usually your email address"); label-color: root.secondary-text; }
                                 }
                                 FormField { enabled: !root.account_setup_in_progress; height: 57px; label: root.account_protocol == "jmap" ? @tr("Password, app password, or API token") : @tr("Password or app password"); value <=> root.account_password; placeholder: @tr("Stored securely in your system keyring"); input-type: password; label-color: root.secondary-text; }
