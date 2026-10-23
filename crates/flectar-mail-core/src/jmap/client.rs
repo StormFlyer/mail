@@ -436,11 +436,12 @@ async fn resolve_session_url(mut current: Url, allow_local_http: bool) -> Result
         .build()
         .map_err(|error| CoreError::Network(format!("JMAP discovery client failed: {error}")))?;
     for redirect_count in 0..=MAX_DISCOVERY_REDIRECTS {
-        let response = http
-            .get(current.clone())
-            .send()
-            .await
-            .map_err(|error| CoreError::Network(format!("JMAP discovery failed: {error}")))?;
+        let response = http.get(current.clone()).send().await.map_err(|error| {
+            CoreError::Network(format!(
+                "JMAP discovery failed: {}",
+                transport_failure(&error)
+            ))
+        })?;
         if !matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
             return Ok(current);
         }
@@ -598,9 +599,39 @@ pub fn map_error(error: jmap_client::Error) -> CoreError {
             CoreError::Auth("JMAP rejected the password, app password, or API token".into())
         }
         jmap_client::Error::Transport(source) if source.is_timeout() || source.is_connect() => {
-            CoreError::Network(format!("JMAP connection failed: {source}"))
+            CoreError::Network(format!(
+                "JMAP request failed: {}",
+                transport_failure(source)
+            ))
         }
+        jmap_client::Error::Transport(source) => CoreError::Jmap(transport_failure(source)),
         _ => CoreError::Jmap(error.to_string()),
+    }
+}
+
+/// What went wrong in an HTTP exchange, in place of reqwest's generic "error
+/// sending request": no answer in time, or the innermost cause, such as a
+/// refused connection, a failed DNS lookup or an untrusted certificate.
+pub(crate) fn transport_failure(error: &reqwest::Error) -> String {
+    let url = error
+        .url()
+        .map(|url| format!(" ({url})"))
+        .unwrap_or_default();
+    if error.is_timeout() {
+        return format!("the server did not answer in time{url}");
+    }
+    let mut cause: &(dyn std::error::Error + 'static) = error;
+    let mut nested = false;
+    while let Some(source) = cause.source() {
+        cause = source;
+        nested = true;
+    }
+    if error.is_connect() {
+        format!("could not connect{url}: {cause}")
+    } else if nested {
+        format!("{error}: {cause}")
+    } else {
+        error.to_string()
     }
 }
 
@@ -1046,6 +1077,48 @@ pub(crate) mod tests {
                 .unwrap()
                 .to_ascii_lowercase()
                 .contains("authorization:")
+        );
+    }
+
+    #[tokio::test]
+    async fn transport_failures_say_what_went_wrong() {
+        let http = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(200))
+            .build()
+            .unwrap();
+
+        // A server that takes the connection but never answers.
+        let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let silent_url = format!("http://{}/jmap/", silent.local_addr().unwrap());
+        let held = tokio::spawn(async move {
+            let _connection = silent.accept().await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        let error = http.post(&silent_url).send().await.unwrap_err();
+        assert_eq!(
+            transport_failure(&error),
+            format!("the server did not answer in time ({silent_url})")
+        );
+        assert!(matches!(
+            map_error(jmap_client::Error::Transport(error)),
+            CoreError::Network(message)
+                if message == format!("JMAP request failed: the server did not answer in time ({silent_url})")
+        ));
+        held.abort();
+
+        // Nothing listens on a port that was just released.
+        let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let closed_url = format!("http://{}/jmap/", closed.local_addr().unwrap());
+        drop(closed);
+        let error = http.post(&closed_url).send().await.unwrap_err();
+        let failure = transport_failure(&error);
+        assert!(
+            failure.starts_with(&format!("could not connect ({closed_url}): ")),
+            "{failure}"
+        );
+        assert!(
+            failure.to_ascii_lowercase().contains("refused"),
+            "{failure}"
         );
     }
 

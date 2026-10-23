@@ -2633,10 +2633,12 @@ async fn download_message_bounded(c: &ConnectedClient, blob_id: &str) -> Result<
             URLPart::Parameter(URLParameter::Type) => url.push_str("message/rfc822"),
         }
     }
-    let response =
-        c.download_http.get(url).send().await.map_err(|error| {
-            CoreError::Network(format!("JMAP message download failed: {error}"))
-        })?;
+    let response = c.download_http.get(url).send().await.map_err(|error| {
+        CoreError::Network(format!(
+            "JMAP message download failed: {}",
+            client::transport_failure(&error)
+        ))
+    })?;
     let status = response.status();
     if matches!(status.as_u16(), 401 | 403) {
         return Err(CoreError::Auth(
@@ -2664,7 +2666,10 @@ async fn download_message_bounded(c: &ConnectedClient, blob_id: &str) -> Result<
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|error| {
-            CoreError::Network(format!("JMAP message download failed: {error}"))
+            CoreError::Network(format!(
+                "JMAP message download failed: {}",
+                client::transport_failure(&error)
+            ))
         })?;
         if bytes.len().saturating_add(chunk.len()) > MAX_JMAP_MESSAGE_BYTES {
             return Err(CoreError::Jmap(format!(
