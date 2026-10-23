@@ -344,6 +344,10 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
             params![id],
         )?;
         conn.execute(
+            "DELETE FROM jmap_full_sync_stored WHERE account_id=?1",
+            params![id],
+        )?;
+        conn.execute(
             "UPDATE messages SET jmap_id=NULL,jmap_blob_id=NULL WHERE account_id=?1",
             params![id],
         )?;
@@ -797,8 +801,22 @@ mod tests {
             params![id],
         )
         .unwrap();
+        conn.execute(
+            "INSERT INTO jmap_full_sync_stored(account_id,email_id) VALUES(?1,'email-a')",
+            params![id],
+        )
+        .unwrap();
+        let full_sync_progress = |conn: &Connection| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM jmap_full_sync_stored WHERE account_id=?1",
+                params![id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap()
+        };
 
         update_password(&conn, id, &initial).unwrap();
+        assert_eq!(full_sync_progress(&conn), 1);
         assert_eq!(
             conn.query_row(
                 "SELECT email_state FROM jmap_sync_state WHERE account_id=?1",
@@ -846,6 +864,7 @@ mod tests {
             .unwrap()
             .is_none()
         );
+        assert_eq!(full_sync_progress(&conn), 0);
         for query in [
             "SELECT jmap_id FROM folders WHERE id=?1",
             "SELECT jmap_id FROM threads WHERE id=?1",

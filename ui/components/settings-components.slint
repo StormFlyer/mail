@@ -337,6 +337,8 @@ export component ShortcutRow inherits Rectangle {
 export component FormField inherits VerticalBox {
     in property <bool> enabled: true;
     in property <string> label;
+    // Bind with `<=>`: typing replaces a one-way binding, after which the
+    // field would keep showing its old text when the form is reset or filled.
     in-out property <string> value;
     in property <string> placeholder;
     in property <InputType> input-type: InputType.text;
@@ -357,12 +359,9 @@ export component FormField inherits VerticalBox {
     field := LineEdit {
         enabled: root.enabled;
         height: 36px;
-        text: root.value;
+        text <=> root.value;
         placeholder-text: root.placeholder;
         input-type: root.input-type;
-        edited(value) => {
-            root.value = value;
-            root.edited(value);
-        }
+        edited(value) => { root.edited(value); }
     }
 }

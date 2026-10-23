@@ -403,6 +403,33 @@ pub fn upsert_jmap(
     )?)
 }
 
+/// Drops the folders of a JMAP account that no server mailbox stands for,
+/// left by an earlier server or protocol, once nothing is in them. The
+/// account's own drafts in such a folder first move to its folder of the same
+/// role on the server.
+pub fn drop_jmap_leftovers(conn: &Connection, account_id: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE messages SET uid = NULL, folder_id = (
+           SELECT linked.id FROM folders old
+           JOIN folders linked ON linked.account_id = old.account_id
+             AND linked.role = old.role AND linked.jmap_id IS NOT NULL
+           WHERE old.id = messages.folder_id
+           ORDER BY linked.id LIMIT 1)
+         WHERE account_id = ?1 AND folder_id IN (
+           SELECT old.id FROM folders old
+           JOIN folders linked ON linked.account_id = old.account_id
+             AND linked.role = old.role AND linked.jmap_id IS NOT NULL
+           WHERE old.account_id = ?1 AND old.jmap_id IS NULL)",
+        params![account_id],
+    )?;
+    conn.execute(
+        "DELETE FROM folders WHERE account_id = ?1 AND jmap_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.folder_id = folders.id)",
+        params![account_id],
+    )?;
+    Ok(())
+}
+
 fn unique_jmap_name(
     conn: &Connection,
     account_id: i64,

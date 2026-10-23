@@ -61,6 +61,15 @@ export component MailSecurityFields inherits VerticalBox {
         root.smtp-security = security;
     }
 
+    // Choosing an item replaces a selector's binding. These keep both showing
+    // values set later, such as a reset form or a suggested server.
+    changed incoming-security => {
+        incoming-encryption.current-index = root.security-index(root.incoming-security);
+    }
+    changed smtp-security => {
+        smtp-encryption.current-index = root.security-index(root.smtp-security);
+    }
+
     Text { text: @tr("Connection security"); color: AppTheme.heading; font-size: TypeScale.secondary; font-weight: 600; }
     HorizontalBox {
         height: 58px;
@@ -75,7 +84,7 @@ export component MailSecurityFields inherits VerticalBox {
             padding: 0px;
             spacing: 4px;
             Text { text: root.incoming-protocol == "pop3" ? @tr("POP3 encryption") : @tr("IMAP encryption"); color: AppTheme.secondary; font-size: TypeScale.caption; }
-            ComboBox {
+            incoming-encryption := ComboBox {
                 height: 36px;
                 min-width: 0px;
                 enabled: root.enabled;
@@ -91,7 +100,7 @@ export component MailSecurityFields inherits VerticalBox {
             padding: 0px;
             spacing: 4px;
             Text { text: @tr("SMTP encryption"); color: AppTheme.secondary; font-size: TypeScale.caption; }
-            ComboBox {
+            smtp-encryption := ComboBox {
                 height: 36px;
                 min-width: 0px;
                 enabled: root.enabled;

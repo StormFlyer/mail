@@ -33,6 +33,8 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/014_folder_paths.sql")),
     Migration::TableRebuild(include_str!("migrations/015_account_protocols.sql")),
     Migration::Plain(include_str!("migrations/016_pop3.sql")),
+    Migration::Plain(include_str!("migrations/017_jmap_attachment_listing.sql")),
+    Migration::Plain(include_str!("migrations/018_jmap_full_sync_progress.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -235,6 +237,7 @@ mod tests {
             "folders",
             "gmail_labels",
             "gmail_sync_state",
+            "jmap_full_sync_stored",
             "jmap_sync_state",
             "labels",
             "message_bodies",
@@ -339,6 +342,81 @@ mod tests {
             )
             .unwrap();
         assert_eq!(indexed, 0);
+    }
+
+    #[test]
+    fn jmap_attachment_listing_upgrade_keeps_what_header_sync_listed() {
+        let mut conn = staged(16);
+        seed_mail_graph(&conn);
+        conn.execute_batch(
+            "UPDATE messages SET jmap_id = 'email-1', jmap_blob_id = 'blob-1', has_attachments = 1
+             WHERE id = 1;
+             INSERT INTO messages (id, account_id, thread_id, folder_id, subject, date, has_attachments)
+             VALUES (2, 1, 1, 1, 'Not on a JMAP server', 2, 1);",
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+        let markers = conn
+            .prepare("SELECT id, jmap_attachments_blob_id FROM messages ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<(i64, Option<String>)>>>()
+            .unwrap();
+        assert_eq!(markers, [(1, Some("blob-1".to_owned())), (2, None)]);
+        let queued = |conn: &Connection| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM messages INDEXED BY idx_messages_jmap_attachments_pending
+                 WHERE has_attachments = 1 AND body_state <> 'cached'
+                   AND jmap_blob_id IS NOT NULL AND jmap_attachments_blob_id IS NOT jmap_blob_id",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(queued(&conn), 0);
+        conn.execute(
+            "UPDATE messages SET jmap_blob_id = 'blob-2' WHERE id = 1",
+            [],
+        )
+        .unwrap();
+        assert_eq!(queued(&conn), 1);
+        conn.execute("UPDATE messages SET body_state = 'cached' WHERE id = 1", [])
+            .unwrap();
+        assert_eq!(queued(&conn), 0);
+    }
+
+    #[test]
+    fn jmap_full_sync_progress_upgrade_keeps_sync_states() {
+        let mut conn = staged(17);
+        seed_mail_graph(&conn);
+        conn.execute(
+            "INSERT INTO jmap_sync_state(account_id,mailbox_state,email_state)
+             VALUES(1,'mailboxes','emails')",
+            [],
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+        let states: (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT mailbox_state,email_state,full_sync_state FROM jmap_sync_state",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(states, ("mailboxes".into(), "emails".into(), None));
+        conn.execute(
+            "INSERT INTO jmap_full_sync_stored(account_id,email_id) VALUES(1,'email-a')",
+            [],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM accounts WHERE id=1", []).unwrap();
+        let progress: i64 = conn
+            .query_row("SELECT COUNT(*) FROM jmap_full_sync_stored", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(progress, 0);
     }
 
     #[test]
