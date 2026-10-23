@@ -517,6 +517,12 @@ fn is_authentication_rejection(error: &jmap_client::Error) -> bool {
     }
 }
 
+/// The server didn't answer within the request timeout. Asking for fewer
+/// objects may still work.
+pub fn is_timeout(error: &jmap_client::Error) -> bool {
+    matches!(error, jmap_client::Error::Transport(source) if source.is_timeout())
+}
+
 fn is_unauthorized(error: &jmap_client::Error) -> bool {
     match error {
         jmap_client::Error::Problem(problem) => problem.status() == Some(401),

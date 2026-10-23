@@ -28,7 +28,7 @@ const MAX_CHANGE_PAGES: usize = 10_000;
 const MAX_JMAP_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
 /// Stalwart reads a message in full to list its attachments, so one listing
 /// request covers at most this many message bytes, or a single larger
-/// message.
+/// message. A request the server doesn't answer in time lowers it.
 const ATTACHMENT_LISTING_BYTES: i64 = 32 * 1024 * 1024;
 const ATTACHMENT_LISTING_EMAILS: usize = 50;
 
@@ -75,6 +75,7 @@ async fn actor(
     let mut waiters = Vec::new();
     let mut retry = 1u64;
     let mut identities_synced_at: Option<std::time::Instant> = None;
+    let mut listing_bytes = ATTACHMENT_LISTING_BYTES;
     loop {
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
@@ -180,7 +181,14 @@ async fn actor(
                 (Some(connected), true) => match wake.now_or_never() {
                     Some(wake) => wake,
                     None => {
-                        listing = match list_attachments(&ctx, &config, connected).await {
+                        listing = match list_attachments(
+                            &ctx,
+                            &config,
+                            connected,
+                            &mut listing_bytes,
+                        )
+                        .await
+                        {
                             Ok(listed) => listed,
                             Err(error) => {
                                 tracing::warn!(account_id = config.id, %error, "JMAP attachment listing failed; retrying after the next sync");
@@ -625,17 +633,17 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
             (query_ids(config, c).await?, Vec::new(), state, true)
         }
     };
-    let max = max_objects_in_get(c);
     // Each Email/get page is committed on its own while the next one is in
     // flight: a first sync fills the mailbox newest first instead of showing
     // nothing until the whole history is downloaded. The email state is only
     // checkpointed once every page is stored, so an interrupted run restarts.
     let mut remote_ids = HashSet::with_capacity(ids.len());
-    let mut chunks = ids.chunks(max);
-    let mut fetched = match chunks.next() {
-        Some(chunk) => Some(fetch_headers(c, chunk).await?),
-        None => None,
+    let mut pages = HeaderPages {
+        ids: &ids,
+        position: 0,
+        size: max_objects_in_get(c),
     };
+    let mut fetched = pages.next(c).await?;
     while let Some((emails, not_found)) = fetched.take() {
         destroyed.extend(not_found);
         remote_ids.extend(
@@ -643,33 +651,60 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
                 .iter()
                 .filter_map(|email| email.id().map(str::to_owned)),
         );
-        let persist = persist_emails(ctx, config, emails);
-        fetched = match chunks.next() {
-            Some(chunk) => {
-                let (next, persisted) = tokio::join!(fetch_headers(c, chunk), persist);
-                persisted?;
-                Some(next?)
-            }
-            None => {
-                persist.await?;
-                None
-            }
-        };
+        let (next, persisted) = tokio::join!(pages.next(c), persist_emails(ctx, config, emails));
+        persisted?;
+        fetched = next?;
     }
     destroyed.sort();
     destroyed.dedup();
     finish_email_sync(ctx, config, remote_ids, destroyed, checkpoint_state, full).await
 }
 
-async fn fetch_headers(c: &ConnectedClient, ids: &[String]) -> Result<(Vec<Email>, Vec<String>)> {
+/// The header pages of one sync run, newest first.
+struct HeaderPages<'a> {
+    ids: &'a [String],
+    position: usize,
+    size: usize,
+}
+
+impl HeaderPages<'_> {
+    /// The next page of headers and the ids the server no longer has. A page
+    /// the server doesn't answer in time is asked for again in halves, and
+    /// later pages keep the smaller size, so a slow server still makes
+    /// progress.
+    async fn next(&mut self, c: &ConnectedClient) -> Result<Option<(Vec<Email>, Vec<String>)>> {
+        while self.position < self.ids.len() {
+            let end = self.ids.len().min(self.position + self.size);
+            match fetch_headers(c, &self.ids[self.position..end]).await {
+                Ok(page) => {
+                    self.position = end;
+                    return Ok(Some(page));
+                }
+                Err(error) if client::is_timeout(&error) && end - self.position > 1 => {
+                    self.size = (end - self.position) / 2;
+                    tracing::debug!(
+                        size = self.size,
+                        "JMAP header page timed out; asking for fewer"
+                    );
+                }
+                Err(error) => return Err(client::map_error(error)),
+            }
+        }
+        Ok(None)
+    }
+}
+
+async fn fetch_headers(
+    c: &ConnectedClient,
+    ids: &[String],
+) -> jmap_client::Result<(Vec<Email>, Vec<String>)> {
     let mut request = c.request();
     request
         .get_email()
         .account_id(&c.account_id)
         .ids(ids.iter().cloned())
         .properties(header_properties());
-    let mut response: EmailGetResponse =
-        request.send_get_email().await.map_err(client::map_error)?;
+    let mut response: EmailGetResponse = request.send_get_email().await?;
     Ok((response.take_list(), response.take_not_found()))
 }
 
@@ -1086,12 +1121,14 @@ async fn publish_changes(ctx: &SyncCtx, thread_ids: Vec<i64>, stale_paths: Vec<S
 /// call finds out whether more messages wait.
 ///
 /// Header sync leaves `attachments` out because Stalwart can only answer it by
-/// reading each message in full. Here the reads are bounded per request and
+/// reading each message in full. Here the reads are bounded per request by
+/// `budget`, which halves whenever the server doesn't answer in time, and
 /// never hold back mail sync.
 async fn list_attachments(
     ctx: &SyncCtx,
     config: &AccountConfig,
     c: &ConnectedClient,
+    budget: &mut i64,
 ) -> Result<bool> {
     let account_id = config.id;
     let limit = max_objects_in_get(c).min(ATTACHMENT_LISTING_EMAILS);
@@ -1101,19 +1138,58 @@ async fn list_attachments(
             repo::messages::jmap_attachment_listing_queue(conn, account_id, limit as i64)
         })
         .await?;
-    let mut bytes = 0_i64;
-    let mut batch = Vec::new();
-    for message in queue {
-        let size = message.size.max(0);
-        if !batch.is_empty() && bytes.saturating_add(size) > ATTACHMENT_LISTING_BYTES {
-            break;
+    let mut count = queue.len();
+    loop {
+        let mut bytes = 0_i64;
+        let mut batch = Vec::new();
+        for message in queue.iter().take(count) {
+            let size = message.size.max(0);
+            if !batch.is_empty() && bytes.saturating_add(size) > *budget {
+                break;
+            }
+            bytes = bytes.saturating_add(size);
+            batch.push(message.clone());
         }
-        bytes = bytes.saturating_add(size);
-        batch.push(message);
+        if batch.is_empty() {
+            return Ok(false);
+        }
+        match request_attachments(c, &batch).await {
+            Ok(listed) => {
+                store_attachments(ctx, batch, listed).await?;
+                return Ok(true);
+            }
+            Err(error) if client::is_timeout(&error) && batch.len() > 1 => {
+                // Halving the count too guarantees progress when sizes are
+                // unknown.
+                count = batch.len() / 2;
+                *budget = (bytes / 2).max(1);
+                tracing::debug!(
+                    account_id,
+                    budget = *budget,
+                    "JMAP attachment listing timed out; asking for fewer"
+                );
+            }
+            Err(error) if client::is_timeout(&error) => {
+                // The server can't read this one message in time. Rather than
+                // retrying it forever, Files leaves it out until the message
+                // is opened, which lists its attachments from the download.
+                tracing::warn!(
+                    account_id,
+                    size = bytes,
+                    "JMAP attachment listing of one message timed out; skipping it"
+                );
+                store_attachments(ctx, batch, Vec::new()).await?;
+                return Ok(true);
+            }
+            Err(error) => return Err(client::map_error(error)),
+        }
     }
-    if batch.is_empty() {
-        return Ok(false);
-    }
+}
+
+async fn request_attachments(
+    c: &ConnectedClient,
+    batch: &[repo::messages::JmapAttachmentListing],
+) -> jmap_client::Result<Vec<Email>> {
     let mut request = c.request();
     request
         .get_email()
@@ -1134,9 +1210,18 @@ async fn list_attachments(
             BodyProperty::Disposition,
             BodyProperty::Cid,
         ]);
-    let mut response: EmailGetResponse =
-        request.send_get_email().await.map_err(client::map_error)?;
-    let listed = response.take_list();
+    let mut response: EmailGetResponse = request.send_get_email().await?;
+    Ok(response.take_list())
+}
+
+/// Stores what the server listed for `batch` and marks every message in it as
+/// listed for its blob. Messages the server didn't list as they are here are
+/// left to header sync, which queues them again if their blob changes.
+async fn store_attachments(
+    ctx: &SyncCtx,
+    batch: Vec<repo::messages::JmapAttachmentListing>,
+    listed: Vec<Email>,
+) -> Result<()> {
     let thread_ids = ctx
         .db
         .write(move |conn| {
@@ -1181,7 +1266,7 @@ async fn list_attachments(
         })
         .await?;
     publish_changes(ctx, thread_ids, Vec::new()).await;
-    Ok(true)
+    Ok(())
 }
 
 fn max_objects_in_get(c: &ConnectedClient) -> usize {

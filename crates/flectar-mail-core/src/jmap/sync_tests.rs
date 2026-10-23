@@ -115,6 +115,8 @@ struct MockJmap {
     /// Ids Email/get reports as notFound.
     missing: Vec<&'static str>,
     max_objects_in_get: usize,
+    /// How long to hold back the answer to a method call.
+    delay: Option<fn(&str, &Value) -> Option<Duration>>,
 }
 
 impl Default for MockJmap {
@@ -126,6 +128,7 @@ impl Default for MockJmap {
             missing: Vec::new(),
             // One Email/get object per page.
             max_objects_in_get: 1,
+            delay: None,
         }
     }
 }
@@ -245,6 +248,7 @@ impl MockJmap {
         let mut body = vec![0; length];
         stream.read_exact(&mut body).await.unwrap();
         let mut status = "200 OK";
+        let mut hold = Duration::ZERO;
         let response = if get {
             session.to_string()
         } else {
@@ -274,6 +278,9 @@ impl MockJmap {
                         .lock()
                         .unwrap()
                         .push((method.to_owned(), call[1].clone()));
+                    if let Some(delay) = self.delay.and_then(|delay| delay(method, &call[1])) {
+                        hold = hold.max(delay);
+                    }
                     match self.answer(method, &call[1]) {
                         Ok(payload) => responses.push(json!([method, payload, call_id])),
                         Err(error) => responses.push(json!(["error", error, call_id])),
@@ -287,6 +294,7 @@ impl MockJmap {
             response.len(),
             response
         );
+        tokio::time::sleep(hold).await;
         // The client may have given up on a slow answer.
         let _ = stream.get_mut().write_all(http.as_bytes()).await;
     }
@@ -622,6 +630,12 @@ fn listed_ids(call: &Value) -> Vec<&str> {
         .collect()
 }
 
+/// One attachment listing request with the full byte budget.
+async fn list_once(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient) -> bool {
+    let mut budget = ATTACHMENT_LISTING_BYTES;
+    list_attachments(ctx, config, c, &mut budget).await.unwrap()
+}
+
 async fn attachment_rows(ctx: &SyncCtx) -> Vec<(String, String, String, String)> {
     ctx.db
         .read(|conn| {
@@ -667,11 +681,7 @@ async fn header_sync_leaves_attachment_lists_to_the_listing_pass() {
     }
     assert!(attachment_rows(&ctx).await.is_empty());
 
-    assert!(
-        list_attachments(&ctx, &config, &mock.connected)
-            .await
-            .unwrap()
-    );
+    assert!(list_once(&ctx, &config, &mock.connected).await);
     let listing = mock.calls("Email/get").pop().unwrap();
     assert_eq!(listed_ids(&listing), ["email-a"]);
     assert_eq!(
@@ -688,11 +698,7 @@ async fn header_sync_leaves_attachment_lists_to_the_listing_pass() {
         )]
     );
     let calls = mock.calls("Email/get").len();
-    assert!(
-        !list_attachments(&ctx, &config, &mock.connected)
-            .await
-            .unwrap()
-    );
+    assert!(!list_once(&ctx, &config, &mock.connected).await);
     assert_eq!(mock.calls("Email/get").len(), calls);
     mock.task.abort();
 }
@@ -728,10 +734,7 @@ async fn attachment_listing_bounds_the_message_bytes_of_each_request() {
     .await;
     run_sync(&ctx, &config, &mock.connected).await.unwrap();
     let headers = mock.calls("Email/get").len();
-    while list_attachments(&ctx, &config, &mock.connected)
-        .await
-        .unwrap()
-    {}
+    while list_once(&ctx, &config, &mock.connected).await {}
     let listings = mock.calls("Email/get").split_off(headers);
     // Newest first; a message larger than the budget goes alone.
     assert_eq!(
@@ -785,16 +788,8 @@ async fn attachment_listing_moves_past_messages_the_server_no_longer_matches() {
     }
     .start()
     .await;
-    assert!(
-        list_attachments(&ctx, &config, &gone.connected)
-            .await
-            .unwrap()
-    );
-    assert!(
-        !list_attachments(&ctx, &config, &gone.connected)
-            .await
-            .unwrap()
-    );
+    assert!(list_once(&ctx, &config, &gone.connected).await);
+    assert!(!list_once(&ctx, &config, &gone.connected).await);
     assert_eq!(gone.calls("Email/get").len(), 1);
     assert_eq!(mock.calls("Email/get").len(), headers);
     assert!(attachment_rows(&ctx).await.is_empty());
@@ -876,11 +871,7 @@ async fn adopting_a_message_drops_the_attachment_rows_of_its_previous_copy() {
         .await
         .unwrap();
     assert!(attachment_rows(&ctx).await.is_empty());
-    assert!(
-        list_attachments(&ctx, &config, &mock.connected)
-            .await
-            .unwrap()
-    );
+    assert!(list_once(&ctx, &config, &mock.connected).await);
     assert_eq!(
         attachment_rows(&ctx).await,
         [(
@@ -889,6 +880,157 @@ async fn adopting_a_message_drops_the_attachment_rows_of_its_previous_copy() {
             "email-a.pdf".to_owned(),
             "part-email-a".to_owned()
         )]
+    );
+    mock.task.abort();
+}
+
+/// Email/get calls naming more than two messages answer too late.
+fn slow_header_pages(method: &str, args: &Value) -> Option<Duration> {
+    let ids = args["ids"].as_array()?;
+    (method == "Email/get" && ids.len() > 2).then_some(Duration::from_secs(5))
+}
+
+#[tokio::test]
+async fn header_pages_that_time_out_are_fetched_in_halves() {
+    let (_dir, ctx, config) = fixture().await;
+    let mut mock = MockJmap {
+        emails: (0..6)
+            .map(|n| email(&format!("email-{n}"), &format!("thread-{n}")))
+            .collect(),
+        max_objects_in_get: 6,
+        delay: Some(slow_header_pages),
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    mock.connected
+        .client
+        .set_timeout(Duration::from_millis(300));
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    let pages = mock
+        .calls("Email/get")
+        .iter()
+        .map(|call| call["ids"].as_array().unwrap().len())
+        .collect::<Vec<_>>();
+    // After the state request, pages of six and three time out; the rest
+    // keep the size that worked.
+    assert_eq!(pages, [0, 6, 3, 1, 1, 1, 1, 1, 1]);
+    assert_eq!(
+        saved_email_state(&ctx, 1).await.unwrap(),
+        Some("state-0".into())
+    );
+    ctx.db
+        .read(|conn| {
+            let count: i64 = conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?;
+            assert_eq!(count, 6);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    mock.task.abort();
+}
+
+/// Attachment listings answer too late when they name more than one message,
+/// and always for email-a.
+fn slow_listings(method: &str, args: &Value) -> Option<Duration> {
+    let ids = args["ids"].as_array()?;
+    let listing = args["properties"]
+        .as_array()
+        .is_some_and(|properties| properties.contains(&json!("attachments")));
+    (method == "Email/get" && listing && (ids.len() > 1 || ids.contains(&json!("email-a"))))
+        .then_some(Duration::from_secs(5))
+}
+
+/// Attachment listings answer too late when they name more than one message.
+fn slow_shared_listings(method: &str, args: &Value) -> Option<Duration> {
+    let ids = args["ids"].as_array()?;
+    let listing = args["properties"]
+        .as_array()
+        .is_some_and(|properties| properties.contains(&json!("attachments")));
+    (method == "Email/get" && listing && ids.len() > 1).then_some(Duration::from_secs(5))
+}
+
+#[tokio::test]
+async fn attachment_listings_that_time_out_shrink_without_known_sizes() {
+    let (_dir, ctx, config) = fixture().await;
+    let mut mock = MockJmap {
+        emails: vec![
+            with_attachment(email("email-x", "thread-x"), 0, "2026-10-08T12:00:02Z"),
+            with_attachment(email("email-y", "thread-y"), 0, "2026-10-08T12:00:01Z"),
+        ],
+        max_objects_in_get: 500,
+        delay: Some(slow_shared_listings),
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    mock.connected
+        .client
+        .set_timeout(Duration::from_millis(300));
+    let headers = mock.calls("Email/get").len();
+    let mut budget = ATTACHMENT_LISTING_BYTES;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while list_attachments(&ctx, &config, &mock.connected, &mut budget)
+            .await
+            .unwrap()
+        {}
+    })
+    .await
+    .expect("listing made no progress");
+    let listings = mock.calls("Email/get").split_off(headers);
+    assert_eq!(
+        listings.iter().map(listed_ids).collect::<Vec<_>>(),
+        [vec!["email-x", "email-y"], vec!["email-x"], vec!["email-y"]]
+    );
+    assert_eq!(attachment_rows(&ctx).await.len(), 2);
+    mock.task.abort();
+}
+
+#[tokio::test]
+async fn attachment_listings_that_time_out_shrink_and_skip_what_never_answers() {
+    let (_dir, ctx, config) = fixture().await;
+    let mut mock = MockJmap {
+        emails: vec![
+            with_attachment(email("email-a", "thread-a"), 1024, "2026-10-08T12:00:03Z"),
+            with_attachment(email("email-b", "thread-b"), 1024, "2026-10-08T12:00:02Z"),
+            with_attachment(email("email-c", "thread-c"), 1024, "2026-10-08T12:00:01Z"),
+        ],
+        max_objects_in_get: 500,
+        delay: Some(slow_listings),
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    mock.connected
+        .client
+        .set_timeout(Duration::from_millis(300));
+    let headers = mock.calls("Email/get").len();
+    let mut budget = ATTACHMENT_LISTING_BYTES;
+    while list_attachments(&ctx, &config, &mock.connected, &mut budget)
+        .await
+        .unwrap()
+    {}
+    let listings = mock.calls("Email/get").split_off(headers);
+    assert_eq!(
+        listings.iter().map(listed_ids).collect::<Vec<_>>(),
+        [
+            vec!["email-a", "email-b", "email-c"],
+            vec!["email-a"],
+            vec!["email-b"],
+            vec!["email-c"],
+        ]
+    );
+    // Half of what timed out, which later listings keep.
+    assert_eq!(budget, 1536);
+    assert_eq!(
+        attachment_rows(&ctx)
+            .await
+            .into_iter()
+            .map(|row| row.0)
+            .collect::<Vec<_>>(),
+        ["email-b", "email-c"]
     );
     mock.task.abort();
 }
