@@ -369,9 +369,10 @@ can import.
 The same import also brings accounts over from Thunderbird (a profile folder,
 its Tools › Export archive, or `prefs.js`) and from Thunderbird for Android or
 K-9 Mail (`.k9s` settings exports). You review each account before anything is
-added: settings Flectar Mail can't reproduce, such as POP3 servers, are
-explained instead of changed silently. Existing accounts are never
-modified, and passwords are never imported.
+added: settings Flectar Mail can't reproduce, such as an Exchange server, are
+explained instead of changed silently, and POP3 accounts keep their rule for
+removing mail from the server. Existing accounts are never modified, and
+passwords are never imported.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">

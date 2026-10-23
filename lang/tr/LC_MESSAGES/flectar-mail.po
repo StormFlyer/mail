@@ -701,7 +701,7 @@ msgstr "Flectar Mail hesap yedeğini dışa aktar"
 msgid "Flectar Mail backup"
 msgstr "Flectar Mail yedeği"
 
-#: ui/app.slint:301 ui/dialogs/import-dialog.slint:211
+#: ui/app.slint:301 ui/dialogs/import-dialog.slint:215
 #: ui/views/onboarding-view.slint:222
 msgid "Import accounts"
 msgstr "Hesapları içe aktar"
@@ -3137,45 +3137,41 @@ msgid "No incoming mail server is configured."
 msgstr "Gelen posta sunucusu yapılandırılmamış."
 
 #: ui/dialogs/import-dialog.slint:78
-msgid "POP3 accounts are not supported. Add the account with IMAP instead."
-msgstr "POP3 hesapları desteklenmiyor. Hesabı bunun yerine IMAP ile ekleyin."
-
-#: ui/dialogs/import-dialog.slint:79
 msgid "The incoming server {} uses a protocol Flectar Mail does not support."
 msgstr ""
 "Gelen posta sunucusu {}, Flectar Mail'in desteklemediği bir protokol "
 "kullanıyor."
 
-#: ui/dialogs/import-dialog.slint:80
+#: ui/dialogs/import-dialog.slint:79
 msgid "No outgoing mail server is configured."
 msgstr "Giden posta sunucusu yapılandırılmamış."
 
-#: ui/dialogs/import-dialog.slint:81
+#: ui/dialogs/import-dialog.slint:80
 msgid "The outgoing server {} uses a protocol Flectar Mail does not support."
 msgstr ""
 "Giden posta sunucusu {}, Flectar Mail'in desteklemediği bir protokol "
 "kullanıyor."
 
-#: ui/dialogs/import-dialog.slint:82
+#: ui/dialogs/import-dialog.slint:81
 msgid ""
 "The incoming server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:83
+#: ui/dialogs/import-dialog.slint:82
 msgid ""
 "The outgoing server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:84
+#: ui/dialogs/import-dialog.slint:83
 msgid ""
 "{} keeps your password off its unencrypted connection, but Flectar Mail "
 "would send it in the clear. Turn on SSL/TLS or STARTTLS for this server "
 "first."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:86
+#: ui/dialogs/import-dialog.slint:85
 msgid ""
 "The incoming server connects without signing in, which Flectar Mail does not "
 "support."
@@ -3183,7 +3179,7 @@ msgstr ""
 "Gelen posta sunucusu oturum açmadan bağlanıyor; Flectar Mail bunu "
 "desteklemiyor."
 
-#: ui/dialogs/import-dialog.slint:87
+#: ui/dialogs/import-dialog.slint:86
 msgid ""
 "The incoming server signs in with a client certificate, which Flectar Mail "
 "does not support."
@@ -3191,13 +3187,13 @@ msgstr ""
 "Gelen posta sunucusu bir istemci sertifikasıyla oturum açıyor; Flectar Mail "
 "bunu desteklemiyor."
 
-#: ui/dialogs/import-dialog.slint:88
+#: ui/dialogs/import-dialog.slint:87
 msgid ""
 "The incoming server signs in with {}, which Flectar Mail does not support."
 msgstr ""
 "Gelen posta sunucusu, Flectar Mail'in desteklemediği {} ile oturum açıyor."
 
-#: ui/dialogs/import-dialog.slint:89
+#: ui/dialogs/import-dialog.slint:88
 msgid ""
 "The outgoing server sends mail without signing in, which Flectar Mail does "
 "not support."
@@ -3205,7 +3201,7 @@ msgstr ""
 "Giden posta sunucusu oturum açmadan posta gönderiyor; Flectar Mail bunu "
 "desteklemiyor."
 
-#: ui/dialogs/import-dialog.slint:90
+#: ui/dialogs/import-dialog.slint:89
 msgid ""
 "The outgoing server signs in with a client certificate, which Flectar Mail "
 "does not support."
@@ -3213,13 +3209,13 @@ msgstr ""
 "Giden posta sunucusu bir istemci sertifikasıyla oturum açıyor; Flectar Mail "
 "bunu desteklemiyor."
 
-#: ui/dialogs/import-dialog.slint:91
+#: ui/dialogs/import-dialog.slint:90
 msgid ""
 "The outgoing server signs in with {}, which Flectar Mail does not support."
 msgstr ""
 "Giden posta sunucusu, Flectar Mail'in desteklemediği {} ile oturum açıyor."
 
-#: ui/dialogs/import-dialog.slint:92
+#: ui/dialogs/import-dialog.slint:91
 msgid ""
 "The outgoing server signs in as {}. Flectar Mail uses one sign-in for both "
 "servers."
@@ -3227,33 +3223,33 @@ msgstr ""
 "Giden posta sunucusu {} olarak oturum açıyor. Flectar Mail her iki sunucu "
 "için tek bir oturum açma kullanır."
 
-#: ui/dialogs/import-dialog.slint:93
+#: ui/dialogs/import-dialog.slint:92
 msgid "The incoming server has no user name."
 msgstr "Gelen posta sunucusunun kullanıcı adı yok."
 
-#: ui/dialogs/import-dialog.slint:94
+#: ui/dialogs/import-dialog.slint:93
 msgid "The server settings for {} are not valid."
 msgstr "{} için sunucu ayarları geçerli değil."
 
-#: ui/dialogs/import-dialog.slint:95
+#: ui/dialogs/import-dialog.slint:94
 msgid "This address appears earlier in the file."
 msgstr "Bu adres dosyada daha önce geçiyor."
 
-#: ui/dialogs/import-dialog.slint:96
+#: ui/dialogs/import-dialog.slint:95
 msgid ""
 "Your password will be sent over the encrypted connection instead of with "
 "CRAM-MD5."
 msgstr "Parolanız CRAM-MD5 yerine şifreli bağlantı üzerinden gönderilecek."
 
-#: ui/dialogs/import-dialog.slint:97
+#: ui/dialogs/import-dialog.slint:96
 msgid "You will sign in with Microsoft instead of a password."
 msgstr "Parola yerine Microsoft ile oturum açacaksınız."
 
-#: ui/dialogs/import-dialog.slint:98
+#: ui/dialogs/import-dialog.slint:97
 msgid "You will sign in with Google instead of a password."
 msgstr "Parola yerine Google ile oturum açacaksınız."
 
-#: ui/dialogs/import-dialog.slint:99
+#: ui/dialogs/import-dialog.slint:98
 msgid ""
 "The account signs in as {}, which is not an email address. Add it with its "
 "own address instead."
@@ -3261,18 +3257,42 @@ msgstr ""
 "Hesap, bir e-posta adresi olmayan {} olarak oturum açıyor. Bunun yerine "
 "kendi adresiyle ekleyin."
 
-#: ui/dialogs/import-dialog.slint:100
+#: ui/dialogs/import-dialog.slint:99
 msgid ""
 "Flectar Mail cannot use browser sign-in for {}. Sign in with an app password."
 msgstr ""
 "Flectar Mail, {} için tarayıcıyla oturum açmayı kullanamaz. Uygulama "
 "parolasıyla oturum açın."
 
-#: ui/dialogs/import-dialog.slint:101
+#: ui/dialogs/import-dialog.slint:100
 msgid "The provider's standard outgoing server replaces {}."
 msgstr "Sağlayıcının standart giden posta sunucusu {} sunucusunun yerini alır."
 
-#: ui/dialogs/import-dialog.slint:102
+#: ui/dialogs/import-dialog.slint:101
+msgid "This account syncs with {} instead of downloading mail with POP3."
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:102 ui/dialogs/settings-dialog.slint:1955
+msgid "Mail is removed from the server once it's on this device."
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:103 ui/dialogs/settings-dialog.slint:1954
+msgid "Mail you delete here is removed from the server too."
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:104
+msgid ""
+"Mail is removed from the server {} days after it's downloaded, or once "
+"deleted here."
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:105
+msgid ""
+"No choice here matches how long the account kept mail on the server, so the "
+"closest one is used."
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:106
 msgid "One other address is managed by Gmail and appears after you sign in."
 msgid_plural ""
 "{n} other addresses are managed by Gmail and appear after you sign in."
@@ -3283,7 +3303,7 @@ msgstr[1] ""
 "Diğer {n} adres Gmail tarafından yönetiliyor ve oturum açtıktan sonra "
 "görünür."
 
-#: ui/dialogs/import-dialog.slint:103
+#: ui/dialogs/import-dialog.slint:107
 msgid ""
 "One sending address was not imported because it is invalid or uses another "
 "outgoing server."
@@ -3297,23 +3317,23 @@ msgstr[1] ""
 "{n} gönderen adresi geçersiz olduğu veya başka bir giden posta sunucusu "
 "kullandığı için içe aktarılmadı."
 
-#: ui/dialogs/import-dialog.slint:104
+#: ui/dialogs/import-dialog.slint:108
 msgid "A signature stored in a file outside the profile was not imported."
 msgstr "Profil dışındaki bir dosyada saklanan imza içe aktarılmadı."
 
-#: ui/dialogs/import-dialog.slint:105
+#: ui/dialogs/import-dialog.slint:109
 msgid "A signature larger than 32 KB was not imported."
 msgstr "32 KB'tan büyük bir imza içe aktarılmadı."
 
-#: ui/dialogs/import-dialog.slint:110
+#: ui/dialogs/import-dialog.slint:114
 msgid "The file could not be read: {}"
 msgstr "Dosya okunamadı: {}"
 
-#: ui/dialogs/import-dialog.slint:111
+#: ui/dialogs/import-dialog.slint:115
 msgid "The settings file is too large."
 msgstr "Ayar dosyası çok büyük."
 
-#: ui/dialogs/import-dialog.slint:112
+#: ui/dialogs/import-dialog.slint:116
 msgid ""
 "This file is not a supported settings export. Choose a .k9s file, a "
 "Thunderbird profile export or prefs.js, or a Flectar Mail backup."
@@ -3322,19 +3342,19 @@ msgstr ""
 "Thunderbird profil dışa aktarımı veya prefs.js ya da bir Flectar Mail yedeği "
 "seçin."
 
-#: ui/dialogs/import-dialog.slint:113
+#: ui/dialogs/import-dialog.slint:117
 msgid "The settings file is damaged: {}"
 msgstr "Ayar dosyası bozuk: {}"
 
-#: ui/dialogs/import-dialog.slint:114
+#: ui/dialogs/import-dialog.slint:118
 msgid "This settings format (version {}) is not supported."
 msgstr "Bu ayar biçimi (sürüm {}) desteklenmiyor."
 
-#: ui/dialogs/import-dialog.slint:115
+#: ui/dialogs/import-dialog.slint:119
 msgid "The settings contain no mail accounts."
 msgstr "Ayarlar hiç e-posta hesabı içermiyor."
 
-#: ui/dialogs/import-dialog.slint:116
+#: ui/dialogs/import-dialog.slint:120
 msgid ""
 "This folder contains several Thunderbird profiles. Choose the profile folder "
 "inside it that you want to import."
@@ -3342,7 +3362,7 @@ msgstr ""
 "Bu klasör birden fazla Thunderbird profili içeriyor. İçinden içe aktarmak "
 "istediğiniz profil klasörünü seçin."
 
-#: ui/dialogs/import-dialog.slint:117
+#: ui/dialogs/import-dialog.slint:121
 msgid ""
 "This folder is not a Thunderbird profile. Choose the folder that contains "
 "prefs.js."
@@ -3350,7 +3370,7 @@ msgstr ""
 "Bu klasör bir Thunderbird profili değil. prefs.js dosyasını içeren klasörü "
 "seçin."
 
-#: ui/dialogs/import-dialog.slint:118
+#: ui/dialogs/import-dialog.slint:122
 msgid ""
 "This Thunderbird profile is on a network location. Choose the profile folder "
 "itself to import it."
@@ -3358,53 +3378,53 @@ msgstr ""
 "Bu Thunderbird profili bir ağ konumunda. İçe aktarmak için doğrudan profil "
 "klasörünü seçin."
 
-#: ui/dialogs/import-dialog.slint:119
+#: ui/dialogs/import-dialog.slint:123
 msgid "The backup could not be restored: {}"
 msgstr "Yedek geri yüklenemedi: {}"
 
-#: ui/dialogs/import-dialog.slint:120
+#: ui/dialogs/import-dialog.slint:124
 msgid "Import failed: {}"
 msgstr "İçe aktarma başarısız oldu: {}"
 
-#: ui/dialogs/import-dialog.slint:125
+#: ui/dialogs/import-dialog.slint:129
 msgid "Could not import accounts"
 msgstr "Hesaplar içe aktarılamadı"
 
-#: ui/dialogs/import-dialog.slint:126
+#: ui/dialogs/import-dialog.slint:130
 msgid "Could not read the settings"
 msgstr "Ayarlar okunamadı"
 
-#: ui/dialogs/import-dialog.slint:164 ui/views/files-view.slint:322
+#: ui/dialogs/import-dialog.slint:168 ui/views/files-view.slint:322
 msgid "Back"
 msgstr "Geri"
 
-#: ui/dialogs/import-dialog.slint:169
+#: ui/dialogs/import-dialog.slint:173
 msgid "Choose folder…"
 msgstr "Klasör seç…"
 
-#: ui/dialogs/import-dialog.slint:181
+#: ui/dialogs/import-dialog.slint:185
 msgid "Choose file…"
 msgstr "Dosya seç…"
 
-#: ui/dialogs/import-dialog.slint:189
+#: ui/dialogs/import-dialog.slint:193
 msgid "Import one account"
 msgid_plural "Import {n} accounts"
 msgstr[0] "Bir hesabı içe aktar"
 msgstr[1] "{n} hesabı içe aktar"
 
-#: ui/dialogs/import-dialog.slint:196
+#: ui/dialogs/import-dialog.slint:200
 msgid "Open accounts"
 msgstr "Hesapları aç"
 
-#: ui/dialogs/import-dialog.slint:274
+#: ui/dialogs/import-dialog.slint:278
 msgid "Choose accounts to import"
 msgstr "İçe aktarılacak hesapları seçin"
 
-#: ui/dialogs/import-dialog.slint:275
+#: ui/dialogs/import-dialog.slint:279
 msgid "Import complete"
 msgstr "İçe aktarma tamamlandı"
 
-#: ui/dialogs/import-dialog.slint:290
+#: ui/dialogs/import-dialog.slint:294
 msgid ""
 "Bring your account settings from Thunderbird, Thunderbird for Android, K-9 "
 "Mail, or a Flectar Mail backup. Passwords are never imported: you sign in to "
@@ -3414,19 +3434,19 @@ msgstr ""
 "Flectar Mail yedeğinden getirin. Parolalar asla içe aktarılmaz: ardından her "
 "hesapta oturum açarsınız."
 
-#: ui/dialogs/import-dialog.slint:296
+#: ui/dialogs/import-dialog.slint:300
 msgid "Thunderbird on this device"
 msgstr "Bu cihazdaki Thunderbird"
 
-#: ui/dialogs/import-dialog.slint:310
+#: ui/dialogs/import-dialog.slint:314
 msgid "Import from Thunderbird profile {}"
 msgstr "{} Thunderbird profilinden içe aktar"
 
-#: ui/dialogs/import-dialog.slint:338
+#: ui/dialogs/import-dialog.slint:342
 msgid "{} (default profile)"
 msgstr "{} (varsayılan profil)"
 
-#: ui/dialogs/import-dialog.slint:373
+#: ui/dialogs/import-dialog.slint:377
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip), profile folders and prefs.js, and Flectar Mail "
@@ -3436,7 +3456,7 @@ msgstr ""
 "Thunderbird profil dışa aktarımları (.zip), profil klasörleri ve prefs.js "
 "ile Flectar Mail yedekleri (.json)."
 
-#: ui/dialogs/import-dialog.slint:374
+#: ui/dialogs/import-dialog.slint:378
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip) and prefs.js, and Flectar Mail backups (.json)."
@@ -3445,15 +3465,15 @@ msgstr ""
 "Thunderbird profil dışa aktarımları (.zip) ve prefs.js ile Flectar Mail "
 "yedekleri (.json)."
 
-#: ui/dialogs/import-dialog.slint:386
+#: ui/dialogs/import-dialog.slint:390
 msgid "Reading settings…"
 msgstr "Ayarlar okunuyor…"
 
-#: ui/dialogs/import-dialog.slint:386
+#: ui/dialogs/import-dialog.slint:390
 msgid "Importing accounts…"
 msgstr "Hesaplar içe aktarılıyor…"
 
-#: ui/dialogs/import-dialog.slint:414
+#: ui/dialogs/import-dialog.slint:418
 msgid ""
 "From Thunderbird for Android or K-9 Mail. Existing accounts are never "
 "changed."
@@ -3461,66 +3481,66 @@ msgstr ""
 "Android için Thunderbird veya K-9 Mail'den. Mevcut hesaplar asla "
 "değiştirilmez."
 
-#: ui/dialogs/import-dialog.slint:415
+#: ui/dialogs/import-dialog.slint:419
 msgid "From Thunderbird. Existing accounts are never changed."
 msgstr "Thunderbird'den. Mevcut hesaplar asla değiştirilmez."
 
-#: ui/dialogs/import-dialog.slint:438
+#: ui/dialogs/import-dialog.slint:442
 msgid "Import {}"
 msgstr "{} hesabını içe aktar"
 
-#: ui/dialogs/import-dialog.slint:453
+#: ui/dialogs/import-dialog.slint:457
 msgid "Already in Flectar Mail"
 msgstr "Zaten Flectar Mail'de"
 
-#: ui/dialogs/import-dialog.slint:454
+#: ui/dialogs/import-dialog.slint:458
 msgid "Cannot be imported"
 msgstr "İçe aktarılamaz"
 
-#: ui/dialogs/import-dialog.slint:455
+#: ui/dialogs/import-dialog.slint:459
 msgid "Sign in with Google after import"
 msgstr "İçe aktardıktan sonra Google ile oturum açın"
 
-#: ui/dialogs/import-dialog.slint:456
+#: ui/dialogs/import-dialog.slint:460
 msgid "Sign in with Microsoft after import"
 msgstr "İçe aktardıktan sonra Microsoft ile oturum açın"
 
-#: ui/dialogs/import-dialog.slint:457
+#: ui/dialogs/import-dialog.slint:461
 msgid "{} · enter your password after import"
 msgstr "{} · içe aktardıktan sonra parolanızı girin"
 
-#: ui/dialogs/import-dialog.slint:463
+#: ui/dialogs/import-dialog.slint:467
 msgid "Named “{}” in the other app"
 msgstr "Diğer uygulamada adı “{}”"
 
-#: ui/dialogs/import-dialog.slint:473
+#: ui/dialogs/import-dialog.slint:477
 msgid "Local folders, feeds, and newsgroups are not imported."
 msgstr "Yerel klasörler, akışlar ve haber grupları içe aktarılmaz."
 
-#: ui/dialogs/import-dialog.slint:486
+#: ui/dialogs/import-dialog.slint:490
 msgid "Imported one account. Sign in to it to start syncing."
 msgid_plural "Imported {n} accounts. Sign in to each one to start syncing."
 msgstr[0] "Bir hesap içe aktarıldı. Eşitlemeyi başlatmak için oturum açın."
 msgstr[1] ""
 "{n} hesap içe aktarıldı. Eşitlemeyi başlatmak için her birinde oturum açın."
 
-#: ui/dialogs/import-dialog.slint:492
+#: ui/dialogs/import-dialog.slint:496
 msgid "No accounts were imported."
 msgstr "Hiçbir hesap içe aktarılmadı."
 
-#: ui/dialogs/import-dialog.slint:498
+#: ui/dialogs/import-dialog.slint:502
 msgid "One account was already in Flectar Mail and was left unchanged."
 msgid_plural ""
 "{n} accounts were already in Flectar Mail and were left unchanged."
 msgstr[0] "Bir hesap zaten Flectar Mail'deydi ve değiştirilmedi."
 msgstr[1] "{n} hesap zaten Flectar Mail'deydi ve değiştirilmedi."
 
-#: ui/dialogs/import-dialog.slint:504
+#: ui/dialogs/import-dialog.slint:508
 msgid ""
 "The theme, language, and other preferences from the backup were applied."
 msgstr "Yedekteki tema, dil ve diğer tercihler uygulandı."
 
-#: ui/dialogs/import-dialog.slint:516
+#: ui/dialogs/import-dialog.slint:520
 msgid "{} could not be imported: {}"
 msgstr "{} içe aktarılamadı: {}"
 
@@ -4394,14 +4414,6 @@ msgstr "Flectar bir kopya kaydeder"
 
 #: ui/dialogs/settings-dialog.slint:1952
 msgid "Keep mail on the server"
-msgstr ""
-
-#: ui/dialogs/settings-dialog.slint:1954
-msgid "Mail you delete here is removed from the server too."
-msgstr ""
-
-#: ui/dialogs/settings-dialog.slint:1955
-msgid "Mail is removed from the server once it's on this device."
 msgstr ""
 
 #: ui/dialogs/settings-dialog.slint:1956

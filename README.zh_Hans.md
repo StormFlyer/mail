@@ -277,7 +277,7 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
 
 POP3 账户会把邮件下载到本机，默认保留在服务器上；你也可以为每个账户选择在 7、14 或 30 天后、在本机删除后，或在下载后立即从服务器移除邮件，但邮件在存入本机之前绝不会被移除。它们的文件夹只存在于本机，因此数据库快照会包含这些邮件；移除 POP3 账户或删除全部数据时，你可以先将邮件导出为 mbox 文件（每个文件夹一个），供其他邮件应用导入。
 
-同一导入功能还可以从 Thunderbird（配置文件夹、「工具 › 导出」生成的归档或 `prefs.js`）以及 Android 版 Thunderbird 或 K-9 Mail（`.k9s` 设置导出）迁移账户。添加之前你会逐一检查每个账户：Flectar Mail 无法沿用的设置（例如 POP3 服务器）会说明原因，而不会被悄悄更改。现有账户不会被修改，密码也永远不会被导入。
+同一导入功能还可以从 Thunderbird（配置文件夹、「工具 › 导出」生成的归档或 `prefs.js`）以及 Android 版 Thunderbird 或 K-9 Mail（`.k9s` 设置导出）迁移账户。添加之前你会逐一检查每个账户：Flectar Mail 无法沿用的设置（例如 Exchange 服务器）会说明原因，而不会被悄悄更改；POP3 账户会沿用从服务器移除邮件的规则。现有账户不会被修改，密码也永远不会被导入。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">

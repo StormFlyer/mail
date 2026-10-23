@@ -707,7 +707,7 @@ msgstr "Экспорт резервной копии учётных записе
 msgid "Flectar Mail backup"
 msgstr "Резервная копия Flectar Mail"
 
-#: ui/app.slint:301 ui/dialogs/import-dialog.slint:211
+#: ui/app.slint:301 ui/dialogs/import-dialog.slint:215
 #: ui/views/onboarding-view.slint:222
 msgid "Import accounts"
 msgstr "Импорт учётных записей"
@@ -3173,27 +3173,22 @@ msgid "No incoming mail server is configured."
 msgstr "Сервер входящей почты не настроен."
 
 #: ui/dialogs/import-dialog.slint:78
-msgid "POP3 accounts are not supported. Add the account with IMAP instead."
-msgstr ""
-"Учётные записи POP3 не поддерживаются. Добавьте учётную запись через IMAP."
-
-#: ui/dialogs/import-dialog.slint:79
 msgid "The incoming server {} uses a protocol Flectar Mail does not support."
 msgstr ""
 "Сервер входящей почты {} использует протокол, который Flectar Mail не "
 "поддерживает."
 
-#: ui/dialogs/import-dialog.slint:80
+#: ui/dialogs/import-dialog.slint:79
 msgid "No outgoing mail server is configured."
 msgstr "Сервер исходящей почты не настроен."
 
-#: ui/dialogs/import-dialog.slint:81
+#: ui/dialogs/import-dialog.slint:80
 msgid "The outgoing server {} uses a protocol Flectar Mail does not support."
 msgstr ""
 "Сервер исходящей почты {} использует протокол, который Flectar Mail не "
 "поддерживает."
 
-#: ui/dialogs/import-dialog.slint:82
+#: ui/dialogs/import-dialog.slint:81
 msgid ""
 "The incoming server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
@@ -3201,7 +3196,7 @@ msgstr ""
 "Сервер входящей почты {} не использует шифрование, поэтому ваш пароль и "
 "почта передаются по сети без защиты."
 
-#: ui/dialogs/import-dialog.slint:83
+#: ui/dialogs/import-dialog.slint:82
 msgid ""
 "The outgoing server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
@@ -3209,7 +3204,7 @@ msgstr ""
 "Сервер исходящей почты {} не использует шифрование, поэтому ваш пароль и "
 "почта передаются по сети без защиты."
 
-#: ui/dialogs/import-dialog.slint:84
+#: ui/dialogs/import-dialog.slint:83
 msgid ""
 "{} keeps your password off its unencrypted connection, but Flectar Mail "
 "would send it in the clear. Turn on SSL/TLS or STARTTLS for this server "
@@ -3219,7 +3214,7 @@ msgstr ""
 "отправил бы его открытым текстом. Сначала включите SSL/TLS или STARTTLS для "
 "этого сервера."
 
-#: ui/dialogs/import-dialog.slint:86
+#: ui/dialogs/import-dialog.slint:85
 msgid ""
 "The incoming server connects without signing in, which Flectar Mail does not "
 "support."
@@ -3227,7 +3222,7 @@ msgstr ""
 "Сервер входящей почты подключается без входа в систему, что Flectar Mail не "
 "поддерживает."
 
-#: ui/dialogs/import-dialog.slint:87
+#: ui/dialogs/import-dialog.slint:86
 msgid ""
 "The incoming server signs in with a client certificate, which Flectar Mail "
 "does not support."
@@ -3235,14 +3230,14 @@ msgstr ""
 "Сервер входящей почты использует вход по сертификату клиента, что Flectar "
 "Mail не поддерживает."
 
-#: ui/dialogs/import-dialog.slint:88
+#: ui/dialogs/import-dialog.slint:87
 msgid ""
 "The incoming server signs in with {}, which Flectar Mail does not support."
 msgstr ""
 "Сервер входящей почты использует вход через {}, который Flectar Mail не "
 "поддерживает."
 
-#: ui/dialogs/import-dialog.slint:89
+#: ui/dialogs/import-dialog.slint:88
 msgid ""
 "The outgoing server sends mail without signing in, which Flectar Mail does "
 "not support."
@@ -3250,7 +3245,7 @@ msgstr ""
 "Сервер исходящей почты отправляет письма без входа в систему, что Flectar "
 "Mail не поддерживает."
 
-#: ui/dialogs/import-dialog.slint:90
+#: ui/dialogs/import-dialog.slint:89
 msgid ""
 "The outgoing server signs in with a client certificate, which Flectar Mail "
 "does not support."
@@ -3258,14 +3253,14 @@ msgstr ""
 "Сервер исходящей почты использует вход по сертификату клиента, что Flectar "
 "Mail не поддерживает."
 
-#: ui/dialogs/import-dialog.slint:91
+#: ui/dialogs/import-dialog.slint:90
 msgid ""
 "The outgoing server signs in with {}, which Flectar Mail does not support."
 msgstr ""
 "Сервер исходящей почты использует вход через {}, который Flectar Mail не "
 "поддерживает."
 
-#: ui/dialogs/import-dialog.slint:92
+#: ui/dialogs/import-dialog.slint:91
 msgid ""
 "The outgoing server signs in as {}. Flectar Mail uses one sign-in for both "
 "servers."
@@ -3273,34 +3268,34 @@ msgstr ""
 "Сервер исходящей почты входит как {}. Flectar Mail использует один вход для "
 "обоих серверов."
 
-#: ui/dialogs/import-dialog.slint:93
+#: ui/dialogs/import-dialog.slint:92
 msgid "The incoming server has no user name."
 msgstr "Для сервера входящей почты не указано имя пользователя."
 
-#: ui/dialogs/import-dialog.slint:94
+#: ui/dialogs/import-dialog.slint:93
 msgid "The server settings for {} are not valid."
 msgstr "Настройки сервера {} недействительны."
 
-#: ui/dialogs/import-dialog.slint:95
+#: ui/dialogs/import-dialog.slint:94
 msgid "This address appears earlier in the file."
 msgstr "Этот адрес уже встречается выше в файле."
 
-#: ui/dialogs/import-dialog.slint:96
+#: ui/dialogs/import-dialog.slint:95
 msgid ""
 "Your password will be sent over the encrypted connection instead of with "
 "CRAM-MD5."
 msgstr ""
 "Пароль будет передаваться по зашифрованному соединению вместо CRAM-MD5."
 
-#: ui/dialogs/import-dialog.slint:97
+#: ui/dialogs/import-dialog.slint:96
 msgid "You will sign in with Microsoft instead of a password."
 msgstr "Вы будете входить через Microsoft вместо пароля."
 
-#: ui/dialogs/import-dialog.slint:98
+#: ui/dialogs/import-dialog.slint:97
 msgid "You will sign in with Google instead of a password."
 msgstr "Вы будете входить через Google вместо пароля."
 
-#: ui/dialogs/import-dialog.slint:99
+#: ui/dialogs/import-dialog.slint:98
 msgid ""
 "The account signs in as {}, which is not an email address. Add it with its "
 "own address instead."
@@ -3308,18 +3303,47 @@ msgstr ""
 "Учётная запись входит как {}, а это не адрес электронной почты. Добавьте её "
 "с её собственным адресом."
 
-#: ui/dialogs/import-dialog.slint:100
+#: ui/dialogs/import-dialog.slint:99
 msgid ""
 "Flectar Mail cannot use browser sign-in for {}. Sign in with an app password."
 msgstr ""
 "Flectar Mail не может использовать вход через браузер для {}. Войдите с "
 "паролем приложения."
 
-#: ui/dialogs/import-dialog.slint:101
+#: ui/dialogs/import-dialog.slint:100
 msgid "The provider's standard outgoing server replaces {}."
 msgstr "Стандартный сервер исходящей почты провайдера заменит {}."
 
-#: ui/dialogs/import-dialog.slint:102
+#: ui/dialogs/import-dialog.slint:101
+msgid "This account syncs with {} instead of downloading mail with POP3."
+msgstr ""
+"Эта учётная запись синхронизируется с {}, а не загружает почту по POP3."
+
+#: ui/dialogs/import-dialog.slint:102 ui/dialogs/settings-dialog.slint:1955
+msgid "Mail is removed from the server once it's on this device."
+msgstr "Почта удаляется с сервера, как только она есть на этом устройстве."
+
+#: ui/dialogs/import-dialog.slint:103 ui/dialogs/settings-dialog.slint:1954
+msgid "Mail you delete here is removed from the server too."
+msgstr "Почта, удалённая здесь, удаляется и с сервера."
+
+#: ui/dialogs/import-dialog.slint:104
+msgid ""
+"Mail is removed from the server {} days after it's downloaded, or once "
+"deleted here."
+msgstr ""
+"Почта удаляется с сервера через {} дней после загрузки или после удаления "
+"здесь."
+
+#: ui/dialogs/import-dialog.slint:105
+msgid ""
+"No choice here matches how long the account kept mail on the server, so the "
+"closest one is used."
+msgstr ""
+"Ни один вариант не совпадает с тем, сколько учётная запись хранила почту на "
+"сервере, поэтому выбран ближайший."
+
+#: ui/dialogs/import-dialog.slint:106
 msgid "One other address is managed by Gmail and appears after you sign in."
 msgid_plural ""
 "{n} other addresses are managed by Gmail and appear after you sign in."
@@ -3327,7 +3351,7 @@ msgstr[0] "Gmail управляет ещё {n} адресом; он появит
 msgstr[1] "Gmail управляет ещё {n} адресами; они появятся после входа."
 msgstr[2] "Gmail управляет ещё {n} адресами; они появятся после входа."
 
-#: ui/dialogs/import-dialog.slint:103
+#: ui/dialogs/import-dialog.slint:107
 msgid ""
 "One sending address was not imported because it is invalid or uses another "
 "outgoing server."
@@ -3344,23 +3368,23 @@ msgstr[2] ""
 "{n} адресов отправителя не импортировано: они недействительны или используют "
 "другой сервер исходящей почты."
 
-#: ui/dialogs/import-dialog.slint:104
+#: ui/dialogs/import-dialog.slint:108
 msgid "A signature stored in a file outside the profile was not imported."
 msgstr "Подпись, хранящаяся в файле вне профиля, не импортирована."
 
-#: ui/dialogs/import-dialog.slint:105
+#: ui/dialogs/import-dialog.slint:109
 msgid "A signature larger than 32 KB was not imported."
 msgstr "Подпись размером более 32 КБ не импортирована."
 
-#: ui/dialogs/import-dialog.slint:110
+#: ui/dialogs/import-dialog.slint:114
 msgid "The file could not be read: {}"
 msgstr "Не удалось прочитать файл: {}"
 
-#: ui/dialogs/import-dialog.slint:111
+#: ui/dialogs/import-dialog.slint:115
 msgid "The settings file is too large."
 msgstr "Файл настроек слишком большой."
 
-#: ui/dialogs/import-dialog.slint:112
+#: ui/dialogs/import-dialog.slint:116
 msgid ""
 "This file is not a supported settings export. Choose a .k9s file, a "
 "Thunderbird profile export or prefs.js, or a Flectar Mail backup."
@@ -3368,19 +3392,19 @@ msgstr ""
 "Этот файл не является поддерживаемым экспортом настроек. Выберите файл .k9s, "
 "экспорт профиля Thunderbird или prefs.js либо резервную копию Flectar Mail."
 
-#: ui/dialogs/import-dialog.slint:113
+#: ui/dialogs/import-dialog.slint:117
 msgid "The settings file is damaged: {}"
 msgstr "Файл настроек повреждён: {}"
 
-#: ui/dialogs/import-dialog.slint:114
+#: ui/dialogs/import-dialog.slint:118
 msgid "This settings format (version {}) is not supported."
 msgstr "Этот формат настроек (версия {}) не поддерживается."
 
-#: ui/dialogs/import-dialog.slint:115
+#: ui/dialogs/import-dialog.slint:119
 msgid "The settings contain no mail accounts."
 msgstr "Настройки не содержат почтовых учётных записей."
 
-#: ui/dialogs/import-dialog.slint:116
+#: ui/dialogs/import-dialog.slint:120
 msgid ""
 "This folder contains several Thunderbird profiles. Choose the profile folder "
 "inside it that you want to import."
@@ -3388,7 +3412,7 @@ msgstr ""
 "Эта папка содержит несколько профилей Thunderbird. Выберите внутри неё папку "
 "профиля, который нужно импортировать."
 
-#: ui/dialogs/import-dialog.slint:117
+#: ui/dialogs/import-dialog.slint:121
 msgid ""
 "This folder is not a Thunderbird profile. Choose the folder that contains "
 "prefs.js."
@@ -3396,7 +3420,7 @@ msgstr ""
 "Эта папка не является профилем Thunderbird. Выберите папку, в которой "
 "находится prefs.js."
 
-#: ui/dialogs/import-dialog.slint:118
+#: ui/dialogs/import-dialog.slint:122
 msgid ""
 "This Thunderbird profile is on a network location. Choose the profile folder "
 "itself to import it."
@@ -3404,54 +3428,54 @@ msgstr ""
 "Этот профиль Thunderbird находится в сетевом расположении. Чтобы "
 "импортировать его, выберите непосредственно папку профиля."
 
-#: ui/dialogs/import-dialog.slint:119
+#: ui/dialogs/import-dialog.slint:123
 msgid "The backup could not be restored: {}"
 msgstr "Не удалось восстановить резервную копию: {}"
 
-#: ui/dialogs/import-dialog.slint:120
+#: ui/dialogs/import-dialog.slint:124
 msgid "Import failed: {}"
 msgstr "Ошибка импорта: {}"
 
-#: ui/dialogs/import-dialog.slint:125
+#: ui/dialogs/import-dialog.slint:129
 msgid "Could not import accounts"
 msgstr "Не удалось импортировать учётные записи"
 
-#: ui/dialogs/import-dialog.slint:126
+#: ui/dialogs/import-dialog.slint:130
 msgid "Could not read the settings"
 msgstr "Не удалось прочитать настройки"
 
-#: ui/dialogs/import-dialog.slint:164 ui/views/files-view.slint:322
+#: ui/dialogs/import-dialog.slint:168 ui/views/files-view.slint:322
 msgid "Back"
 msgstr "Назад"
 
-#: ui/dialogs/import-dialog.slint:169
+#: ui/dialogs/import-dialog.slint:173
 msgid "Choose folder…"
 msgstr "Выбрать папку…"
 
-#: ui/dialogs/import-dialog.slint:181
+#: ui/dialogs/import-dialog.slint:185
 msgid "Choose file…"
 msgstr "Выбрать файл…"
 
-#: ui/dialogs/import-dialog.slint:189
+#: ui/dialogs/import-dialog.slint:193
 msgid "Import one account"
 msgid_plural "Import {n} accounts"
 msgstr[0] "Импортировать {n} учётную запись"
 msgstr[1] "Импортировать {n} учётные записи"
 msgstr[2] "Импортировать {n} учётных записей"
 
-#: ui/dialogs/import-dialog.slint:196
+#: ui/dialogs/import-dialog.slint:200
 msgid "Open accounts"
 msgstr "Открыть учётные записи"
 
-#: ui/dialogs/import-dialog.slint:274
+#: ui/dialogs/import-dialog.slint:278
 msgid "Choose accounts to import"
 msgstr "Выберите учётные записи для импорта"
 
-#: ui/dialogs/import-dialog.slint:275
+#: ui/dialogs/import-dialog.slint:279
 msgid "Import complete"
 msgstr "Импорт завершён"
 
-#: ui/dialogs/import-dialog.slint:290
+#: ui/dialogs/import-dialog.slint:294
 msgid ""
 "Bring your account settings from Thunderbird, Thunderbird for Android, K-9 "
 "Mail, or a Flectar Mail backup. Passwords are never imported: you sign in to "
@@ -3461,19 +3485,19 @@ msgstr ""
 "Android, K-9 Mail или резервной копии Flectar Mail. Пароли никогда не "
 "импортируются: после импорта вы войдёте в каждую учётную запись."
 
-#: ui/dialogs/import-dialog.slint:296
+#: ui/dialogs/import-dialog.slint:300
 msgid "Thunderbird on this device"
 msgstr "Thunderbird на этом устройстве"
 
-#: ui/dialogs/import-dialog.slint:310
+#: ui/dialogs/import-dialog.slint:314
 msgid "Import from Thunderbird profile {}"
 msgstr "Импорт из профиля Thunderbird {}"
 
-#: ui/dialogs/import-dialog.slint:338
+#: ui/dialogs/import-dialog.slint:342
 msgid "{} (default profile)"
 msgstr "{} (профиль по умолчанию)"
 
-#: ui/dialogs/import-dialog.slint:373
+#: ui/dialogs/import-dialog.slint:377
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip), profile folders and prefs.js, and Flectar Mail "
@@ -3483,7 +3507,7 @@ msgstr ""
 "профиля Thunderbird (.zip), папки профиля и prefs.js, а также резервные "
 "копии Flectar Mail (.json)."
 
-#: ui/dialogs/import-dialog.slint:374
+#: ui/dialogs/import-dialog.slint:378
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip) and prefs.js, and Flectar Mail backups (.json)."
@@ -3492,15 +3516,15 @@ msgstr ""
 "профиля Thunderbird (.zip) и prefs.js, а также резервные копии Flectar Mail "
 "(.json)."
 
-#: ui/dialogs/import-dialog.slint:386
+#: ui/dialogs/import-dialog.slint:390
 msgid "Reading settings…"
 msgstr "Чтение настроек…"
 
-#: ui/dialogs/import-dialog.slint:386
+#: ui/dialogs/import-dialog.slint:390
 msgid "Importing accounts…"
 msgstr "Импорт учётных записей…"
 
-#: ui/dialogs/import-dialog.slint:414
+#: ui/dialogs/import-dialog.slint:418
 msgid ""
 "From Thunderbird for Android or K-9 Mail. Existing accounts are never "
 "changed."
@@ -3508,43 +3532,43 @@ msgstr ""
 "Из Thunderbird для Android или K-9 Mail. Существующие учётные записи не "
 "изменяются."
 
-#: ui/dialogs/import-dialog.slint:415
+#: ui/dialogs/import-dialog.slint:419
 msgid "From Thunderbird. Existing accounts are never changed."
 msgstr "Из Thunderbird. Существующие учётные записи не изменяются."
 
-#: ui/dialogs/import-dialog.slint:438
+#: ui/dialogs/import-dialog.slint:442
 msgid "Import {}"
 msgstr "Импортировать {}"
 
-#: ui/dialogs/import-dialog.slint:453
+#: ui/dialogs/import-dialog.slint:457
 msgid "Already in Flectar Mail"
 msgstr "Уже есть в Flectar Mail"
 
-#: ui/dialogs/import-dialog.slint:454
+#: ui/dialogs/import-dialog.slint:458
 msgid "Cannot be imported"
 msgstr "Невозможно импортировать"
 
-#: ui/dialogs/import-dialog.slint:455
+#: ui/dialogs/import-dialog.slint:459
 msgid "Sign in with Google after import"
 msgstr "Войдите через Google после импорта"
 
-#: ui/dialogs/import-dialog.slint:456
+#: ui/dialogs/import-dialog.slint:460
 msgid "Sign in with Microsoft after import"
 msgstr "Войдите через Microsoft после импорта"
 
-#: ui/dialogs/import-dialog.slint:457
+#: ui/dialogs/import-dialog.slint:461
 msgid "{} · enter your password after import"
 msgstr "{} · введите пароль после импорта"
 
-#: ui/dialogs/import-dialog.slint:463
+#: ui/dialogs/import-dialog.slint:467
 msgid "Named “{}” in the other app"
 msgstr "Называется «{}» в другом приложении"
 
-#: ui/dialogs/import-dialog.slint:473
+#: ui/dialogs/import-dialog.slint:477
 msgid "Local folders, feeds, and newsgroups are not imported."
 msgstr "Локальные папки, ленты и группы новостей не импортируются."
 
-#: ui/dialogs/import-dialog.slint:486
+#: ui/dialogs/import-dialog.slint:490
 msgid "Imported one account. Sign in to it to start syncing."
 msgid_plural "Imported {n} accounts. Sign in to each one to start syncing."
 msgstr[0] ""
@@ -3556,11 +3580,11 @@ msgstr[2] ""
 "Импортировано {n} учётных записей. Войдите в каждую, чтобы начать "
 "синхронизацию."
 
-#: ui/dialogs/import-dialog.slint:492
+#: ui/dialogs/import-dialog.slint:496
 msgid "No accounts were imported."
 msgstr "Учётные записи не импортированы."
 
-#: ui/dialogs/import-dialog.slint:498
+#: ui/dialogs/import-dialog.slint:502
 msgid "One account was already in Flectar Mail and was left unchanged."
 msgid_plural ""
 "{n} accounts were already in Flectar Mail and were left unchanged."
@@ -3571,12 +3595,12 @@ msgstr[1] ""
 msgstr[2] ""
 "{n} учётных записей уже были в Flectar Mail и остались без изменений."
 
-#: ui/dialogs/import-dialog.slint:504
+#: ui/dialogs/import-dialog.slint:508
 msgid ""
 "The theme, language, and other preferences from the backup were applied."
 msgstr "Тема, язык и другие настройки из резервной копии применены."
 
-#: ui/dialogs/import-dialog.slint:516
+#: ui/dialogs/import-dialog.slint:520
 msgid "{} could not be imported: {}"
 msgstr "Не удалось импортировать {}: {}"
 
@@ -4462,14 +4486,6 @@ msgstr "Копию сохраняет Flectar"
 #: ui/dialogs/settings-dialog.slint:1952
 msgid "Keep mail on the server"
 msgstr "Хранить почту на сервере"
-
-#: ui/dialogs/settings-dialog.slint:1954
-msgid "Mail you delete here is removed from the server too."
-msgstr "Почта, удалённая здесь, удаляется и с сервера."
-
-#: ui/dialogs/settings-dialog.slint:1955
-msgid "Mail is removed from the server once it's on this device."
-msgstr "Почта удаляется с сервера, как только она есть на этом устройстве."
 
 #: ui/dialogs/settings-dialog.slint:1956
 msgid "Flectar Mail never removes mail from the server."

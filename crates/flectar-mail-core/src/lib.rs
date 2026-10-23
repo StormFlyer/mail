@@ -222,6 +222,13 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
             "unsupported sign-in type for {email}"
         )));
     }
+    if config.mail_protocol != MailProtocol::Pop3
+        && config.settings.keep_on_server != KeepOnServer::Always
+    {
+        return Err(CoreError::Other(
+            "only POP3 accounts remove downloaded mail from their server".into(),
+        ));
+    }
     let connection = &config.settings.connection;
     if config.auth_kind == AuthKind::Oauth2
         && !(connection.incoming_security.is_encrypted() && connection.smtp_security.is_encrypted())
@@ -9679,6 +9686,13 @@ mod account_backup_import_tests {
         oauth.provider = Provider::Microsoft;
         oauth.auth_kind = AuthKind::Oauth2;
         assert!(validate_portable_account(&oauth).is_err());
+
+        // Only POP3 accounts remove mail from their server.
+        pop3.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+        validate_portable_account(&pop3).unwrap();
+        let mut imap = portable_imap("imap@example.com");
+        imap.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+        assert!(validate_portable_account(&imap).is_err());
 
         pop3.incoming_host.clear();
         assert!(validate_portable_account(&pop3).is_err());
