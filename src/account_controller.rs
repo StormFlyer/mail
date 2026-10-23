@@ -263,6 +263,11 @@ pub(super) fn apply_connected_accounts(
                 smtp_port: config.smtp_port.to_string().into(),
                 mail_history: config.settings.mail_history.as_str().into(),
                 sent_copy_policy: config.settings.sent_copy_policy.as_str().into(),
+                keep_on_server: config.settings.keep_on_server.as_str().into(),
+                server_keeps_mail_days: account
+                    .server_keeps_mail_days
+                    .and_then(|days| i32::try_from(days).ok())
+                    .unwrap_or(-1),
                 calendar_connected: calendar.is_some(),
                 calendar_enabled: calendar.is_some_and(|connection| connection.enabled),
                 calendar_status: calendar

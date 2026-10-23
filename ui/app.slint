@@ -382,6 +382,10 @@ export global I18n {
         if (key == "Updating Sent copy settings…") { return @tr("Updating Sent copy settings…"); }
         if (key == "Sent copy settings updated.") { return @tr("Sent copy settings updated."); }
         if (key == "Could not update Sent copy settings: {}") { return @tr("Could not update Sent copy settings: {}", argument); }
+        if (key == "Server mail settings require local mail data.") { return @tr("Server mail settings require local mail data."); }
+        if (key == "Updating server mail settings…") { return @tr("Updating server mail settings…"); }
+        if (key == "Server mail settings updated.") { return @tr("Server mail settings updated."); }
+        if (key == "Could not update server mail settings: {}") { return @tr("Could not update server mail settings: {}", argument); }
         if (key == "Mail history requires local mail data.") { return @tr("Mail history requires local mail data."); }
         if (key == "Updating mail history…") { return @tr("Updating mail history…"); }
         if (key == "Remote images are unavailable in this minimal build.") { return @tr("Remote images are unavailable in this minimal build."); }
@@ -610,6 +614,7 @@ export component AppWindow inherits Window {
     callback reorder_account(string, int, bool);
     callback save_account_mail_history(int, string);
     callback save_account_sent_copy_policy(int, string);
+    callback save_account_keep_on_server(int, string);
     callback connect_account_calendar(int);
     callback set_account_calendar_enabled(int, bool);
     callback connect_caldav(int, string, string, string);
@@ -1909,6 +1914,7 @@ export component AppWindow inherits Window {
             reorder_account(source, target, after) => { root.reorder_account(source, target, after); }
             save_account_mail_history(account-id, value) => { root.save_account_mail_history(account-id, value); }
             save_account_sent_copy_policy(account-id, value) => { root.save_account_sent_copy_policy(account-id, value); }
+            save_account_keep_on_server(account-id, value) => { root.save_account_keep_on_server(account-id, value); }
             connect_account_calendar(account-id) => { root.connect_account_calendar(account-id); }
             set_account_calendar_enabled(account-id, enabled) => { root.set_account_calendar_enabled(account-id, enabled); }
             connect_caldav(account-id, url, username, password) => { root.connect_caldav(account-id, url, username, password); }
