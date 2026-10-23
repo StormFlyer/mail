@@ -855,6 +855,17 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn export_account_mail(
+        &self,
+        account_id: i64,
+        destination: std::path::PathBuf,
+    ) -> Result<flectar_mail_core::models::MailExport, String> {
+        self.core
+            .export_account_mail(account_id, destination)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn load_settings(&self) -> Result<Settings, String> {
         self.core
             .get_settings()

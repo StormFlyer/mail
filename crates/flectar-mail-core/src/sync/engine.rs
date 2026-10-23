@@ -19,7 +19,7 @@
 use crate::accounts::credentials::{self, CredentialStoreHandle, Slot};
 use crate::config::Paths;
 use crate::db::Db;
-use crate::db::repo::{self, folders::Folder, messages::NewMessage};
+use crate::db::repo::{self, folders::Folder};
 use crate::error::{CoreError, Result};
 use crate::events::{CoreEvent, EventBus, SyncProgress};
 use crate::imap::{self, FetchedHeader, ImapCredentials, Session};
@@ -116,9 +116,22 @@ pub struct AccountHandle {
     /// Coalesced wake-up for the dedicated SMTP submission worker. Gmail and
     /// JMAP own their native send queues and therefore leave this unset.
     send_tx: Option<mpsc::Sender<()>>,
+    /// Set for accounts whose mail exists only on this device (POP3), where a
+    /// message's original file can only be downloaded again from the server.
+    restore_tx: Option<mpsc::Sender<RestoreRequest>>,
     settings_tx: watch::Sender<crate::models::AccountSettings>,
     tasks: Vec<tokio::task::AbortHandle>,
 }
+
+/// A request to download a stored message's original file again after it
+/// went missing from this device. Answered with the file's new path.
+pub(crate) struct RestoreRequest {
+    pub message_id: i64,
+    pub complete: oneshot::Sender<std::result::Result<String, String>>,
+}
+
+/// Restoring waits for any running download session to end first.
+const RESTORE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 #[derive(Debug)]
 pub(crate) enum PriorityFetchCmd {
@@ -193,6 +206,26 @@ impl AccountHandle {
         self.send(SyncCmd::SyncNow { complete: None });
     }
 
+    /// Download a stored message's original again; see [`RestoreRequest`].
+    pub(crate) async fn restore_message(&self, message_id: i64) -> Result<String> {
+        let restore_tx = self.restore_tx.as_ref().ok_or_else(|| {
+            CoreError::Other("this account reads its messages from the server".into())
+        })?;
+        let (tx, rx) = oneshot::channel();
+        restore_tx
+            .send(RestoreRequest {
+                message_id,
+                complete: tx,
+            })
+            .await
+            .map_err(|_| CoreError::Other("mail worker stopped".into()))?;
+        tokio::time::timeout(RESTORE_TIMEOUT, rx)
+            .await
+            .map_err(|_| CoreError::Other("downloading the message again timed out".into()))?
+            .map_err(|_| CoreError::Other("mail worker stopped".into()))?
+            .map_err(CoreError::Other)
+    }
+
     pub async fn fetch_attachment(&self, attachment_id: i64) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
         tokio::time::timeout(
@@ -231,6 +264,7 @@ mod account_handle_tests {
             tx,
             body_tx,
             send_tx: Some(send_tx),
+            restore_tx: None,
             settings_tx,
             tasks: Vec::new(),
         };
@@ -258,13 +292,15 @@ pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
     let (settings_tx, settings_rx) = watch::channel(config.settings.clone());
     // API protocols own their submission queues. SMTP-based protocols get a
     // dedicated submission worker that never waits behind mailbox sync.
-    let (joins, send_tx) = match config.mail_protocol {
+    let (joins, send_tx, restore_tx) = match config.mail_protocol {
         MailProtocol::Gmail => (
             crate::sync::gmail::spawn(ctx, config, rx, body_rx, settings_rx),
+            None,
             None,
         ),
         MailProtocol::Jmap => (
             crate::jmap::sync::spawn(ctx, config, rx, body_rx, settings_rx),
+            None,
             None,
         ),
         MailProtocol::Imap => {
@@ -303,7 +339,30 @@ pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
                     settings_rx,
                 )),
             ];
-            (joins, Some(send_tx))
+            (joins, Some(send_tx), None)
+        }
+        MailProtocol::Pop3 => {
+            let (send_tx, send_rx) = mpsc::channel(1);
+            let (restore_tx, restore_rx) = mpsc::channel(PRIORITY_FETCH_QUEUE_CAPACITY);
+            let joins = vec![
+                tokio::spawn(run_send_dispatcher(
+                    ctx.clone(),
+                    config.clone(),
+                    send_rx,
+                    tx.clone(),
+                )),
+                tokio::spawn(crate::sync::pop3::run(
+                    ctx,
+                    config,
+                    crate::sync::pop3::Inputs {
+                        commands: rx,
+                        reads: body_rx,
+                        restores: restore_rx,
+                        settings: settings_rx,
+                    },
+                )),
+            ];
+            (joins, Some(send_tx), Some(restore_tx))
         }
     };
     AccountHandle {
@@ -311,6 +370,7 @@ pub fn spawn_account(ctx: SyncCtx, config: AccountConfig) -> AccountHandle {
         tx,
         body_tx,
         send_tx,
+        restore_tx,
         settings_tx,
         tasks: joins
             .iter()
@@ -1181,6 +1241,8 @@ pub async fn status_for_account(db: &Db, account_id: i64) -> Result<SyncStatus> 
                 rusqlite::params![account_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )?,
+            // POP3 downloads whole messages in its foreground sync.
+            MailProtocol::Pop3 => (0, 0),
         };
         let header_failed: i64 = conn.query_row(
             "SELECT COUNT(*)
@@ -2045,69 +2107,6 @@ async fn extend_history(
     Ok(())
 }
 
-/// A message older than this never triggers the new-mail chime/notification,
-/// even if it lands unread - catches UIDVALIDITY resets and server-side moves
-/// replaying old mail as new-to-the-folder UIDs.
-const CHIME_RECENT_MS: i64 = 24 * 60 * 60 * 1000;
-
-/// Base candidacy for surfacing a freshly arrived message: unread, incoming,
-/// newer than the notify watermark, and genuinely recent (so replayed old UIDs
-/// from a UIDVALIDITY reset or a server-side move stay silent). This is scope-
-/// agnostic on purpose - the *desktop-notification* scope (Important / all /
-/// specific tabs) is applied later by the host dispatcher, which can see the
-/// thread's resolved tab. Bulk/robot filtering lives in [`chime_worthy`].
-fn arrival_eligible(
-    notify_min_uid: Option<u32>,
-    uid: u32,
-    is_read: bool,
-    is_outgoing: bool,
-    arrival_ms: i64,
-    now: i64,
-) -> bool {
-    notify_min_uid.is_some_and(|min_uid| uid >= min_uid)
-        && !is_read
-        && !is_outgoing
-        && now - arrival_ms < CHIME_RECENT_MS
-}
-
-/// Whether a fresh arrival should ring the audible new-mail chime. The chime
-/// stays human-only regardless of the desktop-notification scope, so a
-/// newsletter/monitoring flood never rings the bell every minute.
-fn chime_worthy(is_automated: bool, from_email: &str) -> bool {
-    !is_automated && !crate::mime::robot_sender(from_email)
-}
-
-#[cfg(test)]
-mod notification_policy_tests {
-    use super::{CHIME_RECENT_MS, arrival_eligible, chime_worthy};
-
-    fn eligible(baseline: Option<u32>, uid: u32, read: bool, outgoing: bool, age_ms: i64) -> bool {
-        let now = 2 * CHIME_RECENT_MS;
-        arrival_eligible(baseline, uid, read, outgoing, now - age_ms, now)
-    }
-
-    #[test]
-    fn only_live_unread_incoming_mail_is_a_notification_candidate() {
-        // Automated/robot senders are still candidates here - scope filtering
-        // happens later in the host dispatcher, not at enqueue time.
-        assert!(eligible(Some(100), 100, false, false, 1_000));
-        // No baseline yet (initial catch-up), older UID, read, or outgoing all
-        // disqualify, as does mail that arrived outside the recency window.
-        assert!(!eligible(None, 100, false, false, 1_000));
-        assert!(!eligible(Some(100), 99, false, false, 1_000));
-        assert!(!eligible(Some(100), 100, true, false, 1_000));
-        assert!(!eligible(Some(100), 100, false, true, 1_000));
-        assert!(!eligible(Some(100), 100, false, false, CHIME_RECENT_MS));
-    }
-
-    #[test]
-    fn chime_stays_human_only() {
-        assert!(chime_worthy(false, "alice@example.com"));
-        assert!(!chime_worthy(true, "digest@example.com"));
-        assert!(!chime_worthy(false, "notifications@example.com"));
-    }
-}
-
 /// Insert fetched headers. Returns `(all, fresh)` thread ids for the newly
 /// inserted messages: `all` for list refreshes, `fresh` only for threads that
 /// gained an unread, incoming, recent message (chime/notification-worthy).
@@ -2128,17 +2127,7 @@ async fn store_headers(
     ctx.db
         .write(move |conn| {
             let tx = conn.transaction()?;
-            let settings = repo::settings::get(&tx)?;
-            let auto_labels = settings.auto_labels_enabled;
-            let ai_categorize = settings.ai_categorize;
-            let (outgoing_learning_since, incoming_learning_since) =
-                repo::contacts::learning_boundaries(&tx, account_id, now_ms())?;
-            let account_emails = repo::sender_identities::own_addresses(&tx, account_id)?;
-            let mut thread_ids: Vec<i64> = Vec::new();
-            let mut fresh_ids: Vec<i64> = Vec::new();
-            // Threads already enqueued for a desktop notification this batch, so
-            // a thread that gains several messages in one fetch notifies once.
-            let mut enqueued_threads: Vec<i64> = Vec::new();
+            let mut importer = super::ingest::Importer::new(&tx, account_id)?;
             let mut max_uid: i64 = 0;
             let mut inserted = 0u32;
 
@@ -2239,51 +2228,22 @@ async fn store_headers(
                     continue;
                 }
 
-                let date_ms = parsed
-                    .date_ms
-                    .or(fh.internal_date_ms)
-                    .unwrap_or_else(now_ms);
-
-                let from_email = parsed
-                    .from
-                    .as_ref()
-                    .map(|a| a.email.to_lowercase())
-                    .unwrap_or_default();
-                let is_outgoing = account_emails.contains(&from_email)
-                    || folder_role.as_deref() == Some(roles::SENT);
-
-                let thread_id =
-                    crate::sync::threading::resolve_thread(&tx, account_id, &parsed, date_ms)?;
-
-                let nm = NewMessage {
-                    account_id,
-                    folder_id,
-                    uid: Some(fh.uid as i64),
-                    message_id: parsed.message_id.clone(),
-                    gm_msgid: None,
-                    gm_thrid: None,
-                    subject: parsed.subject.clone(),
-                    from: parsed.from.clone(),
-                    to: parsed.to.clone(),
-                    cc: parsed.cc.clone(),
-                    bcc: parsed.bcc.clone(),
-                    date: date_ms,
-                    internal_date: fh.internal_date_ms,
-                    is_read: fh.flags.seen || is_outgoing,
-                    is_starred: fh.flags.flagged,
-                    is_draft: fh.flags.draft || folder_role.as_deref() == Some(roles::DRAFTS),
-                    is_outgoing,
-                    is_automated: parsed.is_automated,
-                    has_attachments: fh.has_attachments,
-                    size: fh.size.map(|s| s as i64),
-                    snippet: String::new(),
-                    references: parsed.references.clone(),
-                    list_unsubscribe: parsed.list_unsubscribe.clone(),
-                    list_unsubscribe_post: parsed.list_unsubscribe_post.clone(),
-                    sender_addr: parsed.via.clone(),
-                    sender_verification: parsed.sender_verification,
-                };
-                let msg_id = repo::messages::insert(&tx, &nm, thread_id)?;
+                let imported = importer.insert(
+                    &tx,
+                    &parsed,
+                    &super::ingest::Delivery {
+                        folder_id,
+                        folder_role: folder_role.as_deref(),
+                        uid: Some(fh.uid as i64),
+                        received_ms: fh.internal_date_ms,
+                        seen: fh.flags.seen,
+                        flagged: fh.flags.flagged,
+                        draft: fh.flags.draft,
+                        has_attachments: fh.has_attachments,
+                        size: fh.size.map(|s| s as i64),
+                    },
+                )?;
+                let msg_id = imported.message_id;
                 if let Some(plan) = fh.mime_plan.as_ref() {
                     repo::messages::set_mime_plan(&tx, msg_id, Some(plan))?;
                     repo::messages::upsert_planned_attachments(&tx, msg_id, &plan.attachments)?;
@@ -2291,93 +2251,19 @@ async fn store_headers(
                 let _ = repo::sync_failures::clear_header(&tx, folder_id, fh.uid as i64);
                 inserted += 1;
                 repo::labels::reconcile_keywords(&tx, msg_id, &fh.flags.keywords)?;
-                repo::threads::recompute(&tx, thread_id)?;
+                repo::threads::recompute(&tx, imported.thread_id)?;
                 repo::search::index_message(&tx, msg_id)?;
-
-                // Learn compose suggestions without polluting the real address
-                // book. Outgoing recipients are the useful default; incoming
-                // senders require opt-in and exclude automated/junk mail.
-                let when = fh.internal_date_ms.unwrap_or(date_ms);
-                if is_outgoing
-                    && settings.collect_outgoing_contacts
-                    && when >= outgoing_learning_since
-                {
-                    let mut harvested_addresses = std::collections::HashSet::new();
-                    for address in parsed
-                        .to
-                        .iter()
-                        .chain(parsed.cc.iter())
-                        .chain(parsed.bcc.iter())
-                    {
-                        let email = address.email.to_ascii_lowercase();
-                        if !account_emails.contains(&email) && harvested_addresses.insert(email) {
-                            repo::contacts::harvest(&tx, account_id, address, true, when)?;
-                        }
-                    }
-                } else if settings.collect_incoming_contacts
-                    && when >= incoming_learning_since
-                    && !parsed.is_automated
-                    && !matches!(
-                        folder_role.as_deref(),
-                        Some(roles::SPAM) | Some(roles::TRASH)
-                    )
-                    && let Some(from) = &parsed.from
-                    && !crate::mime::robot_sender(&from.email)
-                {
-                    repo::contacts::harvest(&tx, account_id, from, false, when)?;
-                }
-
-                if !thread_ids.contains(&thread_id) {
-                    thread_ids.push(thread_id);
-                }
-                // A fresh arrival (unread + incoming + recent, past the notify
-                // watermark) is a candidate for both the chime and a desktop
-                // notification.
-                let arrival_ms = fh.internal_date_ms.unwrap_or(date_ms);
-                if arrival_eligible(
-                    notify_min_uid,
-                    fh.uid,
-                    nm.is_read,
-                    nm.is_outgoing,
-                    arrival_ms,
-                    now_ms(),
-                ) {
-                    // Enqueue a durable outbox row (once per thread this batch).
-                    // The native dispatcher consumes it after commit and applies
-                    // the user's notification scope against the thread's resolved
-                    // tab - so bulk mail is enqueued too and filtered there, not
-                    // here. Snapshotting sender/subject now keeps delivery
-                    // independent of any later UI or hydration step.
-                    if !enqueued_threads.contains(&thread_id) {
-                        enqueued_threads.push(thread_id);
-                        repo::notifications::enqueue(&tx, msg_id)?;
-                    }
-                    // The audible chime stays human-only regardless of scope.
-                    if chime_worthy(nm.is_automated, &from_email) && !fresh_ids.contains(&thread_id)
-                    {
-                        tracing::info!(
-                            account_id,
-                            thread_id,
-                            from = %from_email,
-                            "receive: chime-worthy new mail",
-                        );
-                        fresh_ids.push(thread_id);
-                    }
-                }
+                importer.learn_contacts(&tx, &parsed, &imported)?;
+                // Only mail past the inbox watermark arrived while this
+                // account was being followed.
+                let live = notify_min_uid.is_some_and(|min_uid| fh.uid >= min_uid);
+                importer.announce(&tx, &imported, live)?;
             }
 
             if max_uid > 0 {
                 repo::folders::set_last_seen_uid(&tx, folder_id, max_uid)?;
             }
-            // Resolve each touched thread to a single tab (rules + heuristic, or
-            // mark it 'pending' for the async AI pass). Runs once per thread with
-            // all its messages in place. See crate::route.
-            if auto_labels {
-                let splits = repo::splits::list(&tx)?;
-                for &tid in &thread_ids {
-                    crate::route::route_thread_deterministic(&tx, &splits, ai_categorize, tid)?;
-                }
-            }
+            let (thread_ids, fresh_ids) = importer.finish(&tx)?;
             tx.commit()?;
             if inserted > 0 {
                 tracing::info!(
@@ -4026,12 +3912,7 @@ async fn persist_body(
     let path_str = path.to_string_lossy().to_string();
 
     let parsed = crate::mime::parse_message(raw)?;
-    let parsed_calendar_events: Vec<_> = parsed
-        .calendar_parts
-        .iter()
-        .flat_map(|ics| crate::calendar::parse_ics(ics))
-        .collect();
-    let config_id = config.id;
+    let calendar_events = super::ingest::calendar_events(&parsed);
     let (persisted, thread_id) = ctx
         .db
         .write(move |conn| {
@@ -4046,38 +3927,7 @@ async fn persist_body(
             ) {
                 return Ok((false, None));
             }
-            repo::messages::store_body(
-                &tx,
-                message_id,
-                parsed.text.as_deref(),
-                parsed.html.as_deref(),
-                Some(&path_str),
-                // Real files only, mirroring BODYSTRUCTURE's disposition check
-                // and the message-card footer (both ignore inline images), so
-                // the list paperclip stays consistent before and after backfill.
-                parsed.attachments.iter().any(|a| !a.is_inline),
-                Some(&parsed.snippet),
-            )?;
-            repo::messages::set_sender_verification(
-                &tx,
-                message_id,
-                parsed.headers.sender_verification,
-            )?;
-            let atts: Vec<repo::messages::NewAttachment> = parsed
-                .attachments
-                .iter()
-                .map(|a| repo::messages::NewAttachment {
-                    message_id,
-                    part_id: Some(a.part_id.as_str()),
-                    filename: a.filename.as_deref(),
-                    mime_type: a.mime_type.as_deref(),
-                    size: Some(a.size),
-                    content_id: a.content_id.as_deref(),
-                    is_inline: a.is_inline,
-                })
-                .collect();
-            repo::messages::replace_attachments(&tx, message_id, &atts)?;
-            repo::search::index_message(&tx, message_id)?;
+            super::ingest::store_body(&tx, message_id, &path_str, &parsed)?;
             let _ = repo::sync_failures::clear_content(&tx, message_id);
             let tid: Option<i64> =
                 repo::messages::get_row(&tx, message_id)?.and_then(|r| r.thread_id);
@@ -4093,23 +3943,7 @@ async fn persist_body(
         let _ = tokio::fs::remove_file(&path).await;
         return Ok(());
     }
-
-    if !parsed_calendar_events.is_empty() {
-        ctx.calendar_db
-            .write(move |conn| {
-                let tx = conn.transaction()?;
-                for event in &parsed_calendar_events {
-                    repo::calendar::upsert(&tx, config_id, message_id, event)?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
-        ctx.bus.emit(CoreEvent::CalendarUpdated {
-            account_id: config_id,
-        });
-    }
-
+    super::ingest::store_calendar_events(ctx, config.id, message_id, calendar_events).await?;
     if let Some(tid) = thread_id {
         ctx.bus.emit(CoreEvent::MailUpdated {
             thread_ids: vec![tid],

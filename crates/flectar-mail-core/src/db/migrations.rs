@@ -32,6 +32,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/013_contact_entries.sql")),
     Migration::Plain(include_str!("migrations/014_folder_paths.sql")),
     Migration::TableRebuild(include_str!("migrations/015_account_protocols.sql")),
+    Migration::Plain(include_str!("migrations/016_pop3.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -245,6 +246,8 @@ mod tests {
             "messages_fts",
             "notification_outbox",
             "pending_actions",
+            "pop3_sync_state",
+            "pop3_uidls",
             "route_cache",
             "sender_identities",
             "snippets",
@@ -1040,7 +1043,10 @@ mod tests {
         assert!(dependents.iter().any(|(table, _)| table == "messages"));
         assert!(dependents.iter().all(|(table, _)| table != "accounts"));
 
-        run(&mut conn).unwrap();
+        // Through the rebuild only: later migrations add tables of their own.
+        for (index, migration) in MIGRATIONS.iter().enumerate().take(15).skip(13) {
+            apply(&mut conn, migration, (index + 1) as i64).unwrap();
+        }
 
         assert_eq!(account_dependents(&conn), dependents);
         let accounts = conn

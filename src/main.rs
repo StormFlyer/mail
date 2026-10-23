@@ -4597,7 +4597,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 app.set_account_protocol("imap".into());
                 app.set_jmap_url("".into());
                 app.set_incoming_host("".into());
+                app.set_incoming_port("993".into());
                 app.set_smtp_host("".into());
+                app.set_smtp_port("465".into());
             }
             if let Some(removal) = update.account_removal.as_mut().filter(|removal| removal.removed) {
                 let current_page = {
@@ -6745,6 +6747,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(app) = suggestion_app.upgrade() else {
             return;
         };
+        // Only server settings that the form shows are suggested.
+        let (protocol, standard_incoming_port) =
+            match MailProtocol::parse(app.get_account_protocol().as_str()) {
+                Some(MailProtocol::Imap) => (MailProtocol::Imap, "993"),
+                Some(MailProtocol::Pop3) => (MailProtocol::Pop3, "995"),
+                Some(MailProtocol::Gmail | MailProtocol::Jmap) | None => return,
+            };
         let transport_matches_last_suggestion = last_suggested_transport
             .borrow()
             .as_ref()
@@ -6762,7 +6771,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             });
         let transport_is_pristine = app.get_incoming_host().trim().is_empty()
             && app.get_smtp_host().trim().is_empty()
-            && app.get_incoming_port().as_str() == "993"
+            && app.get_incoming_port().as_str() == standard_incoming_port
             && app.get_smtp_port().as_str() == "465"
             && app.get_incoming_security().as_str() == "tls"
             && app.get_smtp_security().as_str() == "tls"
@@ -6773,12 +6782,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         let suggestion = {
             let state = suggestion_state.borrow();
-            reusable_mail_transport(&state.account_configs, email.as_str()).cloned()
+            reusable_mail_transport(&state.account_configs, email.as_str(), protocol).cloned()
         };
         let Some(config) = suggestion else {
             if transport_matches_last_suggestion {
                 app.set_incoming_host("".into());
-                app.set_incoming_port("993".into());
+                app.set_incoming_port(standard_incoming_port.into());
                 app.set_smtp_host("".into());
                 app.set_smtp_port("465".into());
                 app.set_incoming_security("tls".into());
@@ -6842,11 +6851,14 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     465,
                     UiMessage::plain("Discovering JMAP and checking capabilities…"),
                 ),
-                MailProtocol::Imap => {
+                MailProtocol::Imap | MailProtocol::Pop3 => {
                     let Some(incoming_port) = port(&incoming_port) else {
-                        app.set_sync_status(UiMessage::plain(
-                            "IMAP port must be between 1 and 65535.",
-                        ));
+                        app.set_sync_status(match mail_protocol {
+                            MailProtocol::Pop3 => {
+                                UiMessage::plain("POP3 port must be between 1 and 65535.")
+                            }
+                            _ => UiMessage::plain("IMAP port must be between 1 and 65535."),
+                        });
                         return;
                     };
                     let Some(smtp_port) = port(&smtp_port) else {
@@ -6858,7 +6870,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     (
                         incoming_port,
                         smtp_port,
-                        UiMessage::plain("Testing IMAP and SMTP connections…"),
+                        match mail_protocol {
+                            MailProtocol::Pop3 => {
+                                UiMessage::plain("Testing POP3 and SMTP connections…")
+                            }
+                            _ => UiMessage::plain("Testing IMAP and SMTP connections…"),
+                        },
                     )
                 }
                 MailProtocol::Gmail => {

@@ -849,6 +849,34 @@ fn attachment_meta_from_row(
     })
 }
 
+/// A message as an export writes it.
+pub struct ExportedMessage {
+    pub id: i64,
+    pub raw_path: Option<String>,
+    pub is_draft: bool,
+    pub date: i64,
+    pub from: String,
+}
+
+/// A folder's messages for an export, oldest first.
+pub fn in_folder_for_export(conn: &Connection, folder_id: i64) -> Result<Vec<ExportedMessage>> {
+    let mut statement = conn.prepare(
+        "SELECT id, raw_path, is_draft, date, COALESCE(from_addr, '')
+         FROM messages WHERE folder_id = ?1 ORDER BY date, id",
+    )?;
+    Ok(statement
+        .query_map([folder_id], |row| {
+            Ok(ExportedMessage {
+                id: row.get(0)?,
+                raw_path: row.get(1)?,
+                is_draft: row.get::<_, i64>(2)? != 0,
+                date: row.get(3)?,
+                from: row.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 pub fn detail(conn: &Connection, id: i64) -> Result<MessageDetail> {
     let sql = format!(
         "SELECT {DETAIL_MESSAGE_COLS}, b.text_body, b.html_body, {SEND_STATE_COLS}

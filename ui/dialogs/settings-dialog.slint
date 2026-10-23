@@ -2,7 +2,7 @@ import { AccountMailPreferencesPanel } from "../components/account-mail-preferen
 import { RendererSettings } from "../renderer-settings.slint";
 import { WindowChrome } from "../window-chrome.slint";
 import { MessageColors } from "../message-colors.slint";
-import { MailSecurityFields } from "../components/mail-security-fields.slint";
+import { MailPorts, MailSecurityFields } from "../components/mail-security-fields.slint";
 import { OAuthBrowserHelp } from "../components/oauth-browser-help.slint";
 import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
 import { AccountRow, MailProfileRow, ProfileMemberRow, StorageUsageRow } from "../models.slint";
@@ -530,6 +530,12 @@ export component SettingsDialog inherits Rectangle {
     in-out property <bool> delete_account_confirmation: false;
     in-out property <int> delete_account_id: -1;
     in-out property <string> delete_account_name: "";
+    // The account being removed keeps its mail only on this device (POP3).
+    private property <bool> delete_account_device_mail: false;
+    // Some account keeps its mail only on this device (POP3).
+    in property <bool> has_device_mail: false;
+    in property <bool> mail_export_running: false;
+    in property <string> mail_export_status: "";
     private property <bool> compact-nav-open: false;
     private property <bool> clear-contact-suggestions-confirming: false;
     private property <string> settings-search-query: "";
@@ -596,6 +602,8 @@ export component SettingsDialog inherits Rectangle {
     callback export_account_backup();
     callback import_accounts();
     callback export_database_snapshot();
+    // Export the mail of one account, or of every POP3 account for -1.
+    callback export_device_mail(int);
     callback delete_all_data();
     callback load_storage_usage();
     pure callback settings-search-matches(string, string) -> bool;
@@ -793,7 +801,15 @@ export component SettingsDialog inherits Rectangle {
     function confirm-account-removal(account: AccountRow) {
         root.delete_account_id = account.id;
         root.delete_account_name = account.email;
+        root.delete_account_device_mail = account.mail_protocol == "pop3";
         root.delete_account_confirmation = true;
+    }
+
+    function choose-protocol(protocol: string) {
+        if MailPorts.is-standard-incoming(root.incoming_port) {
+            root.incoming_port = MailPorts.incoming(protocol, root.incoming_security);
+        }
+        root.account_protocol = protocol;
     }
 
     function open_new_mail_account() {
@@ -1767,7 +1783,7 @@ export component SettingsDialog inherits Rectangle {
                                             spacing: 2px;
                                             account-name := Text { height: max(19px, self.preferred-height); text: account.name; color: root.heading; font-size: TypeScale.body-large; font-weight: 700; overflow: elide; }
                                             account-email := Text { height: max(16px, self.preferred-height); text: account.email; color: root.secondary-text; font-size: TypeScale.caption; overflow: elide; }
-                                            account-state := Text { height: max(16px, self.preferred-height); text: account.status == "offline" ? @tr("Offline · retrying automatically") : account.status == "needs_reauth" ? @tr("Sign-in required") : account.status == "syncing" ? @tr("Syncing…") : account.status == "idle" ? (account.mail_protocol == "gmail" ? @tr("Connected · Gmail") : account.mail_protocol == "jmap" ? @tr("Connected · JMAP") : drop-target.unencrypted ? @tr("Connected without encryption · IMAP + SMTP") : @tr("Connected · IMAP + SMTP")) : @tr("Account status: {}", account.status); color: account.status == "needs_reauth" ? #c0392b : account.status == "idle" && drop-target.unencrypted ? AppTheme.destructive : root.faint-text; font-size: TypeScale.caption; overflow: elide; }
+                                            account-state := Text { height: max(16px, self.preferred-height); text: account.status == "offline" ? @tr("Offline · retrying automatically") : account.status == "needs_reauth" ? @tr("Sign-in required") : account.status == "syncing" ? @tr("Syncing…") : account.status == "idle" ? (account.mail_protocol == "gmail" ? @tr("Connected · Gmail") : account.mail_protocol == "jmap" ? @tr("Connected · JMAP") : account.mail_protocol == "pop3" ? (drop-target.unencrypted ? @tr("Connected without encryption · POP3 + SMTP") : @tr("Connected · POP3 + SMTP")) : drop-target.unencrypted ? @tr("Connected without encryption · IMAP + SMTP") : @tr("Connected · IMAP + SMTP")) : @tr("Account status: {}", account.status); color: account.status == "needs_reauth" ? #c0392b : account.status == "idle" && drop-target.unencrypted ? AppTheme.destructive : root.faint-text; font-size: TypeScale.caption; overflow: elide; }
                                         }
                                         AccountActions {
                                             edit-label: account.provider == "generic" ? @tr("Edit") : @tr("Reconnect");
@@ -2043,7 +2059,7 @@ export component SettingsDialog inherits Rectangle {
                                 vertical-stretch: 0;
                                 delete-card := SettingsCard { title: @tr("Delete all local data"); description: @tr("Remove accounts, downloaded mail, calendars, contacts, preferences, and credentials from this device."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
                                 Image { x: 20px; y: delete-note.y + (delete-note.height - self.height) / 2; width: LayoutMetrics.icon-size; height: LayoutMetrics.icon-size; source: @image-url("../icons/lucide/outline/trash.svg"); colorize: #d04a43; image-fit: contain; accessible-role: none; }
-                                delete-note := Text { x: 48px; y: delete-card.content-y + 14px; width: root.compact ? parent.width - 68px : delete-button.x - 70px; height: max(42px, self.preferred-height); text: @tr("This does not delete anything from Gmail, Outlook, or your IMAP server."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
+                                delete-note := Text { x: 48px; y: delete-card.content-y + 14px; width: root.compact ? parent.width - 68px : delete-button.x - 70px; height: max(42px, self.preferred-height); text: root.has_device_mail ? @tr("POP3 mail is stored only on this device. Nothing is deleted from Gmail, Outlook, or IMAP servers.") : @tr("This does not delete anything from Gmail, Outlook, or your IMAP server."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
                                 delete-button := Button { x: root.compact ? 20px : parent.width - self.width - 20px; y: root.compact ? delete-note.y + delete-note.height + 25px : delete-note.y + (delete-note.height - self.height) / 2; width: root.compact ? parent.width - 40px : max(170px, self.content-width); text: @tr("Delete everything"); icon: @image-url("../icons/lucide/outline/trash.svg"); has-icon: true; clicked => { root.delete_data_confirmation = true; } }
                             }
 
@@ -2586,7 +2602,7 @@ export component SettingsDialog inherits Rectangle {
                         reject
                     }
 
-                    VerticalBox {
+                    account-content := VerticalBox {
                         padding: 0px;
                         padding-top: 22px;
                         padding-right: 22px;
@@ -2609,7 +2625,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding: 0px;
                                 spacing: 2px;
                                 Text { text: root.account_editing ? @tr("Edit {}", root.account_email) : @tr("Connect a mail account"); color: root.title-color; font-size: TypeScale.heading; font-weight: 700; overflow: elide; }
-                                Text { text: root.account_protocol == "jmap" ? @tr("Uses JMAP for mail sync and sending, with automatic discovery.") : @tr("Uses separate IMAP and SMTP servers for mail sync and sending."); color: root.faint-text; font-size: TypeScale.caption; overflow: elide; }
+                                Text { text: root.account_protocol == "jmap" ? @tr("Uses JMAP for mail sync and sending, with automatic discovery.") : root.account_protocol == "pop3" ? @tr("Downloads mail from a POP3 server to this device and sends through SMTP.") : @tr("Uses separate IMAP and SMTP servers for mail sync and sending."); color: root.faint-text; font-size: TypeScale.caption; overflow: elide; }
                             }
                             Rectangle { horizontal-stretch: 1; }
                             IconButton { width: 40px; height: 40px; icon: @image-url("../icons/lucide/outline/x.svg"); icon-color: root.secondary-text; idle-background: transparent; hover-background: root.accent-soft; tooltip-text: @tr("Close"); clicked => { root.account_form_open = false; } }
@@ -2640,12 +2656,15 @@ export component SettingsDialog inherits Rectangle {
                                     FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Username"); value: root.account_username; placeholder: @tr("Usually your email address"); label-color: root.secondary-text; edited(value) => { root.account_username = value; } }
                                 }
                                 FormField { enabled: !root.account_setup_in_progress; height: 57px; label: root.account_protocol == "jmap" ? @tr("Password, app password, or API token") : @tr("Password or app password"); value: root.account_password; placeholder: @tr("Stored securely in your system keyring"); input-type: password; label-color: root.secondary-text; edited(value) => { root.account_password = value; } }
-                                HorizontalBox {
+                                // POP3 mail exists only on this device, so an account
+                                // never switches to or from POP3.
+                                if !(root.account_editing && root.account_protocol == "pop3") : HorizontalBox {
                                     padding: 0px;
                                     height: 40px;
                                     spacing: 8px;
-                                    Button { horizontal-stretch: 1; height: 40px; text: @tr("IMAP + SMTP"); enabled: !root.account_setup_in_progress; primary: root.account_protocol == "imap"; clicked => { root.account_protocol = "imap"; } }
-                                    Button { horizontal-stretch: 1; height: 40px; text: @tr("JMAP"); enabled: !root.account_setup_in_progress; primary: root.account_protocol == "jmap"; clicked => { root.account_protocol = "jmap"; } }
+                                    Button { horizontal-stretch: 1; height: 40px; text: @tr("IMAP"); enabled: !root.account_setup_in_progress; primary: root.account_protocol == "imap"; clicked => { root.choose-protocol("imap"); } }
+                                    if !root.account_editing : Button { horizontal-stretch: 1; height: 40px; text: @tr("POP3"); enabled: !root.account_setup_in_progress; primary: root.account_protocol == "pop3"; clicked => { root.choose-protocol("pop3"); } }
+                                    Button { horizontal-stretch: 1; height: 40px; text: @tr("JMAP"); enabled: !root.account_setup_in_progress; primary: root.account_protocol == "jmap"; clicked => { root.choose-protocol("jmap"); } }
                                 }
                                 if root.account_protocol == "jmap" : FormField { enabled: !root.account_setup_in_progress;
                                     height: 57px;
@@ -2655,25 +2674,26 @@ export component SettingsDialog inherits Rectangle {
                                     label-color: root.secondary-text;
                                     edited(value) => { root.jmap_url = value; }
                                 }
-                                if root.account_protocol == "imap" : HorizontalBox {
+                                if root.account_protocol != "jmap" : HorizontalBox {
                                     padding: 0px;
                                     height: 57px;
                                     spacing: 10px;
-                                    FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("IMAP server"); value: root.incoming_host; placeholder: @tr("imap.example.com"); label-color: root.secondary-text; edited(value) => { root.incoming_host = value; } }
-                                    FormField { enabled: !root.account_setup_in_progress; width: 88px; label: @tr("Port"); value: root.incoming_port; placeholder: @tr("993"); label-color: root.secondary-text; edited(value) => { root.incoming_port = value; } }
+                                    FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: root.account_protocol == "pop3" ? @tr("POP3 server") : @tr("IMAP server"); value: root.incoming_host; placeholder: root.account_protocol == "pop3" ? @tr("pop.example.com") : @tr("imap.example.com"); label-color: root.secondary-text; edited(value) => { root.incoming_host = value; } }
+                                    FormField { enabled: !root.account_setup_in_progress; width: 88px; label: @tr("Port"); value: root.incoming_port; placeholder: MailPorts.incoming(root.account_protocol, root.incoming_security); label-color: root.secondary-text; edited(value) => { root.incoming_port = value; } }
                                 }
-                                if root.account_protocol == "imap" : HorizontalBox {
+                                if root.account_protocol != "jmap" : HorizontalBox {
                                     padding: 0px;
                                     height: 57px;
                                     spacing: 10px;
                                     FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("SMTP server"); value: root.smtp_host; placeholder: @tr("smtp.example.com"); label-color: root.secondary-text; edited(value) => { root.smtp_host = value; } }
-                                    FormField { enabled: !root.account_setup_in_progress; width: 88px; label: @tr("Port"); value: root.smtp_port; placeholder: @tr("465"); label-color: root.secondary-text; edited(value) => { root.smtp_port = value; } }
+                                    FormField { enabled: !root.account_setup_in_progress; width: 88px; label: @tr("Port"); value: root.smtp_port; placeholder: MailPorts.smtp(root.smtp_security); label-color: root.secondary-text; edited(value) => { root.smtp_port = value; } }
                                 }
                                 if root.account_protocol == "imap" : Text {
                                     text: @tr("Proton Bridge: use the local servers, ports and password shown in Bridge, and match its encryption settings.");
                                     color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height;
                                 }
-                                if root.account_protocol == "imap" : MailSecurityFields {
+                                if root.account_protocol != "jmap" : MailSecurityFields {
+                                    incoming-protocol: root.account_protocol;
                                     incoming-security <=> root.incoming_security;
                                     smtp-security <=> root.smtp_security;
                                     incoming-port <=> root.incoming_port;
@@ -2702,14 +2722,19 @@ export component SettingsDialog inherits Rectangle {
                             }
                         }
 
-                        HorizontalBox {
-                            padding: 0px;
-                            height: root.compact ? 44px : 34px;
+                        // Phone-width dialogs give the whole row to the buttons
+                        // and stack them when a label does not fit in half of it.
+                        GridLayout {
+                            property <bool> stacked: root.compact && max(cancel-account.content-width, save-account.content-width) * 2 + self.spacing
+                                > account-panel.width - account-content.padding-left - account-content.padding-right;
                             spacing: 8px;
-                            Rectangle { horizontal-stretch: 1; }
-                            Button { height: parent.height; text: @tr("Cancel"); clicked => { root.account_form_open = false; } }
-                            Button {
-                                height: parent.height;
+                            if !root.compact : Rectangle { row: 0; col: 0; horizontal-stretch: 1; }
+                            cancel-account := Button { row: 0; col: root.compact ? 0 : 1; height: root.compact ? 44px : 34px; label-overflow: elide; text: @tr("Cancel"); clicked => { root.account_form_open = false; } }
+                            save-account := Button {
+                                row: parent.stacked ? 1 : 0;
+                                col: parent.stacked ? 0 : root.compact ? 1 : 2;
+                                height: root.compact ? 44px : 34px;
+                                label-overflow: elide;
                                 text: root.account_setup_in_progress ? @tr("Connecting…") : root.account_editing ? @tr("Save account") : @tr("Connect account");
                                 primary: true;
                                 enabled: root.account_form_valid && !root.account_setup_in_progress;
@@ -2910,7 +2935,13 @@ export component SettingsDialog inherits Rectangle {
             open <=> root.delete_data_confirmation;
             title: @tr("Delete all local data?");
             description: @tr("This removes every account, downloaded message, calendar, contact, preference, and credential stored by Flectar Mail on this device.");
-            detail: @tr("Mail and events on Gmail, Outlook, and IMAP servers will not be deleted.");
+            detail: root.has_device_mail
+                ? @tr("POP3 mail is stored only on this device and will be deleted. Mail and events on Gmail, Outlook, and IMAP servers will not be deleted.")
+                : @tr("Mail and events on Gmail, Outlook, and IMAP servers will not be deleted.");
+            action-label: root.has_device_mail ? @tr("Export POP3 mail…") : "";
+            action-status: root.mail_export_status;
+            action-enabled: !root.mail_export_running;
+            action => { root.export_device_mail(-1); }
             confirm-label: @tr("Delete everything");
             cancel-label: @tr("Keep my data");
             icon: @image-url("../icons/lucide/outline/trash.svg");
@@ -2929,7 +2960,13 @@ export component SettingsDialog inherits Rectangle {
             title: @tr("Remove account?");
             subject: root.delete_account_name;
             description: @tr("Remove this account and its downloaded mail from this device.");
-            detail: @tr("Messages on the mail server will not be deleted.");
+            detail: root.delete_account_device_mail
+                ? @tr("This account's mail is stored only on this device. Export it first to keep a copy.")
+                : @tr("Messages on the mail server will not be deleted.");
+            action-label: root.delete_account_device_mail ? @tr("Export mail…") : "";
+            action-status: root.mail_export_status;
+            action-enabled: !root.mail_export_running;
+            action => { root.export_device_mail(root.delete_account_id); }
             confirm-label: @tr("Remove account");
             cancel-label: @tr("Keep account");
             icon: @image-url("../icons/lucide/outline/trash.svg");

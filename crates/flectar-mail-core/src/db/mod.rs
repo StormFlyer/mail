@@ -489,6 +489,34 @@ impl Db {
         db.call(db.write_tx.as_ref().unwrap(), f).await
     }
 
+    /// Run `f` in one transaction whose commit has reached stable storage when
+    /// this returns. The store normally commits with `synchronous=NORMAL`,
+    /// which a power loss can undo; this is for commits that let a server
+    /// drop its own copy of the data.
+    pub async fn write_durable<T, F>(&self, f: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&rusqlite::Transaction) -> Result<T> + Send + 'static,
+    {
+        self.write(move |conn| {
+            // The level can only change outside a transaction.
+            let previous: i64 = conn.pragma_query_value(None, "synchronous", |row| row.get(0))?;
+            conn.pragma_update(None, "synchronous", "FULL")?;
+            let result = conn.transaction().map_err(Into::into).and_then(|tx| {
+                let value = f(&tx)?;
+                tx.commit()?;
+                Ok(value)
+            });
+            // Once the commit stands, failing to restore the usual level only
+            // costs speed; reporting an error would misstate the commit.
+            if let Err(error) = conn.pragma_update(None, "synchronous", previous) {
+                tracing::warn!(%error, "could not restore the database sync level");
+            }
+            result
+        })
+        .await
+    }
+
     /// Run a read-only closure on the reader connection.
     pub async fn read<T, F>(&self, f: F) -> Result<T>
     where

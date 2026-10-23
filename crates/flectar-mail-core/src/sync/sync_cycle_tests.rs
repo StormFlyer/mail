@@ -1,5 +1,6 @@
 //! End-to-end fixtures for scheduling and IMAP compatibility in one sync cycle.
 use super::*;
+use crate::db::repo::messages::NewMessage;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

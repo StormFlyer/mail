@@ -1,6 +1,7 @@
 use crate::error::Result;
-use crate::models::FolderInfo;
+use crate::models::{FolderInfo, MailProtocol};
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Folder {
@@ -140,16 +141,25 @@ pub fn list(conn: &Connection, account_id: Option<i64>) -> Result<Vec<Folder>> {
 }
 
 pub fn list_info(conn: &Connection, account_id: Option<i64>) -> Result<Vec<FolderInfo>> {
+    let protocols = conn
+        .prepare("SELECT id, mail_protocol FROM accounts")?
+        .query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, MailProtocol>(1)?))
+        })?
+        .collect::<rusqlite::Result<HashMap<_, _>>>()?;
     Ok(list(conn, account_id)?
         .into_iter()
         .map(|f| FolderInfo {
             id: f.id,
             account_id: f.account_id,
             parent_id: f.parent_id,
-            display_name: if f.jmap_id.is_some() {
-                f.path.clone()
-            } else {
-                crate::imap::decode_mailbox_name(&f.path)
+            // IMAP names are modified UTF-7 on the wire; JMAP names and local
+            // POP3 folders are stored as shown.
+            display_name: match protocols.get(&f.account_id) {
+                Some(MailProtocol::Gmail | MailProtocol::Imap) => {
+                    crate::imap::decode_mailbox_name(&f.path)
+                }
+                Some(MailProtocol::Jmap | MailProtocol::Pop3) | None => f.path.clone(),
             },
             is_jmap: f.jmap_id.is_some(),
             path: f.path,
@@ -209,6 +219,39 @@ pub fn rename_tree(
     Ok(())
 }
 
+/// A message in a folder tree.
+pub struct TreeMessage {
+    pub id: i64,
+    pub thread_id: Option<i64>,
+    pub raw_path: Option<String>,
+}
+
+/// Every message in a folder and its subfolders.
+pub fn messages_in_tree(
+    conn: &Connection,
+    account_id: i64,
+    prefix: &str,
+    delimiter: &str,
+) -> Result<Vec<TreeMessage>> {
+    let pattern = subtree_pattern(prefix, delimiter);
+    let mut stmt = conn.prepare(
+        "SELECT m.id, m.thread_id, m.raw_path
+         FROM messages m JOIN folders f ON f.id = m.folder_id
+         WHERE f.account_id = ?1 AND (f.path = ?2 OR f.path LIKE ?3 ESCAPE '\\')",
+    )?;
+    Ok(stmt
+        .query_map(params![account_id, prefix, pattern], |row| {
+            Ok(TreeMessage {
+                id: row.get(0)?,
+                thread_id: row.get(1)?,
+                raw_path: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Delete a folder and its subfolders. Their messages go first, with their
+/// search entries and files (see `crate::sync::delete_folder_tree`).
 pub fn delete_tree(
     conn: &Connection,
     account_id: i64,
@@ -216,34 +259,20 @@ pub fn delete_tree(
     delimiter: &str,
 ) -> Result<()> {
     let pattern = subtree_pattern(prefix, delimiter);
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT m.thread_id
-         FROM messages m JOIN folders f ON f.id = m.folder_id
-         WHERE f.account_id = ?1 AND (f.path = ?2 OR f.path LIKE ?3 ESCAPE '\\')
-           AND m.thread_id IS NOT NULL",
-    )?;
-    let thread_ids = stmt
-        .query_map(params![account_id, prefix, pattern], |row| {
-            row.get::<_, i64>(0)
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    drop(stmt);
-    conn.execute(
-        "DELETE FROM messages WHERE folder_id IN (
-           SELECT id FROM folders
-           WHERE account_id = ?1 AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')
-         )",
-        params![account_id, prefix, pattern],
-    )?;
     conn.execute(
         "DELETE FROM folders
          WHERE account_id = ?1 AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')",
         params![account_id, prefix, pattern],
     )?;
-    for thread_id in thread_ids {
-        super::threads::recompute(conn, thread_id)?;
-    }
     Ok(())
+}
+
+pub fn path_exists(conn: &Connection, account_id: i64, path: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM folders WHERE account_id = ?1 AND path = ?2)",
+        params![account_id, path],
+        |row| row.get(0),
+    )?)
 }
 
 pub fn get(conn: &Connection, id: i64) -> Result<Option<Folder>> {
