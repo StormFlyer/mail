@@ -837,8 +837,21 @@ export component AppWindow inherits Window {
     changed settings_open => {
         root.product-changed(root.active_view);
         // Hiding Settings destroys the dialog before its own change handlers
-        // run, so an unsaved palette is discarded here.
-        if root.settings_open { root.settings-shown(); } else { ThemeDraft.revert(); }
+        // run, so an unsaved palette and open forms are discarded here. The
+        // dialog's private state starts over when it is created again.
+        if root.settings_open {
+            root.settings-shown();
+        } else {
+            ThemeDraft.revert();
+            root.account_form_open = false;
+            root.account_password = "";
+            root.caldav_account_id = -1;
+            root.caldav_password = "";
+            root.caldav_manage_existing = false;
+            root.carddav_account_id = -1;
+            root.carddav_password = "";
+            root.carddav_manage_existing = false;
+        }
         TabsUi.navigated();
     }
     // Settings appeared, whichever way it was opened.

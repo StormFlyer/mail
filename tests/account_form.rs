@@ -1,6 +1,7 @@
 //! The mail account form shows what it will submit: values reset or filled in
-//! after the user typed reach the fields.
+//! after the user typed reach the fields, and closing Settings closes the form.
 
+use flectar_mail::AppWindow;
 use i_slint_core::accessibility::{AccessibilityAction, AccessibleStringProperty};
 use i_slint_core::item_tree::ItemRc;
 use i_slint_core::window::WindowInner;
@@ -159,4 +160,30 @@ fn account_form_fields_follow_their_values() {
     // Editing an account fills the form in, also over typed text.
     ui.set_email("admin@example.com".into());
     assert_eq!(shows(&ui, EMAIL), "admin@example.com");
+    ui.hide().unwrap();
+
+    // Hiding Settings destroys its dialog before the dialog's own handlers
+    // run, so the window closes the forms and forgets typed passwords.
+    let app = AppWindow::new().unwrap();
+    app.show().unwrap();
+    app.set_settings_open(true);
+    slint::platform::update_timers_and_animations();
+    app.set_account_form_open(true);
+    app.set_account_password("typed".into());
+    app.set_caldav_account_id(3);
+    app.set_caldav_password("calendar".into());
+    app.set_caldav_manage_existing(true);
+    app.set_carddav_account_id(4);
+    app.set_carddav_password("contacts".into());
+    app.set_carddav_manage_existing(true);
+    app.set_settings_open(false);
+    slint::platform::update_timers_and_animations();
+    assert!(!app.get_account_form_open());
+    assert_eq!(app.get_account_password(), "");
+    assert_eq!(app.get_caldav_account_id(), -1);
+    assert_eq!(app.get_caldav_password(), "");
+    assert!(!app.get_caldav_manage_existing());
+    assert_eq!(app.get_carddav_account_id(), -1);
+    assert_eq!(app.get_carddav_password(), "");
+    assert!(!app.get_carddav_manage_existing());
 }

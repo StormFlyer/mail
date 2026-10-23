@@ -710,17 +710,6 @@ export component SettingsDialog inherits Rectangle {
         }
     }
 
-    changed settings_open => {
-        if !root.settings_open {
-            theme-editor.discard-changes();
-            root.close-caldav-settings();
-            root.profile-editor-open = false;
-            root.close-account-profile-picker();
-            root.account_form_open = false;
-            root.account_editing = false;
-        }
-    }
-
     function select-sync-interval(index: int) {
         root.sync_interval_minutes = index == 0 ? 1 : index == 1 ? 5 : 15;
         root.save_sync_interval(root.sync_interval_minutes);
