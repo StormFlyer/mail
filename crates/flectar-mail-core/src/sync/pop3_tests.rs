@@ -425,15 +425,22 @@ async fn mail_sent_to_yourself_stays_in_sent() {
         .unwrap();
     fixture.sync().await.unwrap();
     assert!(fixture.inbox().await.is_empty());
-    let linked = fixture
+    let (known, downloaded_as) = fixture
         .ctx
         .db
-        .read(move |conn| repo::pop3::uidl_of_message(conn, sent_id))
+        .read(move |conn| {
+            Ok((
+                repo::pop3::known_uidls(conn, account_id)?,
+                repo::pop3::uidl_of_message(conn, sent_id)?,
+            ))
+        })
         .await
         .unwrap();
-    assert_eq!(linked.as_deref(), Some("uidl-self"));
-    // The downloaded copy was not kept beside the existing one.
+    assert_eq!(known["uidl-self"].state, UidlState::Matched);
+    // The downloaded copy was not kept beside the existing one, so the Sent
+    // copy can't be restored from it.
     assert!(fixture.originals().await.is_empty());
+    assert_eq!(downloaded_as, None);
 }
 
 #[tokio::test]
@@ -669,6 +676,7 @@ fn plans_list_the_newest_first_and_skip_what_is_settled() {
     };
     let known = HashMap::from([
         ("stored".to_owned(), entry(UidlState::Stored, None, None)),
+        ("matched".to_owned(), entry(UidlState::Matched, None, None)),
         ("old".to_owned(), entry(UidlState::Skipped, Some(5), None)),
         (
             "recent".to_owned(),
@@ -689,6 +697,7 @@ fn plans_list_the_newest_first_and_skip_what_is_settled() {
         listed(5, "later"),
         listed(6, "never"),
         listed(7, "new"),
+        listed(8, "matched"),
     ];
     let planned: Vec<_> = plan(&listing, &known, Some(10), 100)
         .into_iter()

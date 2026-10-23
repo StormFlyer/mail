@@ -6,9 +6,11 @@ CREATE TABLE pop3_uidls (
   account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   uidl TEXT NOT NULL CHECK (length(uidl) BETWEEN 1 AND 70),
   -- 'stored': downloaded; message_id empties once the message is deleted
-  -- here. 'skipped': older than the account's mail history when it was
-  -- listed. 'failed': retried from retry_at, never when that is NULL.
-  state TEXT NOT NULL CHECK (state IN ('stored', 'skipped', 'failed')),
+  -- here. 'matched': the account already had the message, such as the Sent
+  -- copy of mail sent to oneself, so the server's copy wasn't kept.
+  -- 'skipped': older than the account's mail history when it was listed.
+  -- 'failed': retried from retry_at, never when that is NULL.
+  state TEXT NOT NULL CHECK (state IN ('stored', 'matched', 'skipped', 'failed')),
   message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
   size INTEGER NOT NULL CHECK (size >= 0),
   -- The message's Date, once known from its headers.
@@ -21,7 +23,7 @@ CREATE TABLE pop3_uidls (
   retry_at INTEGER,
   last_error TEXT,
   PRIMARY KEY (account_id, uidl),
-  CHECK (state <> 'stored' OR stored_at IS NOT NULL)
+  CHECK (state NOT IN ('stored', 'matched') OR stored_at IS NOT NULL)
 ) WITHOUT ROWID;
 
 CREATE INDEX pop3_uidls_message ON pop3_uidls(message_id)

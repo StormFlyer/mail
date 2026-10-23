@@ -515,7 +515,7 @@ fn plan(
             None => (None, 0),
             Some(entry) => {
                 let due = match entry.state {
-                    UidlState::Stored => false,
+                    UidlState::Stored | UidlState::Matched => false,
                     // Reconsidered once the mail history reaches back to it.
                     UidlState::Skipped => {
                         cutoff.is_none_or(|cutoff| entry.sent_at.is_none_or(|at| at >= cutoff))
@@ -740,7 +740,7 @@ async fn store(
             if let Some(message_id) = parsed.headers.message_id.as_deref()
                 && let Some(existing) = repo::messages::by_message_id(tx, account_id, message_id)?
             {
-                repo::pop3::record_stored(tx, account_id, &uidl, size, sent_at, existing.id, now)?;
+                repo::pop3::record_matched(tx, account_id, &uidl, size, sent_at, existing.id, now)?;
                 return Ok(None);
             }
             let inbox = repo::folders::by_role(tx, account_id, roles::INBOX)?

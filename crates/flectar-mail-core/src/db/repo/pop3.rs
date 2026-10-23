@@ -149,6 +149,9 @@ fn parse_expire(value: &str) -> Option<Expire> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UidlState {
     Stored,
+    /// The account already had the message, so the server's copy wasn't
+    /// kept.
+    Matched,
     /// Older than the account's mail history.
     Skipped,
     Failed,
@@ -158,6 +161,7 @@ impl UidlState {
     fn as_str(self) -> &'static str {
         match self {
             Self::Stored => "stored",
+            Self::Matched => "matched",
             Self::Skipped => "skipped",
             Self::Failed => "failed",
         }
@@ -166,6 +170,7 @@ impl UidlState {
     fn parse(value: &str) -> Option<Self> {
         match value {
             "stored" => Some(Self::Stored),
+            "matched" => Some(Self::Matched),
             "skipped" => Some(Self::Skipped),
             "failed" => Some(Self::Failed),
             _ => None,
@@ -249,7 +254,7 @@ pub fn reconcile_listing(
     Ok(())
 }
 
-/// A downloaded message, or one recognized as already stored.
+/// A downloaded message, stored as `message_id`.
 pub fn record_stored(
     conn: &Connection,
     account_id: i64,
@@ -259,14 +264,67 @@ pub fn record_stored(
     message_id: i64,
     at: i64,
 ) -> Result<()> {
+    record_on_device(
+        conn,
+        account_id,
+        uidl,
+        UidlState::Stored,
+        size,
+        sent_at,
+        message_id,
+        at,
+    )
+}
+
+/// A message the account already had as `message_id`.
+pub fn record_matched(
+    conn: &Connection,
+    account_id: i64,
+    uidl: &str,
+    size: u64,
+    sent_at: Option<i64>,
+    message_id: i64,
+    at: i64,
+) -> Result<()> {
+    record_on_device(
+        conn,
+        account_id,
+        uidl,
+        UidlState::Matched,
+        size,
+        sent_at,
+        message_id,
+        at,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_on_device(
+    conn: &Connection,
+    account_id: i64,
+    uidl: &str,
+    state: UidlState,
+    size: u64,
+    sent_at: Option<i64>,
+    message_id: i64,
+    at: i64,
+) -> Result<()> {
     conn.execute(
         "INSERT INTO pop3_uidls (account_id, uidl, state, message_id, size, sent_at, stored_at)
-         VALUES (?1, ?2, 'stored', ?3, ?4, ?5, ?6)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(account_id, uidl) DO UPDATE SET
-           state = 'stored', message_id = excluded.message_id, size = excluded.size,
+           state = excluded.state, message_id = excluded.message_id, size = excluded.size,
            sent_at = excluded.sent_at, stored_at = excluded.stored_at,
            missing_since = NULL, retry_at = NULL, last_error = NULL",
-        params![account_id, uidl, message_id, size_column(size), sent_at, at],
+        params![
+            account_id,
+            uidl,
+            state,
+            message_id,
+            size_column(size),
+            sent_at,
+            at
+        ],
     )?;
     Ok(())
 }
@@ -318,7 +376,8 @@ fn size_column(size: u64) -> i64 {
 pub fn uidl_of_message(conn: &Connection, message_id: i64) -> Result<Option<String>> {
     Ok(conn
         .query_row(
-            "SELECT uidl FROM pop3_uidls WHERE message_id = ?1 LIMIT 1",
+            "SELECT uidl FROM pop3_uidls
+             WHERE message_id = ?1 AND state = 'stored' LIMIT 1",
             [message_id],
             |row| row.get(0),
         )
@@ -416,6 +475,8 @@ mod tests {
         assert!(insert(&"x".repeat(71), "skipped", None).is_err());
         assert!(insert("state", "pending", None).is_err());
         assert!(insert("unstamped", "stored", None).is_err());
+        assert!(insert("unstamped match", "matched", None).is_err());
+        assert!(insert("match", "matched", Some(1)).is_ok());
         let expire = |value: &str| {
             conn.execute(
                 "UPDATE pop3_sync_state SET expire = ?2 WHERE account_id = ?1",
@@ -432,6 +493,7 @@ mod tests {
         let id = account(&conn);
         let (_, message) =
             crate::db::testutil::seed_message(&conn, "alice@example.com", "Hello", false);
+        record_matched(&conn, id, "m", 10, Some(1), message, 100).unwrap();
         record_stored(&conn, id, "a", 10, Some(1), message, 100).unwrap();
         record_skipped(&conn, id, "b", 20, 2).unwrap();
         record_failed(&conn, id, "c", 30, "refused", Some(500)).unwrap();
