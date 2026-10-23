@@ -104,161 +104,255 @@ async fn snoozed_thread(ctx: &SyncCtx) -> (Option<i64>, Option<i64>) {
         .unwrap()
 }
 
-/// One Email/get object per page, with an optional failure on a later page.
+/// A JMAP server answering from fixed data. Every connection is served on its
+/// own task, and every method call is recorded.
+struct MockJmap {
+    emails: Vec<Value>,
+    changes: Option<Value>,
+    /// Email/get fails with serverFail while this id is requested and the
+    /// flag is set.
+    fail_on: Option<(&'static str, Arc<AtomicBool>)>,
+    /// Ids Email/get reports as notFound.
+    missing: Vec<&'static str>,
+    max_objects_in_get: usize,
+}
+
+impl Default for MockJmap {
+    fn default() -> Self {
+        Self {
+            emails: Vec::new(),
+            changes: None,
+            fail_on: None,
+            missing: Vec::new(),
+            // One Email/get object per page.
+            max_objects_in_get: 1,
+        }
+    }
+}
+
+struct Mock {
+    connected: ConnectedClient,
+    task: tokio::task::JoinHandle<()>,
+    calls: Arc<std::sync::Mutex<Vec<(String, Value)>>>,
+}
+
+impl Mock {
+    /// The arguments of every recorded call to `method`, in order.
+    fn calls(&self, method: &str) -> Vec<Value> {
+        self.calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(name, _)| name == method)
+            .map(|(_, arguments)| arguments.clone())
+            .collect()
+    }
+}
+
+impl MockJmap {
+    async fn start(self) -> Mock {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let core = json!({
+            "maxSizeUpload": 50_000_000, "maxConcurrentUpload": 4,
+            "maxSizeRequest": 10_000_000, "maxConcurrentRequests": 4,
+            "maxCallsInRequest": 16, "maxObjectsInGet": self.max_objects_in_get,
+            "maxObjectsInSet": 500, "collationAlgorithms": []
+        });
+        let mail = json!({
+            "maxMailboxesPerEmail": null, "maxMailboxDepth": 10,
+            "maxSizeMailboxName": 255, "maxSizeAttachmentsPerEmail": 50_000_000,
+            "emailQuerySortOptions": ["receivedAt"], "mayCreateTopLevelMailbox": true
+        });
+        let submission = json!({"maxDelayedSend": 0, "submissionExtensions": []});
+        let session = json!({
+            "capabilities": {
+                "urn:ietf:params:jmap:core": core,
+                "urn:ietf:params:jmap:mail": mail,
+                "urn:ietf:params:jmap:submission": submission
+            },
+            "accounts": {"mail-account": {
+                "name": "Test", "isPersonal": true, "isReadOnly": false,
+                "accountCapabilities": {
+                    "urn:ietf:params:jmap:mail": mail,
+                    "urn:ietf:params:jmap:submission": submission
+                }
+            }},
+            "primaryAccounts": {"urn:ietf:params:jmap:mail": "mail-account"},
+            "username": "reader@mail.example", "apiUrl": format!("{origin}/api"),
+            "downloadUrl": format!("{origin}/download/{{accountId}}/{{blobId}}/{{name}}?accept={{type}}"),
+            "uploadUrl": format!("{origin}/upload/{{accountId}}"),
+            "eventSourceUrl": format!("{origin}/events?types={{types}}&closeafter={{closeafter}}&ping={{ping}}"),
+            "state": "session-0"
+        });
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let server = Arc::new((self, session));
+        let task = tokio::spawn({
+            let calls = calls.clone();
+            async move {
+                loop {
+                    let (stream, _) = listener.accept().await.unwrap();
+                    let server = server.clone();
+                    let calls = calls.clone();
+                    tokio::spawn(async move {
+                        let (mock, session) = &*server;
+                        mock.serve(stream, session, &calls).await;
+                    });
+                }
+            }
+        });
+        let connected = client::connect_with(
+            "reader@mail.example",
+            "reader@mail.example",
+            "example-password",
+            &origin,
+            None,
+        )
+        .await
+        .unwrap();
+        Mock {
+            connected,
+            task,
+            calls,
+        }
+    }
+
+    async fn serve(
+        &self,
+        stream: tokio::net::TcpStream,
+        session: &Value,
+        calls: &std::sync::Mutex<Vec<(String, Value)>>,
+    ) {
+        let mut stream = BufReader::new(stream);
+        let mut line = String::new();
+        if stream.read_line(&mut line).await.unwrap_or(0) == 0 {
+            return;
+        }
+        let get = line.starts_with("GET ");
+        let mut length = 0;
+        loop {
+            line.clear();
+            assert_ne!(stream.read_line(&mut line).await.unwrap(), 0);
+            if line == "\r\n" {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
+            {
+                length = value.trim().parse::<usize>().unwrap();
+            }
+        }
+        let mut body = vec![0; length];
+        stream.read_exact(&mut body).await.unwrap();
+        let mut status = "200 OK";
+        let response = if get {
+            session.to_string()
+        } else {
+            let request: Value = serde_json::from_slice(&body).unwrap();
+            // Like Fastmail, reject any capability the session does not
+            // advertise (RFC 8620 §3.6.1).
+            let unknown = request["using"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(Value::as_str)
+                .find(|capability| session["capabilities"].get(*capability).is_none());
+            if let Some(capability) = unknown {
+                status = "400 Bad Request";
+                json!({
+                    "type": "urn:ietf:params:jmap:error:unknownCapability",
+                    "status": 400,
+                    "detail": format!("unknown capability {capability}")
+                })
+                .to_string()
+            } else {
+                let mut responses = Vec::new();
+                for call in request["methodCalls"].as_array().unwrap() {
+                    let method = call[0].as_str().unwrap();
+                    let call_id = &call[2];
+                    calls
+                        .lock()
+                        .unwrap()
+                        .push((method.to_owned(), call[1].clone()));
+                    match self.answer(method, &call[1]) {
+                        Ok(payload) => responses.push(json!([method, payload, call_id])),
+                        Err(error) => responses.push(json!(["error", error, call_id])),
+                    }
+                }
+                json!({"methodResponses": responses, "sessionState": "session-0"}).to_string()
+            }
+        };
+        let http = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),
+            response
+        );
+        // The client may have given up on a slow answer.
+        let _ = stream.get_mut().write_all(http.as_bytes()).await;
+    }
+
+    fn answer(&self, method: &str, args: &Value) -> std::result::Result<Value, Value> {
+        Ok(match method {
+            "Email/changes" => {
+                let changes = self.changes.as_ref().unwrap();
+                json!({
+                    "accountId": "mail-account", "oldState": "state-0",
+                    "newState": "state-1", "hasMoreChanges": false,
+                    "created": changes["created"], "updated": changes["updated"],
+                    "destroyed": changes["destroyed"]
+                })
+            }
+            "Email/query" => json!({
+                "accountId": "mail-account", "queryState": "query-0",
+                "canCalculateChanges": false, "position": 0,
+                "ids": self.emails.iter().map(|email| &email["id"]).collect::<Vec<_>>(),
+                "total": self.emails.len()
+            }),
+            "Email/get" => {
+                let ids = args["ids"].as_array().unwrap();
+                if self.fail_on.as_ref().is_some_and(|(id, fail)| {
+                    ids.iter().any(|requested| requested == id) && fail.load(Ordering::SeqCst)
+                }) {
+                    return Err(json!({"type": "serverFail"}));
+                }
+                let mut list = Vec::new();
+                let mut not_found = Vec::new();
+                for id in ids {
+                    match self.emails.iter().find(|email| &email["id"] == id) {
+                        Some(email) if !self.missing.iter().any(|missing| id == missing) => {
+                            list.push(email)
+                        }
+                        _ => not_found.push(id),
+                    }
+                }
+                let state = if self.changes.is_some() {
+                    "state-1"
+                } else {
+                    "state-0"
+                };
+                json!({"accountId": "mail-account", "state": state, "list": list, "notFound": not_found})
+            }
+            other => panic!("unexpected method {other}"),
+        })
+    }
+}
+
+/// The original fixed server: one Email/get object per page, with an
+/// optional failure on a later page.
 async fn server(
     emails: Vec<Value>,
     changes: Option<Value>,
     fail_on: Option<(&'static str, Arc<AtomicBool>)>,
 ) -> (ConnectedClient, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let origin = format!("http://{}", listener.local_addr().unwrap());
-    let core = json!({
-        "maxSizeUpload": 50_000_000, "maxConcurrentUpload": 4,
-        "maxSizeRequest": 10_000_000, "maxConcurrentRequests": 4,
-        "maxCallsInRequest": 16, "maxObjectsInGet": 1,
-        "maxObjectsInSet": 500, "collationAlgorithms": []
-    });
-    let mail = json!({
-        "maxMailboxesPerEmail": null, "maxMailboxDepth": 10,
-        "maxSizeMailboxName": 255, "maxSizeAttachmentsPerEmail": 50_000_000,
-        "emailQuerySortOptions": ["receivedAt"], "mayCreateTopLevelMailbox": true
-    });
-    let submission = json!({"maxDelayedSend": 0, "submissionExtensions": []});
-    let session = json!({
-        "capabilities": {
-            "urn:ietf:params:jmap:core": core,
-            "urn:ietf:params:jmap:mail": mail,
-            "urn:ietf:params:jmap:submission": submission
-        },
-        "accounts": {"mail-account": {
-            "name": "Test", "isPersonal": true, "isReadOnly": false,
-            "accountCapabilities": {
-                "urn:ietf:params:jmap:mail": mail,
-                "urn:ietf:params:jmap:submission": submission
-            }
-        }},
-        "primaryAccounts": {"urn:ietf:params:jmap:mail": "mail-account"},
-        "username": "reader@mail.example", "apiUrl": format!("{origin}/api"),
-        "downloadUrl": format!("{origin}/download/{{accountId}}/{{blobId}}/{{name}}?accept={{type}}"),
-        "uploadUrl": format!("{origin}/upload/{{accountId}}"),
-        "eventSourceUrl": format!("{origin}/events?types={{types}}&closeafter={{closeafter}}&ping={{ping}}"),
-        "state": "session-0"
-    });
-    let task = tokio::spawn(async move {
-        loop {
-            let (stream, _) = listener.accept().await.unwrap();
-            let mut stream = BufReader::new(stream);
-            let mut line = String::new();
-            assert_ne!(stream.read_line(&mut line).await.unwrap(), 0);
-            let get = line.starts_with("GET ");
-            let mut length = 0;
-            loop {
-                line.clear();
-                assert_ne!(stream.read_line(&mut line).await.unwrap(), 0);
-                if line == "\r\n" {
-                    break;
-                }
-                if let Some((name, value)) = line.split_once(':')
-                    && name.eq_ignore_ascii_case("content-length")
-                {
-                    length = value.trim().parse::<usize>().unwrap();
-                }
-            }
-            let mut body = vec![0; length];
-            stream.read_exact(&mut body).await.unwrap();
-            let mut status = "200 OK";
-            let response = if get {
-                session.to_string()
-            } else {
-                let request: Value = serde_json::from_slice(&body).unwrap();
-                // Like Fastmail, reject any capability the session does not
-                // advertise (RFC 8620 §3.6.1).
-                let unknown = request["using"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .find(|capability| session["capabilities"].get(*capability).is_none());
-                if let Some(capability) = unknown {
-                    status = "400 Bad Request";
-                    json!({
-                        "type": "urn:ietf:params:jmap:error:unknownCapability",
-                        "status": 400,
-                        "detail": format!("unknown capability {capability}")
-                    })
-                    .to_string()
-                } else {
-                    let mut responses = Vec::new();
-                    for call in request["methodCalls"].as_array().unwrap() {
-                        let method = call[0].as_str().unwrap();
-                        let args = &call[1];
-                        let call_id = &call[2];
-                        let payload = match method {
-                            "Email/changes" => {
-                                let changes = changes.as_ref().unwrap();
-                                json!({
-                                    "accountId": "mail-account", "oldState": "state-0",
-                                    "newState": "state-1", "hasMoreChanges": false,
-                                    "created": changes["created"], "updated": changes["updated"],
-                                    "destroyed": changes["destroyed"]
-                                })
-                            }
-                            "Email/query" => json!({
-                                "accountId": "mail-account", "queryState": "query-0",
-                                "canCalculateChanges": false, "position": 0,
-                                "ids": emails.iter().map(|email| &email["id"]).collect::<Vec<_>>(),
-                                "total": emails.len()
-                            }),
-                            "Email/get" => {
-                                let ids = args["ids"].as_array().unwrap();
-                                if fail_on.as_ref().is_some_and(|(id, fail)| {
-                                    ids.iter().any(|requested| requested == id)
-                                        && fail.load(Ordering::SeqCst)
-                                }) {
-                                    responses
-                                        .push(json!(["error", {"type": "serverFail"}, call_id]));
-                                    continue;
-                                }
-                                let mut list = Vec::new();
-                                let mut not_found = Vec::new();
-                                for id in ids {
-                                    match emails.iter().find(|email| &email["id"] == id) {
-                                        Some(email) => list.push(email),
-                                        None => not_found.push(id),
-                                    }
-                                }
-                                let state = if changes.is_some() {
-                                    "state-1"
-                                } else {
-                                    "state-0"
-                                };
-                                json!({"accountId": "mail-account", "state": state, "list": list, "notFound": not_found})
-                            }
-                            other => panic!("unexpected method {other}"),
-                        };
-                        responses.push(json!([method, payload, call_id]));
-                    }
-                    json!({"methodResponses": responses, "sessionState": "session-0"}).to_string()
-                }
-            };
-            let http = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                response.len(),
-                response
-            );
-            stream.get_mut().write_all(http.as_bytes()).await.unwrap();
-        }
-    });
-    let connected = client::connect_with(
-        "reader@mail.example",
-        "reader@mail.example",
-        "example-password",
-        &origin,
-        None,
-    )
-    .await
-    .unwrap();
-    (connected, task)
+    let mock = MockJmap {
+        emails,
+        changes,
+        fail_on,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    (mock.connected, mock.task)
 }
 
 async fn run_sync(
@@ -504,4 +598,297 @@ async fn requests_declare_only_advertised_capabilities() {
         ]
     );
     task.abort();
+}
+
+fn with_attachment(mut email: Value, size: i64, received_at: &str) -> Value {
+    let id = email["id"].as_str().unwrap().to_owned();
+    email["hasAttachment"] = json!(true);
+    email["size"] = json!(size);
+    email["receivedAt"] = json!(received_at);
+    email["attachments"] = json!([{
+        "partId": "2", "blobId": format!("part-{id}"), "size": 10,
+        "name": format!("{id}.pdf"), "type": "application/pdf",
+        "disposition": "attachment"
+    }]);
+    email
+}
+
+fn listed_ids(call: &Value) -> Vec<&str> {
+    call["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_str().unwrap())
+        .collect()
+}
+
+async fn attachment_rows(ctx: &SyncCtx) -> Vec<(String, String, String, String)> {
+    ctx.db
+        .read(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT m.jmap_id, a.part_id, a.filename, a.jmap_blob_id
+                 FROM attachments a JOIN messages m ON m.id = a.message_id
+                 ORDER BY m.jmap_id, a.part_id",
+            )?;
+            Ok(stmt
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn header_sync_leaves_attachment_lists_to_the_listing_pass() {
+    let (_dir, ctx, config) = fixture().await;
+    let mock = MockJmap {
+        emails: vec![
+            with_attachment(email("email-a", "thread-a"), 100, "2026-10-08T12:00:00Z"),
+            email("email-b", "thread-b"),
+        ],
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    // Stalwart reads every requested message in full to list attachments.
+    let header_pages = mock.calls("Email/get");
+    assert!(!header_pages.is_empty());
+    for page in &header_pages {
+        assert!(
+            !page["properties"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("attachments")),
+            "{page}"
+        );
+    }
+    assert!(attachment_rows(&ctx).await.is_empty());
+
+    assert!(
+        list_attachments(&ctx, &config, &mock.connected)
+            .await
+            .unwrap()
+    );
+    let listing = mock.calls("Email/get").pop().unwrap();
+    assert_eq!(listed_ids(&listing), ["email-a"]);
+    assert_eq!(
+        listing["properties"],
+        json!(["id", "blobId", "attachments"])
+    );
+    assert_eq!(
+        attachment_rows(&ctx).await,
+        [(
+            "email-a".to_owned(),
+            "2".to_owned(),
+            "email-a.pdf".to_owned(),
+            "part-email-a".to_owned()
+        )]
+    );
+    let calls = mock.calls("Email/get").len();
+    assert!(
+        !list_attachments(&ctx, &config, &mock.connected)
+            .await
+            .unwrap()
+    );
+    assert_eq!(mock.calls("Email/get").len(), calls);
+    mock.task.abort();
+}
+
+#[tokio::test]
+async fn attachment_listing_bounds_the_message_bytes_of_each_request() {
+    let (_dir, ctx, config) = fixture().await;
+    let mib = 1024 * 1024;
+    let mock = MockJmap {
+        emails: vec![
+            with_attachment(
+                email("email-a", "thread-a"),
+                20 * mib,
+                "2026-10-08T12:00:05Z",
+            ),
+            with_attachment(
+                email("email-b", "thread-b"),
+                20 * mib,
+                "2026-10-08T12:00:04Z",
+            ),
+            with_attachment(
+                email("email-c", "thread-c"),
+                40 * mib,
+                "2026-10-08T12:00:03Z",
+            ),
+            with_attachment(email("email-d", "thread-d"), 1024, "2026-10-08T12:00:02Z"),
+            with_attachment(email("email-e", "thread-e"), 1024, "2026-10-08T12:00:01Z"),
+        ],
+        max_objects_in_get: 500,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    let headers = mock.calls("Email/get").len();
+    while list_attachments(&ctx, &config, &mock.connected)
+        .await
+        .unwrap()
+    {}
+    let listings = mock.calls("Email/get").split_off(headers);
+    // Newest first; a message larger than the budget goes alone.
+    assert_eq!(
+        listings.iter().map(listed_ids).collect::<Vec<_>>(),
+        [
+            vec!["email-a"],
+            vec!["email-b"],
+            vec!["email-c"],
+            vec!["email-d", "email-e"],
+        ]
+    );
+    assert_eq!(attachment_rows(&ctx).await.len(), 5);
+    mock.task.abort();
+}
+
+#[tokio::test]
+async fn attachment_listing_moves_past_messages_the_server_no_longer_matches() {
+    let (_dir, ctx, config) = fixture().await;
+    let mock = MockJmap {
+        emails: vec![
+            with_attachment(email("email-a", "thread-a"), 100, "2026-10-08T12:00:02Z"),
+            with_attachment(email("email-b", "thread-b"), 100, "2026-10-08T12:00:01Z"),
+        ],
+        max_objects_in_get: 500,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    ctx.db
+        .write(|conn| {
+            // Header sync has not seen the server's current copy yet.
+            conn.execute(
+                "UPDATE messages SET jmap_blob_id='blob-newer' WHERE jmap_id='email-b'",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let headers = mock.calls("Email/get").len();
+    // The server has since deleted email-a.
+    let gone = MockJmap {
+        emails: vec![
+            with_attachment(email("email-a", "thread-a"), 100, "2026-10-08T12:00:02Z"),
+            with_attachment(email("email-b", "thread-b"), 100, "2026-10-08T12:00:01Z"),
+        ],
+        missing: vec!["email-a"],
+        max_objects_in_get: 500,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    assert!(
+        list_attachments(&ctx, &config, &gone.connected)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !list_attachments(&ctx, &config, &gone.connected)
+            .await
+            .unwrap()
+    );
+    assert_eq!(gone.calls("Email/get").len(), 1);
+    assert_eq!(mock.calls("Email/get").len(), headers);
+    assert!(attachment_rows(&ctx).await.is_empty());
+    ctx.db
+        .read(|conn| {
+            let markers = conn
+                .prepare("SELECT jmap_id, jmap_attachments_blob_id FROM messages ORDER BY jmap_id")?
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            assert_eq!(
+                markers,
+                [
+                    ("email-a".to_owned(), "blob-email-a".to_owned()),
+                    ("email-b".to_owned(), "blob-newer".to_owned())
+                ]
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+    mock.task.abort();
+    gone.task.abort();
+}
+
+#[tokio::test]
+async fn adopting_a_message_drops_the_attachment_rows_of_its_previous_copy() {
+    let (_dir, ctx, config) = fixture().await;
+    let received = chrono::DateTime::parse_from_rfc3339("2026-10-08T12:00:00Z")
+        .unwrap()
+        .timestamp_millis();
+    let local = ctx
+        .db
+        .write(move |conn| {
+            let (_, message) = crate::db::testutil::seed_message(
+                conn,
+                "sender@mail.example",
+                "Conversation",
+                false,
+            );
+            conn.execute(
+                "UPDATE messages SET message_id='email-a@mail.example', size=100,
+                        date=?2, internal_date=?2, has_attachments=1
+                 WHERE id=?1",
+                params![message, received],
+            )?;
+            conn.execute(
+                "INSERT INTO attachments(message_id, part_id, filename, imap_section)
+                 VALUES(?1, '2', 'old-copy.pdf', '2')",
+                [message],
+            )?;
+            Ok(message)
+        })
+        .await
+        .unwrap();
+    let mock = MockJmap {
+        emails: vec![with_attachment(
+            email("email-a", "thread-a"),
+            100,
+            "2026-10-08T12:00:00Z",
+        )],
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    ctx.db
+        .read(move |conn| {
+            let adopted = repo::messages::by_jmap_id(conn, 1, "email-a")?.unwrap();
+            assert_eq!(adopted.id, local);
+            let queue = repo::messages::jmap_attachment_listing_queue(conn, 1, 10)?;
+            assert_eq!(
+                queue.iter().map(|item| item.message_id).collect::<Vec<_>>(),
+                [local]
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(attachment_rows(&ctx).await.is_empty());
+    assert!(
+        list_attachments(&ctx, &config, &mock.connected)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        attachment_rows(&ctx).await,
+        [(
+            "email-a".to_owned(),
+            "2".to_owned(),
+            "email-a.pdf".to_owned(),
+            "part-email-a".to_owned()
+        )]
+    );
+    mock.task.abort();
 }

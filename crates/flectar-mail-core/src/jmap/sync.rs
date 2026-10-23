@@ -10,20 +10,27 @@ use crate::models::{AccountConfig, Address, MailProtocol, SenderDeliveryStatus, 
 use crate::sync::engine::{
     PriorityFetchCmd, SyncCmd, SyncCtx, configured_sync_interval, set_state, set_state_error,
 };
-use futures::StreamExt;
+use futures::{FutureExt, Stream, StreamExt};
 use jmap_client::core::error::MethodErrorType;
 use jmap_client::core::response::{EmailGetResponse, MailboxGetResponse};
 use jmap_client::core::set::{SetErrorType, SetObject};
-use jmap_client::email::{Email, Header, HeaderValue, Property as EmailProperty};
+use jmap_client::email::{BodyProperty, Email, Header, HeaderValue, Property as EmailProperty};
+use jmap_client::event_source::PushNotification;
 use jmap_client::mailbox::{Property as MailboxProperty, Role};
 use rusqlite::{OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
-use tokio::sync::{mpsc, watch};
+use std::pin::Pin;
+use tokio::sync::{mpsc, oneshot, watch};
 
 const PAGE: usize = 500;
 const MAX_QUERY_RESTARTS: usize = 3;
 const MAX_CHANGE_PAGES: usize = 10_000;
 const MAX_JMAP_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
+/// Stalwart reads a message in full to list its attachments, so one listing
+/// request covers at most this many message bytes, or a single larger
+/// message.
+const ATTACHMENT_LISTING_BYTES: i64 = 32 * 1024 * 1024;
+const ATTACHMENT_LISTING_EMAILS: usize = 50;
 
 pub(crate) fn spawn(
     ctx: SyncCtx,
@@ -131,7 +138,10 @@ async fn actor(
         } else {
             std::time::Duration::from_secs(retry)
         };
-        if let Some(connected) = connected {
+        let deadline = tokio::time::sleep(delay);
+        tokio::pin!(deadline);
+        let mut push = None;
+        if let Some(connected) = &connected {
             // RFC 8620 EventSource gives Stalwart an immediate new-mail path;
             // the selected periodic interval remains the correctness backstop.
             match connected
@@ -148,34 +158,88 @@ async fn actor(
                 )
                 .await
             {
-                Ok(mut stream) => {
-                    tokio::select! {
-                        command = rx.recv() => match command {
-                            None | Some(SyncCmd::Shutdown) => return,
-                            Some(SyncCmd::SyncNow { complete: Some(done) }) => waiters.push(done),
-                            _ => {}
-                        },
-                        _ = settings.changed() => {},
-                        _ = tokio::time::sleep(delay) => {},
-                        notification = stream.next() => {
-                            if let Some(Err(error)) = notification {
-                                tracing::debug!(account_id=config.id, error=%error, "JMAP push stream ended; polling fallback will continue");
-                            }
-                        },
-                    }
-                    continue;
-                }
+                Ok(stream) => push = Some(stream),
                 Err(error) => {
                     tracing::debug!(account_id=config.id, error=%error, "JMAP push unavailable; using polling")
                 }
             }
         }
-        match tokio::time::timeout(delay, rx.recv()).await {
-            Ok(None) | Ok(Some(SyncCmd::Shutdown)) => return,
-            Ok(Some(SyncCmd::SyncNow {
-                complete: Some(done),
-            })) => waiters.push(done),
-            _ => {}
+        let mut listing = connected.is_some();
+        loop {
+            let wake = next_wake(
+                &mut rx,
+                &mut settings,
+                &mut waiters,
+                push.as_mut(),
+                deadline.as_mut(),
+                config.id,
+            );
+            let wake = match (&connected, listing) {
+                // Attachment listing fills idle time one request at a time and
+                // gives way as soon as anything else needs the actor.
+                (Some(connected), true) => match wake.now_or_never() {
+                    Some(wake) => wake,
+                    None => {
+                        listing = match list_attachments(&ctx, &config, connected).await {
+                            Ok(listed) => listed,
+                            Err(error) => {
+                                tracing::warn!(account_id = config.id, %error, "JMAP attachment listing failed; retrying after the next sync");
+                                false
+                            }
+                        };
+                        continue;
+                    }
+                },
+                _ => wake.await,
+            };
+            match wake {
+                Wake::Shutdown => return,
+                Wake::Sync => break,
+            }
+        }
+    }
+}
+
+enum Wake {
+    Shutdown,
+    Sync,
+}
+
+/// Waits for the next reason to sync: a command, a settings change, the
+/// sync interval, or a push notification.
+async fn next_wake<S>(
+    rx: &mut mpsc::Receiver<SyncCmd>,
+    settings: &mut watch::Receiver<crate::models::AccountSettings>,
+    waiters: &mut Vec<oneshot::Sender<std::result::Result<(), String>>>,
+    push: Option<&mut S>,
+    deadline: Pin<&mut tokio::time::Sleep>,
+    account_id: i64,
+) -> Wake
+where
+    S: Stream<Item = jmap_client::Result<PushNotification>> + Unpin,
+{
+    let notification = async {
+        match push {
+            Some(stream) => stream.next().await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        command = rx.recv() => match command {
+            None | Some(SyncCmd::Shutdown) => Wake::Shutdown,
+            Some(SyncCmd::SyncNow { complete: Some(done) }) => {
+                waiters.push(done);
+                Wake::Sync
+            }
+            Some(_) => Wake::Sync,
+        },
+        _ = settings.changed() => Wake::Sync,
+        _ = deadline => Wake::Sync,
+        notification = notification => {
+            if let Some(Err(error)) = notification {
+                tracing::debug!(account_id, error=%error, "JMAP push stream ended; polling fallback will continue");
+            }
+            Wake::Sync
         }
     }
 }
@@ -517,8 +581,8 @@ fn header_properties() -> Vec<EmailProperty> {
         EmailProperty::Bcc,
         EmailProperty::Subject,
         EmailProperty::SentAt,
+        // Not `attachments`: see `list_attachments`.
         EmailProperty::HasAttachment,
-        EmailProperty::Attachments,
         EmailProperty::Preview,
         EmailProperty::Header(Header::as_text("Auto-Submitted", false)),
         EmailProperty::Header(Header::as_text("List-Id", false)),
@@ -561,12 +625,7 @@ async fn sync_emails(ctx: &SyncCtx, config: &AccountConfig, c: &ConnectedClient)
             (query_ids(config, c).await?, Vec::new(), state, true)
         }
     };
-    let max = c
-        .client
-        .session()
-        .core_capabilities()
-        .map(|v| v.max_objects_in_get().clamp(1, 1000))
-        .unwrap_or(256);
+    let max = max_objects_in_get(c);
     // Each Email/get page is committed on its own while the next one is in
     // flight: a first sync fills the mailbox newest first instead of showing
     // nothing until the whole history is downloaded. The email state is only
@@ -807,8 +866,16 @@ async fn persist_emails(ctx: &SyncCtx, config: &AccountConfig, emails: Vec<Email
                     (pending_keywords, pending_mailboxes) =
                         repo::actions::jmap_reconciliation_guards(&tx, existing.id)?;
                     let old_thread_id = existing.thread_id;
-                    if existing.jmap_blob_id != blob_id && let Some(path) = existing.raw_path {
-                        stale_paths.push(path);
+                    if existing.jmap_blob_id != blob_id {
+                        // These rows describe the previous content; the
+                        // attachment listing describes the new blob.
+                        tx.execute(
+                            "DELETE FROM attachments WHERE message_id=?1",
+                            params![existing.id],
+                        )?;
+                        if let Some(path) = existing.raw_path {
+                            stale_paths.push(path);
+                        }
                     }
                     tx.execute(
                         "UPDATE messages SET thread_id=?2, folder_id=CASE WHEN ?21 THEN folder_id ELSE ?3 END,
@@ -902,11 +969,6 @@ async fn persist_emails(ctx: &SyncCtx, config: &AccountConfig, emails: Vec<Email
                         blob_id.as_deref(),
                     )?;
                 }
-                // Populate Files without downloading the message or changing $seen.
-                // Preserve MIME-derived rows once a raw body is cached; their part
-                // identifiers belong to the MIME parser, not the JMAP server.
-                let body_cached: bool=tx.query_row("SELECT body_state='cached' FROM messages WHERE id=?1",[local_id],|r|r.get(0))?;
-                if !body_cached { persist_attachment_parts(&tx, local_id, email.attachments().unwrap_or_default())?; }
                 if !pending_mailboxes {
                     repo::gmail::set_message_folders(&tx, local_id, &folder_ids)?;
                 }
@@ -1016,6 +1078,118 @@ async fn publish_changes(ctx: &SyncCtx, thread_ids: Vec<i64>, stale_paths: Vec<S
     if !thread_ids.is_empty() {
         ctx.bus.emit(CoreEvent::MailUpdated { thread_ids });
     }
+}
+
+/// Lists the attachments of the newest messages still waiting for it, as many
+/// as one request covers, so Files can show them without downloading the
+/// messages or changing $seen. Returns whether a request was made; the next
+/// call finds out whether more messages wait.
+///
+/// Header sync leaves `attachments` out because Stalwart can only answer it by
+/// reading each message in full. Here the reads are bounded per request and
+/// never hold back mail sync.
+async fn list_attachments(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    c: &ConnectedClient,
+) -> Result<bool> {
+    let account_id = config.id;
+    let limit = max_objects_in_get(c).min(ATTACHMENT_LISTING_EMAILS);
+    let queue = ctx
+        .db
+        .read(move |conn| {
+            repo::messages::jmap_attachment_listing_queue(conn, account_id, limit as i64)
+        })
+        .await?;
+    let mut bytes = 0_i64;
+    let mut batch = Vec::new();
+    for message in queue {
+        let size = message.size.max(0);
+        if !batch.is_empty() && bytes.saturating_add(size) > ATTACHMENT_LISTING_BYTES {
+            break;
+        }
+        bytes = bytes.saturating_add(size);
+        batch.push(message);
+    }
+    if batch.is_empty() {
+        return Ok(false);
+    }
+    let mut request = c.request();
+    request
+        .get_email()
+        .account_id(&c.account_id)
+        .ids(batch.iter().map(|message| message.remote_id.clone()))
+        .properties([
+            EmailProperty::Id,
+            EmailProperty::BlobId,
+            EmailProperty::Attachments,
+        ])
+        .arguments()
+        .body_properties([
+            BodyProperty::PartId,
+            BodyProperty::BlobId,
+            BodyProperty::Size,
+            BodyProperty::Name,
+            BodyProperty::Type,
+            BodyProperty::Disposition,
+            BodyProperty::Cid,
+        ]);
+    let mut response: EmailGetResponse =
+        request.send_get_email().await.map_err(client::map_error)?;
+    let listed = response.take_list();
+    let thread_ids = ctx
+        .db
+        .write(move |conn| {
+            let tx = conn.transaction()?;
+            let mut changed_threads = HashSet::new();
+            for message in &batch {
+                let current = tx
+                    .query_row(
+                        "SELECT thread_id, body_state FROM messages
+                         WHERE id=?1 AND jmap_id=?2 AND jmap_blob_id=?3",
+                        params![message.message_id, message.remote_id, message.blob_id],
+                        |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, String>(1)?)),
+                    )
+                    .optional()?;
+                // A message that changed meanwhile comes back through the
+                // queue with its new blob.
+                let Some((thread_id, body_state)) = current else {
+                    continue;
+                };
+                // Missing here or holding another blob on the server: header
+                // sync reconciles the message, which queues it again if needed.
+                // MIME-derived rows of a cached body stay authoritative.
+                if let Some(email) = listed.iter().find(|email| {
+                    email.id() == Some(message.remote_id.as_str())
+                        && email.blob_id() == Some(message.blob_id.as_str())
+                }) && body_state != "cached"
+                {
+                    persist_attachment_parts(
+                        &tx,
+                        message.message_id,
+                        email.attachments().unwrap_or_default(),
+                    )?;
+                    changed_threads.extend(thread_id);
+                }
+                tx.execute(
+                    "UPDATE messages SET jmap_attachments_blob_id=?2 WHERE id=?1",
+                    params![message.message_id, message.blob_id],
+                )?;
+            }
+            tx.commit()?;
+            Ok(changed_threads.into_iter().collect::<Vec<_>>())
+        })
+        .await?;
+    publish_changes(ctx, thread_ids, Vec::new()).await;
+    Ok(true)
+}
+
+fn max_objects_in_get(c: &ConnectedClient) -> usize {
+    c.client
+        .session()
+        .core_capabilities()
+        .map(|v| v.max_objects_in_get().clamp(1, 1000))
+        .unwrap_or(256)
 }
 
 fn persist_attachment_parts(
@@ -2387,7 +2561,7 @@ mod tests {
 mod attachment_metadata_tests {
     use super::*;
     #[test]
-    fn header_attachment_metadata_preserves_identity_and_invalidates_changed_blobs() {
+    fn attachment_listing_preserves_identity_and_invalidates_changed_blobs() {
         let db = crate::db::testutil::conn();
         crate::db::testutil::seed_account(&db);
         db.execute("INSERT INTO messages(id,account_id,folder_id,subject,from_addr,date) VALUES(99,1,1,'File metadata','sender@test.dev',0)",[]).unwrap();
