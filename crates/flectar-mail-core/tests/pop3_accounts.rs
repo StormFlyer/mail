@@ -400,6 +400,58 @@ async fn a_pop3_account_downloads_files_and_sends_mail_on_this_device() {
     assert!(sent.contains("Subject: From a POP3 account\n"), "{sent}");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn how_long_mail_stays_on_the_server_applies_at_once() {
+    let (pop3_port, pop3_commands) = pop3_server(vec![incoming("hello", "Hello there")]).await;
+    let (smtp_port, _delivered) = smtp_server().await;
+    let temp = tempfile::tempdir().unwrap();
+    let credentials = Arc::new(DevelopmentFileCredentialStore::new(
+        temp.path().join("credentials.json"),
+    ));
+    let core = Core::start_mail_ui_with_credentials(Paths::for_tests(temp.path()), credentials)
+        .await
+        .unwrap();
+    let account = core
+        .add_account_password(pop3_args(pop3_port, smtp_port))
+        .await
+        .unwrap();
+    wait_for(|| async {
+        core.list_threads(View::Inbox, None, Some(account.id), None, None, (None, 50))
+            .await
+            .unwrap()
+            .threads
+            .into_iter()
+            .next()
+    })
+    .await;
+    let removals = || {
+        pop3_commands
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|command| command.starts_with("DELE"))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert!(removals().is_empty());
+
+    core.set_account_keep_on_server(account.id, KeepOnServer::UntilDownloaded)
+        .await
+        .unwrap();
+    let settings = core
+        .list_account_configs()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|config| config.id == account.id)
+        .unwrap()
+        .settings;
+    assert_eq!(settings.keep_on_server, KeepOnServer::UntilDownloaded);
+    // This server refuses DELE, so every later sync asks again.
+    wait_for(|| async { removals().first().cloned() }).await;
+    assert!(removals().iter().all(|command| command == "DELE 1"));
+}
+
 #[tokio::test]
 async fn interrupted_mail_writes_are_removed_at_startup() {
     let temp = tempfile::tempdir().unwrap();

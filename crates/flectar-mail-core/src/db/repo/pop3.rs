@@ -2,7 +2,7 @@
 //! UIDL ledger of every message the account has seen on the server.
 
 use crate::error::Result;
-use crate::models::roles;
+use crate::models::{KeepOnServer, roles};
 use crate::pop3::Expire;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
 use rusqlite::{Connection, OptionalExtension, ToSql, params};
@@ -137,7 +137,7 @@ fn expire_text(expire: Expire) -> String {
     }
 }
 
-fn parse_expire(value: &str) -> Option<Expire> {
+pub(super) fn parse_expire(value: &str) -> Option<Expire> {
     if value == "never" {
         Some(Expire::Never)
     } else {
@@ -372,6 +372,51 @@ fn size_column(size: u64) -> i64 {
     i64::try_from(size).unwrap_or(i64::MAX)
 }
 
+/// A downloaded message the account's setting removes from the server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Removable {
+    pub uidl: String,
+    /// The size the server listed when the message was downloaded.
+    pub size: u64,
+    /// The message was deleted here. Otherwise it is still on this device,
+    /// and its server copy goes only while its original exists.
+    pub deleted: bool,
+    pub original: Option<String>,
+}
+
+/// The messages `keep` removes from the server at `now`, oldest first. Only
+/// mail downloaded here qualifies, never mail the account already had.
+pub fn removable(
+    conn: &Connection,
+    account_id: i64,
+    keep: KeepOnServer,
+    now: i64,
+) -> Result<Vec<Removable>> {
+    const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+    let downloaded_before = keep
+        .days()
+        .map(|days| now.saturating_sub(i64::from(days) * DAY_MS));
+    let mut statement = conn.prepare(
+        "SELECT u.uidl, u.size, u.message_id IS NULL, m.raw_path
+         FROM pop3_uidls u LEFT JOIN messages m ON m.id = u.message_id
+         WHERE u.account_id = ?1 AND u.state = 'stored' AND u.missing_since IS NULL
+           AND CASE WHEN u.message_id IS NULL THEN ?2 ELSE u.stored_at <= ?3 END
+         ORDER BY u.stored_at, u.uidl",
+    )?;
+    let rows = statement.query_map(
+        params![account_id, keep.removes_deleted(), downloaded_before],
+        |row| {
+            Ok(Removable {
+                uidl: row.get(0)?,
+                size: u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
+                deleted: row.get(2)?,
+                original: row.get(3)?,
+            })
+        },
+    )?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
 /// The UIDL a stored message was downloaded under.
 pub fn uidl_of_message(conn: &Connection, message_id: i64) -> Result<Option<String>> {
     Ok(conn
@@ -485,6 +530,86 @@ mod tests {
         };
         assert!(expire("never").is_ok() && expire("30").is_ok());
         assert!(expire("-1").is_err() && expire("soon").is_err() && expire("").is_err());
+    }
+
+    #[test]
+    fn accounts_show_how_long_their_server_keeps_mail() {
+        let conn = crate::db::testutil::conn();
+        let id = account(&conn);
+        let keeps = |conn: &Connection| {
+            crate::db::repo::accounts::get(conn, id)
+                .unwrap()
+                .unwrap()
+                .server_keeps_mail_days
+        };
+        assert_eq!(keeps(&conn), None);
+        record_sign_in(&conn, id, 1, None, Some(Expire::Days(30))).unwrap();
+        assert_eq!(keeps(&conn), Some(30));
+        record_sign_in(&conn, id, 2, None, Some(Expire::Never)).unwrap();
+        assert_eq!(keeps(&conn), None);
+    }
+
+    #[test]
+    fn only_mail_downloaded_here_is_removable() {
+        let conn = crate::db::testutil::conn();
+        let id = account(&conn);
+        let day = 24 * 60 * 60 * 1000;
+        let message = |subject: &str| {
+            let (_, message) =
+                crate::db::testutil::seed_message(&conn, "alice@example.com", subject, false);
+            conn.execute(
+                "UPDATE messages SET account_id = ?2, raw_path = ?3 WHERE id = ?1",
+                params![message, id, format!("/mail/{subject}.pop3.eml")],
+            )
+            .unwrap();
+            message
+        };
+        let (old, recent, deleted, matched) = (
+            message("old"),
+            message("recent"),
+            message("deleted"),
+            message("matched"),
+        );
+        record_stored(&conn, id, "old", 1, None, old, day).unwrap();
+        record_stored(&conn, id, "recent", 2, None, recent, 9 * day).unwrap();
+        record_stored(&conn, id, "deleted", 3, None, deleted, 9 * day).unwrap();
+        record_matched(&conn, id, "matched", 4, None, matched, day).unwrap();
+        record_stored(&conn, id, "gone", 5, None, old, day).unwrap();
+        record_skipped(&conn, id, "skipped", 6, 0).unwrap();
+        record_failed(&conn, id, "failed", 7, "refused", None).unwrap();
+        crate::db::repo::messages::delete(&conn, deleted).unwrap();
+        crate::db::repo::messages::delete(&conn, matched).unwrap();
+        conn.execute(
+            "UPDATE pop3_uidls SET missing_since = 1 WHERE uidl = 'gone'",
+            [],
+        )
+        .unwrap();
+
+        let uidls = |keep| {
+            removable(&conn, id, keep, 10 * day)
+                .unwrap()
+                .into_iter()
+                .map(|removable| removable.uidl)
+                .collect::<Vec<_>>()
+        };
+        assert!(uidls(KeepOnServer::Always).is_empty());
+        assert_eq!(uidls(KeepOnServer::UntilDeleted), ["deleted"]);
+        assert_eq!(uidls(KeepOnServer::SevenDays), ["old", "deleted"]);
+        assert_eq!(
+            uidls(KeepOnServer::UntilDownloaded),
+            ["old", "deleted", "recent"]
+        );
+        let removable = removable(&conn, id, KeepOnServer::UntilDownloaded, 10 * day).unwrap();
+        assert_eq!(
+            removable[0],
+            Removable {
+                uidl: "old".into(),
+                size: 1,
+                deleted: false,
+                original: Some("/mail/old.pop3.eml".into()),
+            }
+        );
+        assert!(removable[1].deleted && removable[1].original.is_none());
     }
 
     #[test]

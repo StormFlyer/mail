@@ -358,17 +358,21 @@ snapshots or transfer connected-account setup and preferences through a backup.
 Passwords and OAuth tokens stay in the system keyring, so a restored device asks
 you to sign in again.
 
-POP3 accounts download mail to this device and leave it on the server. Their
-folders exist only on this device, so snapshots include that mail, and removing
-a POP3 account or deleting all data offers to export it first as mbox files,
-one per folder, which other mail apps can import.
+POP3 accounts download mail to this device and leave it on the server unless
+you choose otherwise: each account can remove mail from the server after 7, 14,
+or 30 days, once you delete it here, or as soon as it's downloaded, but never
+before it's stored on this device. Their folders exist only on this device, so
+snapshots include that mail, and removing a POP3 account or deleting all data
+offers to export it first as mbox files, one per folder, which other mail apps
+can import.
 
 The same import also brings accounts over from Thunderbird (a profile folder,
 its Tools › Export archive, or `prefs.js`) and from Thunderbird for Android or
 K-9 Mail (`.k9s` settings exports). You review each account before anything is
-added: settings Flectar Mail can't reproduce, such as POP3 servers, are
-explained instead of changed silently. Existing accounts are never
-modified, and passwords are never imported.
+added: settings Flectar Mail can't reproduce, such as an Exchange server, are
+explained instead of changed silently, and POP3 accounts keep their rule for
+removing mail from the server. Existing accounts are never modified, and
+passwords are never imported.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">

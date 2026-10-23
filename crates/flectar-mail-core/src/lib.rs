@@ -222,6 +222,13 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
             "unsupported sign-in type for {email}"
         )));
     }
+    if config.mail_protocol != MailProtocol::Pop3
+        && config.settings.keep_on_server != KeepOnServer::Always
+    {
+        return Err(CoreError::Other(
+            "only POP3 accounts remove downloaded mail from their server".into(),
+        ));
+    }
     let connection = &config.settings.connection;
     if config.auth_kind == AuthKind::Oauth2
         && !(connection.incoming_security.is_encrypted() && connection.smtp_security.is_encrypted())
@@ -1084,6 +1091,40 @@ impl Core {
                     }
                 }
                 config.settings.sent_copy_policy = policy;
+                repo::accounts::set_settings(&tx, account_id, &config.settings)?;
+                tx.commit()?;
+                Ok(config.settings)
+            })
+            .await?;
+        if let Some(handle) = self.handles.read().await.get(&account_id).cloned() {
+            handle.update_settings(settings);
+        }
+        self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
+        Ok(())
+    }
+
+    /// Choose how long a POP3 account leaves downloaded mail on its server.
+    /// The account's next sync applies the choice.
+    pub async fn set_account_keep_on_server(
+        &self,
+        account_id: i64,
+        keep: KeepOnServer,
+    ) -> Result<()> {
+        let settings = self
+            .db
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                let mut config = repo::accounts::get_config(&tx, account_id)?
+                    .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
+                match config.mail_protocol {
+                    MailProtocol::Pop3 => {}
+                    MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
+                        return Err(CoreError::Other(
+                            "only POP3 accounts remove downloaded mail from their server".into(),
+                        ));
+                    }
+                }
+                config.settings.keep_on_server = keep;
                 repo::accounts::set_settings(&tx, account_id, &config.settings)?;
                 tx.commit()?;
                 Ok(config.settings)
@@ -9645,6 +9686,13 @@ mod account_backup_import_tests {
         oauth.provider = Provider::Microsoft;
         oauth.auth_kind = AuthKind::Oauth2;
         assert!(validate_portable_account(&oauth).is_err());
+
+        // Only POP3 accounts remove mail from their server.
+        pop3.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+        validate_portable_account(&pop3).unwrap();
+        let mut imap = portable_imap("imap@example.com");
+        imap.settings.keep_on_server = KeepOnServer::UntilDownloaded;
+        assert!(validate_portable_account(&imap).is_err());
 
         pop3.incoming_host.clear();
         assert!(validate_portable_account(&pop3).is_err());

@@ -4,7 +4,8 @@
 //! A session holds the server's lock on the mailbox, so sessions stay short
 //! and other mail apps get their turn. A session ends with QUIT only after
 //! everything it retrieved is on stable storage, because QUIT lets a server
-//! that expires retrieved mail (EXPIRE 0) delete it. Anything that goes wrong
+//! that expires retrieved mail (EXPIRE 0) delete it, and removes the mail the
+//! account's setting no longer keeps on the server. Anything that goes wrong
 //! before then drops the connection instead, which leaves the mailbox as it
 //! was.
 
@@ -21,7 +22,9 @@ use crate::db::repo::{
 use crate::error::{CoreError, Result};
 use crate::events::CoreEvent;
 use crate::mime::ParsedBody;
-use crate::models::{AccountConfig, AccountSettings, ConnectionSecurity, now_ms, roles};
+use crate::models::{
+    AccountConfig, AccountSettings, ConnectionSecurity, KeepOnServer, now_ms, roles,
+};
 use crate::pop3::{self, SignInRefusal};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -32,7 +35,11 @@ use tokio::time::Instant;
 const SESSION_BUDGET: Duration = Duration::from_secs(90);
 /// The most messages one session downloads.
 const SESSION_MESSAGES: usize = 250;
-/// How soon the next session continues a download that reached its budget.
+/// The most messages one session removes from the server, and the longest
+/// it spends on that after downloading.
+const SESSION_REMOVALS: usize = 500;
+const REMOVAL_BUDGET: Duration = Duration::from_secs(30);
+/// How soon the next session continues work that reached a budget.
 const CONTINUE_AFTER: Duration = Duration::from_secs(15);
 /// Header sections read at once to date messages against the mail history.
 const DATE_BATCH: usize = 32;
@@ -374,7 +381,8 @@ pub(crate) async fn probe(config: &AccountConfig, password: &str) -> Result<Prob
 enum Synced {
     /// Every listed message is accounted for.
     Complete,
-    /// The session's budget ran out with messages left to download.
+    /// The session's budget ran out with messages left to download or
+    /// remove.
     Partial,
     /// The server accepts no sign-in before this time.
     NotBefore(i64),
@@ -415,7 +423,7 @@ async fn sync(ctx: &SyncCtx, config: &AccountConfig) -> std::result::Result<Sync
         .await?;
     let cutoff = config.settings.mail_history.cutoff_ms_at(signed_in_at);
     let planned = plan(&listing, &known, cutoff, signed_in_at);
-    let listed: HashSet<String> = listing.into_iter().map(|message| message.uidl).collect();
+    let listed: HashSet<String> = listing.iter().map(|message| message.uidl.clone()).collect();
     ctx.db
         .write(move |conn| {
             let listed = listed.iter().map(String::as_str).collect();
@@ -425,18 +433,23 @@ async fn sync(ctx: &SyncCtx, config: &AccountConfig) -> std::result::Result<Sync
 
     // Mail found by the first complete download is history, not news.
     let live = state.first_synced_at.is_some();
-    let complete = download(ctx, config, &mut session, planned, cutoff, live).await?;
-    if complete {
+    let downloaded = download(ctx, config, &mut session, planned, cutoff, live).await?;
+    if downloaded == Downloaded::All {
         ctx.db
             .write(move |conn| repo::pop3::record_first_sync(conn, account_id, now_ms()))
             .await?;
     }
+    let removed = match downloaded {
+        Downloaded::All | Downloaded::Partly => remove(ctx, config, &mut session, &listing).await?,
+        Downloaded::Ended => false,
+    };
     // Everything retrieved is stored, so the server may now act on the
-    // session. After a cut-short response the client sends nothing more.
+    // session and remove what it was asked to. After a cut-short response
+    // the client sends nothing more.
     if let Err(error) = session.quit().await {
         tracing::debug!(account_id, %error, "POP3 QUIT failed");
     }
-    Ok(if complete {
+    Ok(if downloaded == Downloaded::All && removed {
         Synced::Complete
     } else {
         Synced::Partial
@@ -539,8 +552,18 @@ fn plan(
     candidates
 }
 
-/// Download planned messages until the session's budget runs out. Returns
-/// whether every planned message was dealt with.
+/// How far a session's download got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Downloaded {
+    /// Every planned message was dealt with.
+    All,
+    /// The session's budget ran out first.
+    Partly,
+    /// The session can't continue.
+    Ended,
+}
+
+/// Download planned messages until the session's budget runs out.
 async fn download(
     ctx: &SyncCtx,
     config: &AccountConfig,
@@ -548,7 +571,7 @@ async fn download(
     candidates: Vec<Candidate>,
     cutoff: Option<i64>,
     live: bool,
-) -> std::result::Result<bool, Failure> {
+) -> std::result::Result<Downloaded, Failure> {
     let account_id = config.id;
     let deadline = Instant::now() + SESSION_BUDGET;
     // Without TOP a message's date is only known once it is retrieved, and
@@ -563,7 +586,7 @@ async fn download(
         };
         for (candidate, date) in batch.iter().zip(dates) {
             if Instant::now() >= deadline || downloaded >= SESSION_MESSAGES {
-                return Ok(false);
+                return Ok(Downloaded::Partly);
             }
             if let Some(cutoff) = cutoff
                 && let Some(sent_at) = candidate.sent_at.or(date)
@@ -581,11 +604,11 @@ async fn download(
             match retrieve(ctx, config, session, candidate, live).await? {
                 Retrieved::Stored => downloaded += 1,
                 Retrieved::Deferred => {}
-                Retrieved::SessionEnded => return Ok(false),
+                Retrieved::SessionEnded => return Ok(Downloaded::Ended),
             }
         }
     }
-    Ok(true)
+    Ok(Downloaded::All)
 }
 
 /// The dates of the batch's messages that don't have one yet, from their
@@ -698,6 +721,71 @@ async fn record_failure(
             repo::pop3::record_failed(conn, account_id, &uidl, size, &error, retry_at)
         })
         .await
+}
+
+/// Mark the mail the account's setting no longer keeps on the server. The
+/// server removes it at QUIT and keeps it if the session ends any other way.
+/// Returns whether everything due was marked.
+async fn remove(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    session: &mut pop3::Session,
+    listing: &[Listed],
+) -> std::result::Result<bool, Failure> {
+    let keep = config.settings.keep_on_server;
+    if keep == KeepOnServer::Always {
+        return Ok(true);
+    }
+    let account_id = config.id;
+    let now = now_ms();
+    let due = ctx
+        .db
+        .read(move |conn| repo::pop3::removable(conn, account_id, keep, now))
+        .await?;
+    // A UIDL the server repeats doesn't tell its messages apart, and one
+    // listed with another size than it was downloaded with may name another
+    // message now. Neither is removed.
+    let mut listed: HashMap<&str, Option<&Listed>> = HashMap::new();
+    for message in listing {
+        listed
+            .entry(message.uidl.as_str())
+            .and_modify(|entry| *entry = None)
+            .or_insert(Some(message));
+    }
+    let deadline = Instant::now() + REMOVAL_BUDGET;
+    let mut marked = 0;
+    for message in due {
+        let Some(Some(server)) = listed.get(message.uidl.as_str()) else {
+            continue;
+        };
+        if server.size != message.size
+            || (!message.deleted && !original_exists(message.original.as_deref()).await)
+        {
+            continue;
+        }
+        if marked == SESSION_REMOVALS || Instant::now() >= deadline {
+            return Ok(false);
+        }
+        match session.delete(server.number).await {
+            Ok(()) => marked += 1,
+            Err(error @ pop3::Error::Refused { .. }) => {
+                tracing::debug!(account_id, %error, "the POP3 server kept a message it was asked to remove");
+            }
+            Err(error) => return Err(failure(config, error)),
+        }
+    }
+    Ok(true)
+}
+
+/// Whether a message's original is on this device, so that the server's
+/// copy isn't the only one.
+async fn original_exists(path: Option<&str>) -> bool {
+    match path {
+        Some(path) => tokio::fs::metadata(path)
+            .await
+            .is_ok_and(|metadata| metadata.is_file()),
+        None => false,
+    }
 }
 
 /// How the file names of downloaded POP3 originals end.

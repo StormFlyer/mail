@@ -593,6 +593,7 @@ export component SettingsDialog inherits Rectangle {
     callback reorder_account(string, int, bool);
     callback save_account_mail_history(int, string);
     callback save_account_sent_copy_policy(int, string);
+    callback save_account_keep_on_server(int, string);
     callback connect_account_calendar(int);
     callback set_account_calendar_enabled(int, bool);
     callback connect_caldav(int, string, string, string);
@@ -629,6 +630,14 @@ export component SettingsDialog inherits Rectangle {
         @tr("6 months · Recommended"),
         @tr("1 year"),
         @tr("All mail"),
+    ];
+    private property <[string]> keep-on-server-options: [
+        @tr("Always"),
+        @tr("Until deleted here"),
+        @tr("7 days"),
+        @tr("14 days"),
+        @tr("30 days"),
+        @tr("Until downloaded"),
     ];
     private property <[string]> language-options: [
         @tr("System language"),
@@ -667,7 +676,7 @@ export component SettingsDialog inherits Rectangle {
         let terms = section == "General"
             ? @tr("general theme appearance palette language workspace layout window frameless title bar renderer privacy remote images sync group messages date inbox tray background startup sign in login")
             : section == "Accounts"
-            ? @tr("accounts profiles personal work colors providers gmail outlook imap jmap caldav carddav mail history oauth security signatures")
+            ? @tr("accounts profiles personal work colors providers gmail outlook imap pop3 jmap caldav carddav mail history server oauth security signatures")
             : section == "Contacts"
             ? @tr("contacts people suggestions autocomplete recipients senders address book privacy clear")
             : section == "Notifications"
@@ -765,6 +774,36 @@ export component SettingsDialog inherits Rectangle {
                 : index == 2 ? "sixMonths"
                 : index == 3 ? "oneYear" : "all",
         );
+    }
+
+    pure function keep-on-server-index(value: string) -> int {
+        return value == "untilDeleted" ? 1
+            : value == "sevenDays" ? 2
+            : value == "fourteenDays" ? 3
+            : value == "thirtyDays" ? 4
+            : value == "untilDownloaded" ? 5 : 0;
+    }
+
+    function select-keep-on-server(account-id: int, index: int) {
+        root.save_account_keep_on_server(
+            account-id,
+            index == 1 ? "untilDeleted"
+                : index == 2 ? "sevenDays"
+                : index == 3 ? "fourteenDays"
+                : index == 4 ? "thirtyDays"
+                : index == 5 ? "untilDownloaded" : "always",
+        );
+    }
+
+    // Whether the server removes downloaded mail sooner than the account's
+    // choice keeps it there.
+    pure function server-removes-sooner(account: AccountRow) -> bool {
+        let chosen = account.keep_on_server == "sevenDays" ? 7
+            : account.keep_on_server == "fourteenDays" ? 14
+            : account.keep_on_server == "thirtyDays" ? 30
+            : account.keep_on_server == "untilDownloaded" ? 0 : -1;
+        return account.server_keeps_mail_days >= 0
+            && (chosen < 0 || account.server_keeps_mail_days < chosen);
     }
 
     private property <bool> account_form_valid: root.account_email != ""
@@ -1717,11 +1756,14 @@ export component SettingsDialog inherits Rectangle {
                             for account[account-index] in root.connected_accounts : drop-target := DropArea {
                                 private property <length> divider-y: account.sync_error != "" ? sync-error.y + sync-error.height + 4px : account-header.height;
                                 private property <bool> has-sent-copy: account.provider != "gmail" && account.mail_protocol == "imap";
+                                private property <bool> has-server-copies: account.mail_protocol == "pop3";
                                 private property <bool> unencrypted: account.incoming_security == "none" || account.smtp_security == "none";
                                 // Preference rows keep their designed gaps below the last select row.
                                 private property <length> profile-y: self.has-sent-copy
                                     ? sent-copy-row.y + sent-copy-row.height + (root.compact ? 10px : 8px)
-                                    : history-row.y + history-row.height + (root.compact ? 9px : 1px);
+                                    : self.has-server-copies
+                                        ? server-copies-note.y + server-copies-note.height + (root.compact ? 10px : 8px)
+                                        : history-row.y + history-row.height + (root.compact ? 9px : 1px);
                                 height: profile-row.y + profile-row.height + (root.compact ? (account.provider == "generic" ? 61px : 7px) : 13px);
                                 can-drop(event) => root.read_account_transfer(event.data) != "" ? DragAction.move : DragAction.none;
                                 dropped(event) => {
@@ -1900,6 +1942,50 @@ export component SettingsDialog inherits Rectangle {
                                         selected(index, value) => {
                                             root.save_account_sent_copy_policy(account.id, index == 1 ? "server" : index == 2 ? "client" : "auto");
                                         }
+                                    }
+                                    server-copies-row := SettingsSelectRow {
+                                        visible: drop-target.has-server-copies;
+                                        x: root.compact ? 24px : 32px;
+                                        y: history-row.y + history-row.height + (root.compact ? 7px : 5px);
+                                        width: parent.width - (root.compact ? 48px : 64px);
+                                        compact: root.compact;
+                                        title: @tr("Keep mail on the server");
+                                        compact-description-height: 51px;
+                                        description: account.keep_on_server == "untilDeleted" ? @tr("Mail you delete here is removed from the server too.")
+                                            : account.keep_on_server == "untilDownloaded" ? @tr("Mail is removed from the server once it's on this device.")
+                                            : account.keep_on_server == "always" ? @tr("Flectar Mail never removes mail from the server.")
+                                            : @tr("Mail is removed after this time, or once deleted here.");
+                                        choices: root.keep-on-server-options;
+                                        selected-index: root.keep-on-server-index(account.keep_on_server);
+                                        title-color: root.body-text;
+                                        description-color: root.faint-text;
+                                        selected(index, value) => { root.select-keep-on-server(account.id, index); }
+                                    }
+                                    // The server's own rule wins over the account's choice.
+                                    server-rule := Text {
+                                        visible: drop-target.has-server-copies && root.server-removes-sooner(account);
+                                        // Aligned with the row's own texts.
+                                        x: server-copies-row.x + (root.compact ? 8px : 16px);
+                                        y: server-copies-row.y + server-copies-row.height + (self.visible ? 4px : 0px);
+                                        width: server-copies-row.width - (root.compact ? 16px : 32px);
+                                        height: self.visible ? self.preferred-height : 0px;
+                                        text: account.server_keeps_mail_days == 0
+                                            ? @tr("This server removes mail as soon as it's downloaded.")
+                                            : @tr("This server removes downloaded mail after one day." | "This server removes downloaded mail after {n} days." % account.server_keeps_mail_days);
+                                        color: AppTheme.destructive;
+                                        font-size: TypeScale.caption;
+                                        wrap: word-wrap;
+                                    }
+                                    server-copies-note := Text {
+                                        visible: drop-target.has-server-copies && (account.keep_on_server != "always" || root.server-removes-sooner(account));
+                                        x: server-rule.x;
+                                        y: server-rule.y + server-rule.height + (self.visible ? 4px : 0px);
+                                        width: server-rule.width;
+                                        height: self.visible ? self.preferred-height : 0px;
+                                        text: @tr("Mail removed from the server is kept only on this device. Database snapshots in Storage include it.");
+                                        color: root.faint-text;
+                                        font-size: TypeScale.caption;
+                                        wrap: word-wrap;
                                     }
                                     profile-row := Rectangle {
                                         x: root.compact ? 24px : 32px;

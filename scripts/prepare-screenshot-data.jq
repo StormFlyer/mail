@@ -67,6 +67,8 @@ def favicon_path(address):
     | .smtp_security = (.smtp_security // "tls")
     | .trusted_certificate_pem = (.trusted_certificate_pem // "")
     | .mail_history = (.mail_history // "sixMonths")
+    | .keep_on_server = (.keep_on_server // "always")
+    | .server_keeps_mail_days = (.server_keeps_mail_days // -1)
     | .caldav_url = (.caldav_url // "")
     | .caldav_username = (.caldav_username // "")
     | .carddav_connected = (.carddav_connected // false)

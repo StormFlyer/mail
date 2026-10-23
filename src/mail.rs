@@ -913,6 +913,19 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn set_account_keep_on_server(
+        &self,
+        account_id: i64,
+        value: &str,
+    ) -> Result<(), String> {
+        let keep = flectar_mail_core::models::KeepOnServer::from_storage(value)
+            .ok_or_else(|| format!("unsupported choice for mail on the server: {value}"))?;
+        self.core
+            .set_account_keep_on_server(account_id, keep)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn set_account_sent_copy_policy(&self, account_id: i64, value: &str) -> Result<(), String> {
         let policy = flectar_mail_core::models::SentCopyPolicy::from_storage(value)
             .ok_or_else(|| format!("unsupported Sent copy policy: {value}"))?;
@@ -2634,6 +2647,7 @@ mod tests {
             sync_state: "idle".into(),
             sync_error: None,
             can_create_top_level_mailbox: true,
+            server_keeps_mail_days: None,
         }
     }
 
