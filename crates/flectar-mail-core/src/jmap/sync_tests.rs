@@ -107,6 +107,7 @@ async fn snoozed_thread(ctx: &SyncCtx) -> (Option<i64>, Option<i64>) {
 /// A JMAP server answering from fixed data. Every connection is served on its
 /// own task, and every method call is recorded.
 struct MockJmap {
+    mailboxes: Vec<Value>,
     emails: Vec<Value>,
     changes: Option<Value>,
     /// Email/get fails with serverFail while this id is requested and the
@@ -122,6 +123,7 @@ struct MockJmap {
 impl Default for MockJmap {
     fn default() -> Self {
         Self {
+            mailboxes: Vec::new(),
             emails: Vec::new(),
             changes: None,
             fail_on: None,
@@ -352,6 +354,36 @@ impl MockJmap {
                     "state-0"
                 };
                 json!({"accountId": "mail-account", "state": state, "list": list, "notFound": not_found})
+            }
+            // Like Stalwart, a Mailbox/get without ids returns no more than
+            // maxObjectsInGet mailboxes, without saying so.
+            "Mailbox/get" => {
+                let list = match args["ids"].as_array() {
+                    Some(ids) => self
+                        .mailboxes
+                        .iter()
+                        .filter(|mailbox| ids.contains(&mailbox["id"]))
+                        .collect::<Vec<_>>(),
+                    None => self
+                        .mailboxes
+                        .iter()
+                        .take(self.max_objects_in_get)
+                        .collect(),
+                };
+                json!({"accountId": "mail-account", "state": "mailboxes-0", "list": list, "notFound": []})
+            }
+            "Mailbox/query" => {
+                let position = args["position"].as_u64().unwrap_or(0) as usize;
+                let limit = args["limit"]
+                    .as_u64()
+                    .map_or(usize::MAX, |limit| limit as usize);
+                json!({
+                    "accountId": "mail-account", "queryState": "mailbox-query-0",
+                    "canCalculateChanges": false, "position": position,
+                    "total": self.mailboxes.len(),
+                    "ids": self.mailboxes.iter().skip(position).take(limit)
+                        .map(|mailbox| &mailbox["id"]).collect::<Vec<_>>()
+                })
             }
             other => panic!("unexpected method {other}"),
         })
@@ -1223,5 +1255,88 @@ async fn full_sync_after_a_server_change_keeps_only_mail_on_the_new_server() {
         })
         .await
         .unwrap();
+    mock.task.abort();
+}
+
+fn mailbox(id: &str, name: &str, role: Option<&str>) -> Value {
+    json!({
+        "id": id, "name": name, "parentId": null, "role": role,
+        "myRights": {
+            "mayReadItems": true, "mayAddItems": true, "mayRemoveItems": true,
+            "maySetSeen": true, "maySetKeywords": true, "mayCreateChild": true,
+            "mayRename": true, "mayDelete": true, "maySubmit": true
+        }
+    })
+}
+
+async fn synced_mailboxes(ctx: &SyncCtx) -> Vec<String> {
+    ctx.db
+        .read(|conn| {
+            Ok(conn
+                .prepare("SELECT jmap_id FROM folders WHERE jmap_id IS NOT NULL ORDER BY jmap_id")?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<Vec<String>>>()?)
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn mailboxes_past_the_get_limit_are_all_listed() {
+    let (_dir, ctx, _config) = fixture().await;
+    let mock = MockJmap {
+        mailboxes: vec![
+            mailbox("inbox-remote", "Inbox", Some("inbox")),
+            mailbox("archive-remote", "Archive", Some("archive")),
+            mailbox("projects-remote", "Projects", None),
+            mailbox("receipts-remote", "Receipts", None),
+            mailbox("travel-remote", "Travel", None),
+        ],
+        max_objects_in_get: 2,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    sync_mailboxes(&ctx, 1, &mock.connected).await.unwrap();
+    assert_eq!(
+        synced_mailboxes(&ctx).await,
+        [
+            "archive-remote",
+            "inbox-remote",
+            "projects-remote",
+            "receipts-remote",
+            "travel-remote"
+        ]
+    );
+    // The first answer filled the limit, so the rest came in pages of two.
+    let pages = mock
+        .calls("Mailbox/get")
+        .iter()
+        .map(|call| call["ids"].as_array().map(Vec::len))
+        .collect::<Vec<_>>();
+    assert_eq!(pages, [None, Some(2), Some(2), Some(1)]);
+    mock.task.abort();
+}
+
+#[tokio::test]
+async fn mailboxes_within_the_get_limit_take_one_request() {
+    let (_dir, ctx, _config) = fixture().await;
+    let mock = MockJmap {
+        mailboxes: vec![
+            mailbox("inbox-remote", "Inbox", Some("inbox")),
+            mailbox("archive-remote", "Archive", Some("archive")),
+        ],
+        max_objects_in_get: 3,
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    sync_mailboxes(&ctx, 1, &mock.connected).await.unwrap();
+    assert_eq!(
+        synced_mailboxes(&ctx).await,
+        ["archive-remote", "inbox-remote"]
+    );
+    assert_eq!(mock.calls("Mailbox/get").len(), 1);
+    assert!(mock.calls("Mailbox/query").is_empty());
     mock.task.abort();
 }

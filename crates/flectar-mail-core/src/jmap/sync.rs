@@ -12,13 +12,15 @@ use crate::sync::engine::{
 };
 use futures::{FutureExt, Stream, StreamExt};
 use jmap_client::core::error::MethodErrorType;
+use jmap_client::core::query::QueryResponse;
 use jmap_client::core::response::{EmailGetResponse, MailboxGetResponse};
 use jmap_client::core::set::{SetErrorType, SetObject};
 use jmap_client::email::{BodyProperty, Email, Header, HeaderValue, Property as EmailProperty};
 use jmap_client::event_source::PushNotification;
-use jmap_client::mailbox::{Property as MailboxProperty, Role};
+use jmap_client::mailbox::{Mailbox, Property as MailboxProperty, Role};
 use rusqlite::{OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::pin::Pin;
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -291,22 +293,7 @@ fn role(value: Role) -> Option<&'static str> {
 }
 
 async fn sync_mailboxes(ctx: &SyncCtx, local_account: i64, c: &ConnectedClient) -> Result<()> {
-    let mut request = c.request();
-    // Counters (totalEmails, unreadThreads, ...) are computed locally; asking
-    // for them makes the server count every mailbox of a large account.
-    request.get_mailbox().account_id(&c.account_id).properties([
-        MailboxProperty::Id,
-        MailboxProperty::Name,
-        MailboxProperty::ParentId,
-        MailboxProperty::Role,
-        MailboxProperty::MyRights,
-    ]);
-    let mut response: MailboxGetResponse = request
-        .send_get_mailbox()
-        .await
-        .map_err(client::map_error)?;
-    let state = response.take_state();
-    let mailboxes = response.take_list();
+    let (state, mailboxes) = fetch_mailboxes(c).await?;
     let hierarchy = mailboxes
         .iter()
         .map(|mailbox| {
@@ -414,6 +401,71 @@ async fn sync_mailboxes(ctx: &SyncCtx, local_account: i64, c: &ConnectedClient) 
             Ok(())
         })
         .await
+}
+
+/// Every mailbox of the account and the Mailbox state they share.
+///
+/// Asked for without ids, Stalwart returns no more mailboxes than its get
+/// limit and says nothing of the rest. An answer that fills the limit is
+/// checked against Mailbox/query and fetched again in pages.
+async fn fetch_mailboxes(c: &ConnectedClient) -> Result<(String, Vec<Mailbox>)> {
+    let limit = max_objects_in_get(c);
+    let (state, mailboxes) = get_mailboxes(c, None).await?;
+    if mailboxes.len() < limit {
+        return Ok((state, mailboxes));
+    }
+    'restart: for _ in 0..MAX_QUERY_RESTARTS {
+        let ids = query_all("Mailbox/query", |position| async move {
+            let mut request = c.request();
+            request
+                .query_mailbox()
+                .account_id(&c.account_id)
+                .position(position)
+                .limit(PAGE)
+                .calculate_total(true);
+            request.send_query_mailbox().await
+        })
+        .await?;
+        let mut state: Option<String> = None;
+        let mut mailboxes = Vec::with_capacity(ids.len());
+        for page in ids.chunks(limit) {
+            let (page_state, list) = get_mailboxes(c, Some(page)).await?;
+            if state.get_or_insert_with(|| page_state.clone()) != &page_state {
+                continue 'restart;
+            }
+            mailboxes.extend(list);
+        }
+        if let Some(state) = state {
+            return Ok((state, mailboxes));
+        }
+    }
+    Err(CoreError::Jmap(
+        "mailboxes changed repeatedly while listing them; retrying later".into(),
+    ))
+}
+
+async fn get_mailboxes(
+    c: &ConnectedClient,
+    ids: Option<&[String]>,
+) -> Result<(String, Vec<Mailbox>)> {
+    let mut request = c.request();
+    // Counters (totalEmails, unreadThreads, ...) are computed locally; asking
+    // for them makes the server count every mailbox of a large account.
+    let get = request.get_mailbox().account_id(&c.account_id).properties([
+        MailboxProperty::Id,
+        MailboxProperty::Name,
+        MailboxProperty::ParentId,
+        MailboxProperty::Role,
+        MailboxProperty::MyRights,
+    ]);
+    if let Some(ids) = ids {
+        get.ids(ids.iter().cloned());
+    }
+    let mut response: MailboxGetResponse = request
+        .send_get_mailbox()
+        .await
+        .map_err(client::map_error)?;
+    Ok((response.take_state(), response.take_list()))
 }
 
 fn mailbox_path(id: &str, hierarchy: &HashMap<String, (String, Option<String>)>) -> Result<String> {
@@ -540,33 +592,43 @@ async fn saved_email_state(ctx: &SyncCtx, id: i64) -> Result<Option<String>> {
 /// Every Email received after `received_after` (ms), newest first.
 async fn query_ids(c: &ConnectedClient, received_after: Option<i64>) -> Result<Vec<String>> {
     let cutoff = received_after.map(|v| v / 1000);
+    query_all("Email/query", |position| async move {
+        let mut request = c.request();
+        let query = request
+            .query_email()
+            .account_id(&c.account_id)
+            .position(position)
+            .limit(PAGE)
+            .calculate_total(true)
+            .sort([jmap_client::email::query::Comparator::received_at().descending()]);
+        if let Some(cutoff) = cutoff {
+            query.filter(jmap_client::email::query::Filter::after(cutoff));
+        }
+        request.send_query_email().await
+    })
+    .await
+}
+
+/// Pages through a query until it has every id, starting over whenever the
+/// results change underneath it.
+async fn query_all<F, Fut>(name: &str, mut page: F) -> Result<Vec<String>>
+where
+    F: FnMut(i32) -> Fut,
+    Fut: Future<Output = jmap_client::Result<QueryResponse>>,
+{
     'restart: for _ in 0..MAX_QUERY_RESTARTS {
         let mut ids = Vec::new();
         let mut query_state: Option<String> = None;
         let mut expected_total: Option<usize> = None;
         loop {
             let position = i32::try_from(ids.len())
-                .map_err(|_| CoreError::Jmap("Email/query result set is too large".into()))?;
-            let mut request = c.request();
-            let query = request
-                .query_email()
-                .account_id(&c.account_id)
-                .position(position)
-                .limit(PAGE)
-                .calculate_total(true)
-                .sort([jmap_client::email::query::Comparator::received_at().descending()]);
-            if let Some(cutoff) = cutoff {
-                query.filter(jmap_client::email::query::Filter::after(cutoff));
-            }
-            let mut response = request
-                .send_query_email()
-                .await
-                .map_err(client::map_error)?;
+                .map_err(|_| CoreError::Jmap(format!("{name} result set is too large")))?;
+            let mut response = page(position).await.map_err(client::map_error)?;
             let response_state = response.query_state().to_owned();
             let total = response
                 .total()
-                .ok_or_else(|| CoreError::Jmap("Email/query omitted its requested total".into()))?;
-            if response.position() != ids.len() as i32
+                .ok_or_else(|| CoreError::Jmap(format!("{name} omitted its requested total")))?;
+            if response.position() != position
                 || query_state
                     .as_ref()
                     .is_some_and(|state| state != &response_state)
@@ -593,9 +655,9 @@ async fn query_ids(c: &ConnectedClient, received_after: Option<i64>) -> Result<V
             }
         }
     }
-    Err(CoreError::Jmap(
-        "mailbox changed repeatedly while paging Email/query; retrying later".into(),
-    ))
+    Err(CoreError::Jmap(format!(
+        "{name} results changed repeatedly while paging; retrying later"
+    )))
 }
 
 async fn changes(
@@ -1727,57 +1789,19 @@ async fn execute_action(
 }
 
 async fn query_mailbox_ids(c: &ConnectedClient, mailbox_id: &str) -> Result<Vec<String>> {
-    'restart: for _ in 0..MAX_QUERY_RESTARTS {
-        let mut ids = Vec::new();
-        let mut state: Option<String> = None;
-        let mut total: Option<usize> = None;
-        loop {
-            let position = i32::try_from(ids.len())
-                .map_err(|_| CoreError::Jmap("Trash contains too many messages".into()))?;
-            let mut request = c.request();
-            request
-                .query_email()
-                .account_id(&c.account_id)
-                .position(position)
-                .limit(PAGE)
-                .calculate_total(true)
-                .sort([jmap_client::email::query::Comparator::received_at().descending()])
-                .filter(jmap_client::email::query::Filter::in_mailbox(mailbox_id));
-            let mut response = request
-                .send_query_email()
-                .await
-                .map_err(client::map_error)?;
-            let page_state = response.query_state().to_owned();
-            let page_total = response
-                .total()
-                .ok_or_else(|| CoreError::Jmap("Trash query omitted its total".into()))?;
-            if response.position() != position
-                || state.as_ref().is_some_and(|s| s != &page_state)
-                || total.is_some_and(|n| n != page_total)
-            {
-                continue 'restart;
-            }
-            state.get_or_insert(page_state);
-            total.get_or_insert(page_total);
-            let page = response.take_ids();
-            if page.is_empty() && ids.len() < page_total {
-                continue 'restart;
-            }
-            ids.extend(page);
-            if ids.len() == page_total {
-                if ids.iter().collect::<HashSet<_>>().len() != ids.len() {
-                    continue 'restart;
-                }
-                return Ok(ids);
-            }
-            if ids.len() > page_total {
-                continue 'restart;
-            }
-        }
-    }
-    Err(CoreError::Jmap(
-        "Trash changed repeatedly while loading it; retrying later".into(),
-    ))
+    query_all("Trash query", |position| async move {
+        let mut request = c.request();
+        request
+            .query_email()
+            .account_id(&c.account_id)
+            .position(position)
+            .limit(PAGE)
+            .calculate_total(true)
+            .sort([jmap_client::email::query::Comparator::received_at().descending()])
+            .filter(jmap_client::email::query::Filter::in_mailbox(mailbox_id));
+        request.send_query_email().await
+    })
+    .await
 }
 
 async fn apply_message_mutation<T>(
