@@ -11,8 +11,10 @@ export component LabelChip inherits Rectangle {
     in property <color> text-color;
     in property <color> chip-border-color;
     in property <bool> compact: false;
-    // The width that shows the whole name.
+    // The width that shows the whole name, and the least that still shows
+    // its start.
     out property <length> natural-width: chip-name.x + chip-name.preferred-width + (root.compact ? 4px : 5px);
+    out property <length> least-width: min(root.natural-width, chip-name.x + 2.5rem + (root.compact ? 4px : 5px));
 
     min-width: root.natural-width;
     preferred-width: root.natural-width;

@@ -391,3 +391,34 @@ fn labels_past_the_limit_take_no_room() {
     let gap = more_x - (marketing_x + marketing_width);
     assert!(gap < 10.0, "hidden labels took {gap}px");
 }
+
+#[test]
+fn labels_without_room_for_their_names_are_counted() {
+    let DesktopList { ui, window, .. } = desktop_list(EmailRow {
+        id: 1,
+        sender: "Cloudflare".into(),
+        subject: "Your weekly traffic report".into(),
+        preview: "Requests were up 18% across flectar.com".into(),
+        labels: ModelRc::new(VecModel::from(vec![
+            label(1, "Reports"),
+            label(2, "Marketing"),
+            label(3, "Travel"),
+        ])),
+        ..Default::default()
+    });
+
+    // A narrower list keeps one label readable and counts the rest,
+    ui.window().set_size(slint::PhysicalSize::new(320, 260));
+    settle(&window, Duration::ZERO);
+    let reports = labelled(ui.window(), "Reports", None).expect("the first label");
+    let width = bounds(&reports).2;
+    assert!(width >= 28.0, "the label was cut to {width}px");
+    assert!(labelled(ui.window(), "Marketing", None).is_none());
+    assert!(labelled(ui.window(), "+2", None).is_some());
+
+    // and a narrower one only counts them.
+    ui.window().set_size(slint::PhysicalSize::new(260, 260));
+    settle(&window, Duration::ZERO);
+    assert!(labelled(ui.window(), "Reports", None).is_none());
+    assert!(labelled(ui.window(), "+3", None).is_some());
+}

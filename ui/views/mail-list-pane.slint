@@ -285,11 +285,14 @@ export component MailListPane inherits FocusScope {
     private property <length> message-row-height: root.dense ? 44px
         : 32px + root.sender-line + root.subject-line + root.detail-line;
     private property <length> group-row-height: root.compact ? 44px : 40px;
+    // A label shows only with room for the start of its name, and its gap.
+    private property <length> label-least-width: label-probe.least-width + 4px;
     forward-focus: list-keyboard;
 
     sender-line-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.body-large; font-weight: 700; }
     subject-line-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.body; font-weight: 700; }
     detail-line-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.secondary; }
+    label-probe := LabelChip { visible: false; compact: true; name: "Long label name"; }
 
     function reveal-target(target: MailNavigationTarget) {
         if mail-list-scroll.visible-height <= 0px { return; }
@@ -747,8 +750,14 @@ export component MailListPane inherits FocusScope {
                                 // The code chip leads the detail line when the line has room.
                                 private property <bool> shows-code: mail-data.verification_code != ""
                                     && detail.width >= code-chip.width + 4px;
-                                // Next to it one label still fits; "+N" counts the rest.
-                                private property <int> label-limit: root.dense || mail-row.shows-code ? 1 : 2;
+                                // Labels follow, one beside the code, while each keeps room
+                                // for the start of its name; "+N" (26px) counts the rest.
+                                private property <length> label-room: detail.width
+                                    - (mail-row.shows-code ? code-chip.width + 4px : 0px);
+                                private property <int> label-limit: !root.dense && !mail-row.shows-code
+                                    && mail-row.label-room >= 2 * root.label-least-width + (mail-data.labels.length > 2 ? 26px : 0px) ? 2
+                                    : mail-row.label-room >= root.label-least-width + (mail-data.labels.length > 1 ? 26px : 0px) ? 1
+                                    : 0;
                                 private property <bool> reveal-ready: !entry.reveal_row;
                                 private property <bool> touch-pending: false;
                                 private property <bool> long-press-triggered: false;
@@ -1038,7 +1047,7 @@ export component MailListPane inherits FocusScope {
                                                     // The preview gives way first, then the names shorten.
                                                     preferred-width: min(self.natural-width, root.dense ? 68px : 92px);
                                                     max-width: self.preferred-width;
-                                                    min-width: min(self.preferred-width, 36px);
+                                                    min-width: min(self.preferred-width, self.least-width);
                                                     horizontal-stretch: 0;
                                                     name: label.name;
                                                     name-has-emoji: label.name_has_emoji;
