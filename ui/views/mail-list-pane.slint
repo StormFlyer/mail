@@ -178,7 +178,7 @@ export component MailListPane inherits FocusScope {
     in property <string> selected_scope: "Unified Inbox";
     in property <string> scope_title: selected_scope;
     in property <bool> trash_view: false;
-    in property <string> search_query: "";
+    in-out property <string> search_query: "";
     in property <string> search_filter: "All mail";
     in property <bool> sync_in_progress: false;
     in property <bool> can_load_more: false;
@@ -467,7 +467,7 @@ export component MailListPane inherits FocusScope {
                                 : @image-url("../icons/lucide/outline/sidebar-collapse.svg");
                             leading-tooltip: root.mail_sidebar_collapsed ? @tr("Show folders") : @tr("Hide folders");
                             leading-accessible-id: "mail-folders-button";
-                            text: root.search_query;
+                            text <=> root.search_query;
                             placeholder-text: @tr("Search mail");
                             filters: [
                                 { title: @tr("All mail"), value: "All mail" },

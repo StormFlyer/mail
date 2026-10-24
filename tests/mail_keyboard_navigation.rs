@@ -4,7 +4,10 @@ use slint::platform::{
     software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
 };
 use slint::{ComponentHandle, Model, ModelRc, Rgb8Pixel, VecModel};
-use std::{cell::Cell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 slint::slint! {
     import { Palette } from "std-widgets.slint";
@@ -79,6 +82,7 @@ slint::slint! {
         in-out property <int> checked-count: 0;
         in-out property <bool> trash: false;
         in-out property <bool> draft: false;
+        in-out property <string> query;
         out property <string> page: view.compact-page;
         out property <bool> list-ring: view.list-focus-visible;
         callback selected(int);
@@ -102,6 +106,7 @@ slint::slint! {
             text_mode: root.text-mode;
             source_mode: root.source-mode;
             settings_open <=> root.settings-open;
+            search_query <=> root.query;
             selection-count: root.checked-count;
             trash_view: root.trash;
             selected_is_draft: root.draft;
@@ -283,6 +288,9 @@ fn keyboard_navigation_keeps_focus_scrolls_and_respects_text_inputs() {
     ui.on_checked(move |id, value| count.set((id, value)));
     let count = pages.clone();
     ui.on_page_requested(move || count.set(count.get() + 1));
+    let searched = Rc::new(RefCell::new(String::new()));
+    let query = searched.clone();
+    ui.on_searched(move |text| *query.borrow_mut() = text.into());
     ui.show().unwrap();
     render(&window, 500, 400, "initial");
     ui.invoke_focus_list();
@@ -396,8 +404,11 @@ fn keyboard_navigation_keeps_focus_scrolls_and_respects_text_inputs() {
         !ui.get_focused(),
         "clicking search moves focus out of the list"
     );
-    let cursor = ui.get_cursor();
+    let mail_actions = (selected.get(), opened.get(), checked.get());
     key(ui.window(), "x");
+    assert_eq!(searched.borrow().as_str(), "x");
+    // The new query starts the list over, as the app's search results do.
+    let cursor = ui.get_cursor();
     key(ui.window(), Key::Home);
     key(ui.window(), Key::DownArrow);
     key(ui.window(), Key::Return);
@@ -405,6 +416,11 @@ fn keyboard_navigation_keeps_focus_scrolls_and_respects_text_inputs() {
         ui.get_cursor(),
         cursor,
         "search navigation must not move the mail cursor"
+    );
+    assert_eq!(
+        (selected.get(), opened.get(), checked.get()),
+        mail_actions,
+        "keys typed in search are not mail actions"
     );
     key(ui.window(), Key::Tab);
     assert!(!ui.get_focused(), "Tab follows the toolbar controls");
@@ -679,4 +695,9 @@ fn mail_shortcuts_act_on_what_has_focus() {
     slint::platform::update_timers_and_animations();
     key(ui.window(), "c");
     assert_eq!(searched.borrow().as_str(), "c");
+    assert_eq!(ui.get_query(), "c");
+    // A query set from outside, like a restored tab's, replaces the text.
+    ui.set_query("".into());
+    key(ui.window(), "d");
+    assert_eq!(searched.borrow().as_str(), "d");
 }

@@ -13,8 +13,12 @@ use crate::sync::engine::{
 use futures::{FutureExt, Stream, StreamExt};
 use jmap_client::core::error::MethodErrorType;
 use jmap_client::core::query::QueryResponse;
-use jmap_client::core::response::{EmailGetResponse, MailboxGetResponse};
+use jmap_client::core::response::{
+    EmailGetResponse, EmailSetResponse, EmailSubmissionSetResponse, IdentityGetResponse,
+    MailboxGetResponse,
+};
 use jmap_client::core::set::{SetErrorType, SetObject};
+use jmap_client::email::import::EmailImportResponse;
 use jmap_client::email::{BodyProperty, Email, Header, HeaderValue, Property as EmailProperty};
 use jmap_client::event_source::PushNotification;
 use jmap_client::mailbox::{Mailbox, Property as MailboxProperty, Role};
@@ -78,6 +82,9 @@ async fn actor(
     let mut retry = 1u64;
     let mut identities_synced_at: Option<std::time::Instant> = None;
     let mut listing_bytes = ATTACHMENT_LISTING_BYTES;
+    // Kept from one sync to the next, with its connection. A failed sync or a
+    // changed Session makes the next one connect again.
+    let mut session: Option<ConnectedClient> = None;
     loop {
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
@@ -91,9 +98,16 @@ async fn actor(
         if settings.has_changed().unwrap_or(false) {
             config.settings = settings.borrow_and_update().clone();
         }
+        let reused = session.take();
         let outcome = async {
-            let connected = connect(&ctx, &config).await?;
-            persist_session(&ctx, config.id, &connected).await?;
+            let connected = match reused {
+                Some(connected) if !connected.session_changed() => connected,
+                _ => {
+                    let connected = connect(&ctx, &config).await?;
+                    persist_session(&ctx, config.id, &connected).await?;
+                    connected
+                }
+            };
             if identities_synced_at.is_none_or(|at| at.elapsed() >= IDENTITY_REFRESH_INTERVAL) {
                 // Identities change rarely and only gate the From picker, so
                 // a failure here must not block mail synchronization.
@@ -207,6 +221,9 @@ async fn actor(
                 Wake::Sync => break,
             }
         }
+        // The push stream borrows the session it was opened on.
+        drop(push);
+        session = connected;
     }
 }
 
@@ -423,7 +440,7 @@ async fn fetch_mailboxes(c: &ConnectedClient) -> Result<(String, Vec<Mailbox>)> 
                 .position(position)
                 .limit(PAGE)
                 .calculate_total(true);
-            request.send_query_mailbox().await
+            c.send_single::<QueryResponse>(request).await
         })
         .await?;
         let mut state: Option<String> = None;
@@ -461,10 +478,8 @@ async fn get_mailboxes(
     if let Some(ids) = ids {
         get.ids(ids.iter().cloned());
     }
-    let mut response: MailboxGetResponse = request
-        .send_get_mailbox()
-        .await
-        .map_err(client::map_error)?;
+    let mut response: MailboxGetResponse =
+        c.send_single(request).await.map_err(client::map_error)?;
     Ok((response.take_state(), response.take_list()))
 }
 
@@ -604,7 +619,7 @@ async fn query_ids(c: &ConnectedClient, received_after: Option<i64>) -> Result<V
         if let Some(cutoff) = cutoff {
             query.filter(jmap_client::email::query::Filter::after(cutoff));
         }
-        request.send_query_email().await
+        c.send_single::<QueryResponse>(request).await
     })
     .await
 }
@@ -707,8 +722,7 @@ async fn current_email_state(c: &ConnectedClient) -> Result<String> {
         .account_id(&c.account_id)
         .ids(Vec::<String>::new())
         .properties([EmailProperty::Id]);
-    let mut response: EmailGetResponse =
-        request.send_get_email().await.map_err(client::map_error)?;
+    let mut response: EmailGetResponse = c.send_single(request).await.map_err(client::map_error)?;
     Ok(response.take_state())
 }
 
@@ -882,7 +896,7 @@ async fn fetch_headers(
         .account_id(&c.account_id)
         .ids(ids.iter().cloned())
         .properties(header_properties());
-    let mut response: EmailGetResponse = request.send_get_email().await?;
+    let mut response: EmailGetResponse = c.send_single(request).await?;
     Ok((response.take_list(), response.take_not_found()))
 }
 
@@ -1302,7 +1316,13 @@ async fn finish_email_sync(
                     stale_paths.extend(leftover.raw_path);
                     repo::messages::delete(&tx, leftover.id)?;
                 }
-                repo::folders::drop_jmap_leftovers(&tx, account_id)?;
+                // Everything an earlier server or protocol left has now been
+                // matched with its copy here or removed.
+                tx.execute(
+                    "UPDATE messages SET relink_pending=0 WHERE account_id=?1 AND relink_pending=1",
+                    params![account_id],
+                )?;
+                changed_threads.extend(repo::folders::drop_jmap_leftovers(&tx, account_id)?);
             }
             for thread_id in &changed_threads {
                 repo::threads::recompute(&tx, *thread_id)?;
@@ -1431,7 +1451,7 @@ async fn request_attachments(
             BodyProperty::Disposition,
             BodyProperty::Cid,
         ]);
-    let mut response: EmailGetResponse = request.send_get_email().await?;
+    let mut response: EmailGetResponse = c.send_single(request).await?;
     Ok(response.take_list())
 }
 
@@ -1691,7 +1711,8 @@ async fn execute_action(
                     .set_email()
                     .account_id(&c.account_id)
                     .destroy(batch.iter().cloned());
-                let mut response = request.send_set_email().await.map_err(client::map_error)?;
+                let mut response: EmailSetResponse =
+                    c.send_single(request).await.map_err(client::map_error)?;
                 for id in batch {
                     match response.destroyed(id) {
                         Ok(()) => {}
@@ -1802,7 +1823,7 @@ async fn query_mailbox_ids(c: &ConnectedClient, mailbox_id: &str) -> Result<Vec<
             .calculate_total(true)
             .sort([jmap_client::email::query::Comparator::received_at().descending()])
             .filter(jmap_client::email::query::Filter::in_mailbox(mailbox_id));
-        request.send_query_email().await
+        c.send_single::<QueryResponse>(request).await
     })
     .await
 }
@@ -2135,8 +2156,7 @@ async fn save_draft_action(
     }
 
     let mut uploaded = c
-        .client
-        .upload(Some(&c.account_id), raw, Some("message/rfc822"))
+        .upload(raw, "message/rfc822")
         .await
         .map_err(client::map_error)?;
     let blob_id = uploaded.take_blob_id();
@@ -2158,8 +2178,8 @@ async fn save_draft_action(
         .keywords(["$draft", "$seen"])
         .received_at(now_ms() / 1000);
     let create_id = import.create_id();
-    let imported = request
-        .send_import_email()
+    let imported = c
+        .send_single::<EmailImportResponse>(request)
         .await
         .map_err(client::map_error)?
         .created(&create_id)
@@ -2272,8 +2292,8 @@ async fn send_action(
             .await?;
         let mut identity_request = c.request();
         identity_request.get_identity().account_id(&c.account_id);
-        let identities = identity_request
-            .send_get_identity()
+        let identities = c
+            .send_single::<IdentityGetResponse>(identity_request)
             .await
             .map_err(client::map_error)?
             .take_list();
@@ -2300,8 +2320,8 @@ async fn send_action(
             .to_owned();
         let (request, create_id) =
             submission_request(c, &remote_email, identity_id, sent_mailbox.clone());
-        let mut response = request
-            .send_set_email_submission()
+        let mut response = c
+            .send_single::<EmailSubmissionSetResponse>(request)
             .await
             .map_err(map_submission_error)?;
         let created = response.created(&create_id);
@@ -2474,7 +2494,7 @@ async fn ensure_submitted_email_state(
         .mailbox_ids([sent_mailbox])
         .keyword("$draft", false)
         .keyword("$seen", true);
-    let mut response = request.send_set_email().await.map_err(client::map_error)?;
+    let mut response: EmailSetResponse = c.send_single(request).await.map_err(client::map_error)?;
     match response.updated(remote_email) {
         Ok(_) => Ok(()),
         Err(jmap_client::Error::Set(error)) if error.type_ == SetErrorType::NotFound => Ok(()),
@@ -2551,10 +2571,12 @@ async fn mark_submission_accepted(
 }
 
 async fn body_actor(ctx: SyncCtx, config: AccountConfig, mut rx: mpsc::Receiver<PriorityFetchCmd>) {
+    let mut session = None;
     while let Some(command) = rx.recv().await {
         match command {
             PriorityFetchCmd::Body(message_id) => {
-                if let Err(error) = fetch_body(&ctx, &config, message_id).await {
+                if let Err(error) = fetch_body(&ctx, &config, &mut session, message_id).await {
+                    session = None;
                     tracing::warn!(account_id=config.id, message_id, error=%error, "JMAP body fetch failed");
                     let _ = ctx
                         .db
@@ -2566,16 +2588,40 @@ async fn body_actor(ctx: SyncCtx, config: AccountConfig, mut rx: mpsc::Receiver<
                 attachment_id,
                 complete,
             } => {
-                let result = fetch_attachment(&ctx, &config, attachment_id)
+                let result = fetch_attachment(&ctx, &config, &mut session, attachment_id)
                     .await
-                    .map_err(|error| error.to_string());
+                    .map_err(|error| {
+                        session = None;
+                        error.to_string()
+                    });
                 let _ = complete.send(result);
             }
         }
     }
 }
 
-async fn fetch_body(ctx: &SyncCtx, config: &AccountConfig, message_id: i64) -> Result<()> {
+/// The body worker's session: connected when first needed, and again after a
+/// failure or once the server reports a changed Session.
+async fn body_session<'a>(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    session: &'a mut Option<ConnectedClient>,
+) -> Result<&'a ConnectedClient> {
+    if session
+        .as_ref()
+        .is_none_or(ConnectedClient::session_changed)
+    {
+        *session = Some(connect(ctx, config).await?);
+    }
+    Ok(session.as_ref().expect("the session was connected above"))
+}
+
+async fn fetch_body(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    session: &mut Option<ConnectedClient>,
+    message_id: i64,
+) -> Result<()> {
     let row = ctx
         .db
         .read(move |conn| repo::messages::get_row(conn, message_id))
@@ -2598,8 +2644,8 @@ async fn fetch_body(ctx: &SyncCtx, config: &AccountConfig, message_id: i64) -> R
             MAX_JMAP_MESSAGE_BYTES / (1024 * 1024)
         )));
     }
-    let connected = connect(ctx, config).await?;
-    let raw = download_message_bounded(&connected, &expected_blob).await?;
+    let connected = body_session(ctx, config, session).await?;
+    let raw = download_message_bounded(connected, &expected_blob).await?;
     let parsed = crate::mime::parse_message(&raw)?;
     let calendar_events = crate::sync::ingest::calendar_events(&parsed);
     let dir = ctx.paths.mail_dir(config.id);
@@ -2660,7 +2706,7 @@ async fn download_message_bounded(c: &ConnectedClient, blob_id: &str) -> Result<
             URLPart::Parameter(URLParameter::Type) => url.push_str("message/rfc822"),
         }
     }
-    let response = c.download_http.get(url).send().await.map_err(|error| {
+    let response = c.get(url).send().await.map_err(|error| {
         CoreError::Network(format!(
             "JMAP message download failed: {}",
             client::transport_failure(&error)
@@ -2712,6 +2758,7 @@ async fn download_message_bounded(c: &ConnectedClient, blob_id: &str) -> Result<
 async fn fetch_attachment(
     ctx: &SyncCtx,
     config: &AccountConfig,
+    session: &mut Option<ConnectedClient>,
     attachment_id: i64,
 ) -> Result<Vec<u8>> {
     let (message_id, part_id, raw_path, blob_id) = ctx
@@ -2734,8 +2781,8 @@ async fn fetch_attachment(
         })
         .await?;
     if let Some(blob) = blob_id {
-        let connected = connect(ctx, config).await?;
-        return download_message_bounded(&connected, &blob).await;
+        let connected = body_session(ctx, config, session).await?;
+        return download_message_bounded(connected, &blob).await;
     }
     let part_id = part_id.ok_or_else(|| CoreError::NotFound("attachment MIME part".into()))?;
     let cached = match raw_path {
@@ -2747,7 +2794,7 @@ async fn fetch_attachment(
     let raw = match cached {
         Some(raw) => raw,
         None => {
-            fetch_body(ctx, config, message_id).await?;
+            fetch_body(ctx, config, session, message_id).await?;
             let path = ctx
                 .db
                 .read(move |conn| {

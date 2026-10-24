@@ -786,7 +786,7 @@ export component AppWindow inherits Window {
     in-out property <bool> mail_sidebar_collapsed: false;
     in-out property <bool> contacts_sidebar_collapsed: false;
     in property <string> unified_count: "";
-    in property <string> search_query: "";
+    in-out property <string> search_query: "";
     in property <string> search_filter: "All mail";
     in property <string> selected_sender: "";
     in property <string> selected_address: "";
@@ -1387,7 +1387,7 @@ export component AppWindow inherits Window {
             selected_scope_title: root.selected_scope_title;
             trash_view: root.trash_view;
             unified_count: root.unified_count;
-            search_query: root.search_query;
+            search_query <=> root.search_query;
             search_filter: root.search_filter;
             selected_sender: root.selected_sender;
             selected_address: root.selected_address;
@@ -1587,7 +1587,7 @@ export component AppWindow inherits Window {
             contacts: root.contacts;
             sidebar-rows: root.contact_sidebar_rows;
             toggle-section(key, open) => { root.toggle-contact-section(key, open); }
-            query: root.contact_search_query;
+            query <=> root.contact_search_query;
             filter: root.contact_scope == "Favorites" ? "favorites"
                 : root.contact_scope == "Suggestions" ? "suggestions" : "all";
             selected-scope: root.contact_scope;

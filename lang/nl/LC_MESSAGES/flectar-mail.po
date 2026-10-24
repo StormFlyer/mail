@@ -2217,19 +2217,19 @@ msgstr ""
 msgid "Confirm"
 msgstr ""
 
-#: ui/components/controls.slint:188
+#: ui/components/controls.slint:185
 msgid "On"
 msgstr ""
 
-#: ui/components/controls.slint:188 ui/dialogs/settings-dialog.slint:625
+#: ui/components/controls.slint:185 ui/dialogs/settings-dialog.slint:625
 msgid "Off"
 msgstr ""
 
-#: ui/components/controls.slint:236 ui/views/mail-list-pane.slint:522
+#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:522
 msgid "Clear selection"
 msgstr ""
 
-#: ui/components/controls.slint:236
+#: ui/components/controls.slint:233
 msgid "Select"
 msgstr ""
 

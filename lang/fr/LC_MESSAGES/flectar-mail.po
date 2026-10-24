@@ -2739,22 +2739,22 @@ msgstr "Quel est l’objet de cet e-mail ?"
 msgid "Confirm"
 msgstr "Confirmer"
 
-#: ui/components/controls.slint:188
+#: ui/components/controls.slint:185
 #, fuzzy
 msgid "On"
 msgstr "Activé"
 
-#: ui/components/controls.slint:188 ui/dialogs/settings-dialog.slint:625
+#: ui/components/controls.slint:185 ui/dialogs/settings-dialog.slint:625
 #, fuzzy
 msgid "Off"
 msgstr "Désactivé"
 
-#: ui/components/controls.slint:236 ui/views/mail-list-pane.slint:522
+#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:522
 #, fuzzy
 msgid "Clear selection"
 msgstr "Effacer la sélection"
 
-#: ui/components/controls.slint:236
+#: ui/components/controls.slint:233
 #, fuzzy
 msgid "Select"
 msgstr "Sélectionner"

@@ -331,6 +331,45 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
     {
         super::pop3::forget_server(conn, id)?;
     }
+    let imap_identity_changed = a.mail_protocol == MailProtocol::Imap
+        && (old_protocol != MailProtocol::Imap
+            || !old_incoming_host.eq_ignore_ascii_case(a.incoming_host)
+            || old_outgoing.2 != a.username);
+    // Mail from the previous server or protocol keeps its local state and
+    // waits to be matched by Message-ID with its copy on the new server; what
+    // isn't there goes once the new server's mail has been gone through. This
+    // runs before the identities below are forgotten: they tell the mail that
+    // came from a server apart from the sent mail only this device holds.
+    if imap_identity_changed || jmap_identity_changed {
+        super::messages::await_relink(conn, id, None)?;
+    }
+    // UIDs only identify messages on the IMAP server that issued them.
+    // Sending, and filing what was sent, don't depend on the old server, so
+    // they stay queued.
+    if imap_identity_changed {
+        conn.execute(
+            "UPDATE pending_actions
+             SET state='cancelled',finished_at=?2,
+                 last_error='remote mail account changed before this action completed'
+             WHERE account_id=?1 AND state IN ('pending','inflight')
+               AND kind NOT IN ('send','append_sent')",
+            params![id, now_ms()],
+        )?;
+        conn.execute(
+            "UPDATE folders SET uidvalidity=NULL, uidnext=NULL, highestmodseq=NULL,
+                    last_seen_uid=0, backfill_cursor=NULL, backfill_done=0
+             WHERE account_id=?1",
+            params![id],
+        )?;
+        conn.execute("DELETE FROM sync_failures WHERE account_id=?1", params![id])?;
+    } else if a.mail_protocol != MailProtocol::Imap {
+        // Only an IMAP server leaves folders out of its list.
+        conn.execute(
+            "UPDATE folders SET missing_on_server=0
+             WHERE account_id=?1 AND missing_on_server=1",
+            params![id],
+        )?;
+    }
     if jmap_identity_changed {
         conn.execute(
             "UPDATE pending_actions
@@ -853,7 +892,17 @@ mod tests {
         )
         .unwrap();
         crate::db::repo::actions::set_state(&conn, send, "inflight", None).unwrap();
+        let waiting = |conn: &Connection| {
+            conn.query_row(
+                "SELECT relink_pending FROM messages WHERE account_id=?1",
+                params![id],
+                |row| row.get::<_, bool>(0),
+            )
+            .unwrap()
+        };
+        assert!(!waiting(&conn));
         update_password(&conn, id, &changed).unwrap();
+        assert!(waiting(&conn), "mail of the old server waits for its copy");
         assert!(
             conn.query_row(
                 "SELECT email_state FROM jmap_sync_state WHERE account_id=?1",
@@ -1001,5 +1050,244 @@ mod tests {
             ..other_server
         };
         assert!(update_password(&conn, id, &to_imap).is_err());
+    }
+
+    fn relink_state(conn: &Connection, id: i64) -> (bool, Option<i64>) {
+        conn.query_row(
+            "SELECT relink_pending, uid FROM messages WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap()
+    }
+
+    fn seed_message(
+        conn: &Connection,
+        account_id: i64,
+        folder_id: i64,
+        uid: Option<i64>,
+        jmap_id: Option<&str>,
+        is_outgoing: bool,
+    ) -> i64 {
+        conn.execute(
+            "INSERT INTO messages (account_id, folder_id, uid, jmap_id, is_outgoing, date)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1)",
+            params![account_id, folder_id, uid, jmap_id, is_outgoing],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn another_imap_server_unlinks_the_mail_that_came_from_a_server() {
+        let conn = crate::db::testutil::conn();
+        let initial = NewAccount {
+            email: "me@test.dev",
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Generic,
+            auth_kind: AuthKind::Password,
+            mail_protocol: MailProtocol::Imap,
+            username: "me",
+            jmap_url: "",
+            jmap_account_id: None,
+            incoming_host: "imap.test.dev",
+            incoming_port: 993,
+            smtp_host: "smtp.test.dev",
+            smtp_port: 465,
+        };
+        let id = insert(&conn, &initial, &settings()).unwrap();
+        let inbox =
+            super::super::folders::upsert(&conn, id, "INBOX", Some("/"), Some("inbox")).unwrap();
+        let sent =
+            super::super::folders::upsert(&conn, id, "Sent", Some("/"), Some("sent")).unwrap();
+        super::super::folders::set_uid_state(&conn, inbox, Some(7), Some(9), None).unwrap();
+        super::super::folders::set_last_seen_uid(&conn, inbox, 8).unwrap();
+        super::super::folders::set_backfill(&conn, inbox, Some(1), true).unwrap();
+        let received = seed_message(&conn, id, inbox, Some(5), None, false);
+        let filed = seed_message(&conn, id, sent, Some(6), None, true);
+        let only_here = seed_message(&conn, id, sent, None, None, true);
+        let draft = seed_message(&conn, id, sent, None, None, false);
+        conn.execute(
+            "INSERT INTO drafts_meta (message_id) VALUES (?1)",
+            params![draft],
+        )
+        .unwrap();
+        let actions = [
+            ("star", received),
+            ("append_sent", only_here),
+            ("send", draft),
+        ]
+        .map(|(kind, message_id)| {
+            crate::db::repo::actions::enqueue(
+                &conn,
+                id,
+                kind,
+                Some(message_id),
+                None,
+                &serde_json::json!({}),
+                None,
+            )
+            .unwrap()
+        });
+        super::super::sync_failures::record_header(&conn, inbox, 4, None, "bad header").unwrap();
+        let states = |conn: &Connection| {
+            actions.map(|action| {
+                crate::db::repo::actions::get(conn, action)
+                    .unwrap()
+                    .unwrap()
+                    .state
+            })
+        };
+
+        // Another port or letter case reaches the same mailbox.
+        let same = NewAccount {
+            incoming_host: "IMAP.test.dev",
+            incoming_port: 143,
+            ..initial
+        };
+        update_password(&conn, id, &same).unwrap();
+        assert_eq!(relink_state(&conn, received), (false, Some(5)));
+        assert_eq!(states(&conn), ["pending", "pending", "pending"]);
+
+        let moved = NewAccount {
+            incoming_host: "mail.example.net",
+            ..same
+        };
+        update_password(&conn, id, &moved).unwrap();
+        assert_eq!(relink_state(&conn, received), (true, None));
+        assert_eq!(relink_state(&conn, filed), (true, None));
+        assert_eq!(relink_state(&conn, only_here), (false, None));
+        assert_eq!(relink_state(&conn, draft), (false, None));
+        assert_eq!(states(&conn), ["cancelled", "pending", "pending"]);
+        let folder = super::super::folders::get(&conn, inbox).unwrap().unwrap();
+        assert_eq!(
+            (
+                folder.uidvalidity,
+                folder.last_seen_uid,
+                folder.backfill_cursor
+            ),
+            (None, 0, None)
+        );
+        assert!(!folder.backfill_done);
+        let failures: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_failures WHERE account_id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(failures, 0);
+
+        // Another user on the same server is another mailbox.
+        conn.execute(
+            "UPDATE messages SET uid = 5, relink_pending = 0 WHERE id = ?1",
+            params![received],
+        )
+        .unwrap();
+        update_password(
+            &conn,
+            id,
+            &NewAccount {
+                username: "other",
+                ..moved
+            },
+        )
+        .unwrap();
+        assert_eq!(relink_state(&conn, received), (true, None));
+
+        // A JMAP server matches the same mail, and has no missing folders.
+        conn.execute(
+            "UPDATE folders SET missing_on_server = 1 WHERE id = ?1",
+            params![sent],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE messages SET uid = 6, relink_pending = 0 WHERE id = ?1",
+            params![filed],
+        )
+        .unwrap();
+        update_password(
+            &conn,
+            id,
+            &NewAccount {
+                username: "other",
+                mail_protocol: MailProtocol::Jmap,
+                jmap_url: "https://mail.example.net/.well-known/jmap",
+                ..moved
+            },
+        )
+        .unwrap();
+        assert_eq!(relink_state(&conn, received), (true, None));
+        assert_eq!(relink_state(&conn, filed), (true, None));
+        assert_eq!(relink_state(&conn, only_here), (false, None));
+        assert_eq!(relink_state(&conn, draft), (false, None));
+        let missing: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM folders WHERE missing_on_server = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(missing, 0);
+    }
+
+    #[test]
+    fn switching_from_jmap_to_imap_unlinks_the_jmap_mail() {
+        let conn = crate::db::testutil::conn();
+        let jmap = NewAccount {
+            email: "me@test.dev",
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Generic,
+            auth_kind: AuthKind::Password,
+            mail_protocol: MailProtocol::Jmap,
+            username: "me@test.dev",
+            jmap_url: "https://mail.test.dev",
+            jmap_account_id: Some("account-a"),
+            incoming_host: "",
+            incoming_port: 993,
+            smtp_host: "",
+            smtp_port: 465,
+        };
+        let id = insert(&conn, &jmap, &settings()).unwrap();
+        let inbox =
+            super::super::folders::upsert_jmap(&conn, id, "mailbox-a", "Inbox", Some("inbox"))
+                .unwrap();
+        let received = seed_message(&conn, id, inbox, None, Some("email-a"), false);
+        let sent = seed_message(&conn, id, inbox, None, Some("email-b"), true);
+        let only_here = seed_message(&conn, id, inbox, None, None, true);
+
+        update_password(
+            &conn,
+            id,
+            &NewAccount {
+                mail_protocol: MailProtocol::Imap,
+                jmap_url: "",
+                jmap_account_id: None,
+                incoming_host: "mail.test.dev",
+                smtp_host: "mail.test.dev",
+                ..jmap
+            },
+        )
+        .unwrap();
+        assert_eq!(relink_state(&conn, received), (true, None));
+        assert_eq!(relink_state(&conn, sent), (true, None));
+        assert_eq!(relink_state(&conn, only_here), (false, None));
+        let jmap_ids: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE jmap_id IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(jmap_ids, 0);
+        // An IMAP folder that takes over this one's name starts its history.
+        assert!(
+            !super::super::folders::get(&conn, inbox)
+                .unwrap()
+                .unwrap()
+                .backfill_done
+        );
     }
 }
