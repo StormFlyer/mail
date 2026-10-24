@@ -448,6 +448,7 @@ fn apply_fixture(app: &AppWindow) {
                 day: (19 + index).to_string().into(),
                 iso_date: format!("2026-10-{}", 19 + index).into(),
                 is_today: index == 0,
+                ..Default::default()
             })
             .collect(),
     ));
@@ -462,6 +463,7 @@ fn apply_fixture(app: &AppWindow) {
                     is_today: index == 21,
                     is_selected: index == 21,
                     has_events: index % 5 == 0,
+                    ..Default::default()
                 }
             })
             .collect(),

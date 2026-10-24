@@ -44,15 +44,22 @@ import { FilesView, FilesUi } from "views/files-view.slint";
 import { ContactsView } from "views/contacts-view.slint";
 import { OnboardingView } from "views/onboarding-view.slint";
 
-// Rust view-models call this global for the small amount of date/status text
+// Rust view-models call this global for the date vocabulary and status text
 // that must be materialized before it enters a Slint model. Keeping the
 // translations here makes those strings part of the same bundled catalog as
 // the declarative UI.
 export global I18n {
-    pure callback month-name(int, bool) -> string;
-    pure callback weekday-short(int) -> string;
-    pure callback weekday-name(int) -> string;
-    pure callback agenda-date-label(int, int, int) -> string;
+    // Date vocabulary and patterns for src/date_format.rs. Patterns use CLDR
+    // date field symbols: y year, M month (MMM abbreviated, MMMM full),
+    // LLLL standalone month, d day, E weekday (EEEE full), a AM/PM, h and H
+    // 12- and 24-hour hours, m minutes. Text in single quotes is literal.
+    pure callback date-month(int, string) -> string;
+    pure callback date-weekday(int, bool) -> string;
+    pure callback date-day-period(bool) -> string;
+    pure callback date-yesterday() -> string;
+    pure callback date-pattern(string) -> string;
+    pure callback date-range(string, string) -> string;
+    pure callback date-at-time(string, string) -> string;
     pure callback calendar-all-day() -> string;
     pure callback untitled-event() -> string;
     pure callback no-contact-history() -> string;
@@ -60,7 +67,7 @@ export global I18n {
     pure callback new-contact-entry() -> string;
     pure callback no-connected-account() -> string;
     pure callback interaction-count(int) -> string;
-    pure callback last-contacted(int, int, int) -> string;
+    pure callback last-contacted(string) -> string;
     pure callback loading-local-data() -> string;
     pure callback local-data-ready() -> string;
     pure callback local-data-unavailable(string) -> string;
@@ -79,44 +86,84 @@ export global I18n {
     pure callback ui-message-compose(string, string, string, string) -> string;
     pure callback ui-message-oauth(string, string, string, string) -> string;
 
-    month-name(month, short) => {
-        if (month == 1) { return short ? @tr("Jan") : @tr("January"); }
-        if (month == 2) { return short ? @tr("Feb") : @tr("February"); }
-        if (month == 3) { return short ? @tr("Mar") : @tr("March"); }
-        if (month == 4) { return short ? @tr("Apr") : @tr("April"); }
-        if (month == 5) { return @tr("May"); }
-        if (month == 6) { return short ? @tr("Jun") : @tr("June"); }
-        if (month == 7) { return short ? @tr("Jul") : @tr("July"); }
-        if (month == 8) { return short ? @tr("Aug") : @tr("August"); }
-        if (month == 9) { return short ? @tr("Sep") : @tr("September"); }
-        if (month == 10) { return short ? @tr("Oct") : @tr("October"); }
-        if (month == 11) { return short ? @tr("Nov") : @tr("November"); }
-        if (month == 12) { return short ? @tr("Dec") : @tr("December"); }
+    date-month(month, form) => {
+        if (form == "abbreviated") {
+            if (month == 1) { return @tr("abbreviated month in a date" => "Jan"); }
+            if (month == 2) { return @tr("abbreviated month in a date" => "Feb"); }
+            if (month == 3) { return @tr("abbreviated month in a date" => "Mar"); }
+            if (month == 4) { return @tr("abbreviated month in a date" => "Apr"); }
+            if (month == 5) { return @tr("abbreviated month in a date" => "May"); }
+            if (month == 6) { return @tr("abbreviated month in a date" => "Jun"); }
+            if (month == 7) { return @tr("abbreviated month in a date" => "Jul"); }
+            if (month == 8) { return @tr("abbreviated month in a date" => "Aug"); }
+            if (month == 9) { return @tr("abbreviated month in a date" => "Sep"); }
+            if (month == 10) { return @tr("abbreviated month in a date" => "Oct"); }
+            if (month == 11) { return @tr("abbreviated month in a date" => "Nov"); }
+            if (month == 12) { return @tr("abbreviated month in a date" => "Dec"); }
+        }
+        if (form == "wide") {
+            if (month == 1) { return @tr("month in a date" => "January"); }
+            if (month == 2) { return @tr("month in a date" => "February"); }
+            if (month == 3) { return @tr("month in a date" => "March"); }
+            if (month == 4) { return @tr("month in a date" => "April"); }
+            if (month == 5) { return @tr("month in a date" => "May"); }
+            if (month == 6) { return @tr("month in a date" => "June"); }
+            if (month == 7) { return @tr("month in a date" => "July"); }
+            if (month == 8) { return @tr("month in a date" => "August"); }
+            if (month == 9) { return @tr("month in a date" => "September"); }
+            if (month == 10) { return @tr("month in a date" => "October"); }
+            if (month == 11) { return @tr("month in a date" => "November"); }
+            if (month == 12) { return @tr("month in a date" => "December"); }
+        }
+        if (month == 1) { return @tr("month on its own" => "January"); }
+        if (month == 2) { return @tr("month on its own" => "February"); }
+        if (month == 3) { return @tr("month on its own" => "March"); }
+        if (month == 4) { return @tr("month on its own" => "April"); }
+        if (month == 5) { return @tr("month on its own" => "May"); }
+        if (month == 6) { return @tr("month on its own" => "June"); }
+        if (month == 7) { return @tr("month on its own" => "July"); }
+        if (month == 8) { return @tr("month on its own" => "August"); }
+        if (month == 9) { return @tr("month on its own" => "September"); }
+        if (month == 10) { return @tr("month on its own" => "October"); }
+        if (month == 11) { return @tr("month on its own" => "November"); }
+        if (month == 12) { return @tr("month on its own" => "December"); }
         return "";
     }
 
-    weekday-short(day) => {
-        if (day == 0) { return @tr("Mon"); }
-        if (day == 1) { return @tr("Tue"); }
-        if (day == 2) { return @tr("Wed"); }
-        if (day == 3) { return @tr("Thu"); }
-        if (day == 4) { return @tr("Fri"); }
-        if (day == 5) { return @tr("Sat"); }
-        return @tr("Sun");
+    date-weekday(day, abbreviated) => {
+        if (day == 0) { return abbreviated ? @tr("Mon") : @tr("Monday"); }
+        if (day == 1) { return abbreviated ? @tr("Tue") : @tr("Tuesday"); }
+        if (day == 2) { return abbreviated ? @tr("Wed") : @tr("Wednesday"); }
+        if (day == 3) { return abbreviated ? @tr("Thu") : @tr("Thursday"); }
+        if (day == 4) { return abbreviated ? @tr("Fri") : @tr("Friday"); }
+        if (day == 5) { return abbreviated ? @tr("Sat") : @tr("Saturday"); }
+        return abbreviated ? @tr("Sun") : @tr("Sunday");
     }
 
-    weekday-name(day) => {
-        if (day == 0) { return @tr("Monday"); }
-        if (day == 1) { return @tr("Tuesday"); }
-        if (day == 2) { return @tr("Wednesday"); }
-        if (day == 3) { return @tr("Thursday"); }
-        if (day == 4) { return @tr("Friday"); }
-        if (day == 5) { return @tr("Saturday"); }
-        return @tr("Sunday");
+    date-day-period(pm) => {
+        return pm ? @tr("time of day" => "PM") : @tr("time of day" => "AM");
     }
-    agenda-date-label(weekday, day, month) => {
-        return @tr("{} · {} {}", root.weekday-name(weekday), day, root.month-name(month, false));
+
+    date-yesterday() => { return @tr("Yesterday"); }
+
+    date-pattern(key) => {
+        if (key == "short-day-month") { return @tr("date pattern (CLDR): day and month of recent mail in lists" => "MMM d"); }
+        if (key == "short-date") { return @tr("date pattern (CLDR): date of older mail in lists, keep it short" => "MMM d, y"); }
+        if (key == "date") { return @tr("date pattern (CLDR): a date on its own" => "MMM d, y"); }
+        if (key == "weekday-date") { return @tr("date pattern (CLDR): a date with its weekday" => "EEE, MMM d, y"); }
+        if (key == "weekday-day-month") { return @tr("date pattern (CLDR): day heading in the agenda" => "EEEE, MMMM d"); }
+        if (key == "month-year") { return @tr("date pattern (CLDR): month heading, LLLL is the month name on its own" => "LLLL y"); }
+        if (key == "same-month-start") { return @tr("date pattern (CLDR): first date of a range within one month" => "MMMM d"); }
+        if (key == "same-month-end") { return @tr("date pattern (CLDR): last date of a range within one month" => "d, y"); }
+        if (key == "same-year-start") { return @tr("date pattern (CLDR): first date of a range within one year" => "MMM d"); }
+        if (key == "same-year-end") { return @tr("date pattern (CLDR): last date of a range within one year" => "MMM d, y"); }
+        if (key == "time-24") { return @tr("time pattern (CLDR): 24-hour clock" => "HH:mm"); }
+        if (key == "time-12") { return @tr("time pattern (CLDR): 12-hour clock, a is AM or PM" => "h:mm a"); }
+        return @tr("time pattern (CLDR): whole hour on a 12-hour clock" => "h a");
     }
+
+    date-range(start, end) => { return @tr("date range" => "{0} – {1}", start, end); }
+    date-at-time(date, time) => { return @tr("date and time" => "{0} at {1}", date, time); }
 
     calendar-all-day() => { return @tr("All day"); }
     untitled-event() => { return @tr("(untitled event)"); }
@@ -127,9 +174,7 @@ export global I18n {
     interaction-count(count) => {
         return @tr("{n} interaction" | "{n} interactions" % count);
     }
-    last-contacted(month, day, year) => {
-        return @tr("Last contacted {} {}, {}", root.month-name(month, true), day, year);
-    }
+    last-contacted(date) => { return @tr("Last contacted {}", date); }
     loading-local-data() => { return @tr("Loading local data…"); }
     local-data-ready() => { return @tr("Local data ready."); }
     local-data-unavailable(error) => { return @tr("Local data is unavailable: {}", error); }
@@ -770,6 +815,8 @@ export component AppWindow inherits Window {
     in property <string> calendar_period_title: "";
     in property <string> calendar_week_label: "";
     in property <string> calendar_selected_date: "";
+    in property <string> calendar_selected_date_label: "";
+    in property <[string]> calendar_hour_labels: ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
     in property <bool> calendar_selected_date_has_events: false;
     in-out property <bool> calendar_sidebar_collapsed: false;
     in-out property <string> calendar_view_mode: "week";
@@ -1535,6 +1582,8 @@ export component AppWindow inherits Window {
             period-title: root.calendar_period_title;
             week-label: root.calendar_week_label;
             selected-date: root.calendar_selected_date;
+            selected-date-label: root.calendar_selected_date_label;
+            hour-labels: root.calendar_hour_labels;
             selected-date-has-events: root.calendar_selected_date_has_events;
             view-mode: root.calendar_view_mode;
             background-color: root.page-bg;

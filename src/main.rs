@@ -12,6 +12,7 @@ mod compose_controller;
 mod compose_editor;
 mod contacts;
 mod data_controller;
+mod date_format;
 mod document_preview;
 pub mod documents;
 mod email_document;
@@ -84,6 +85,7 @@ use contacts::{
     ContactDirectoryState, apply_contact_directory, apply_contact_rows, clear_contact_form,
 };
 use data_controller::register_data_management_callbacks;
+use date_format::DateStyle;
 use favicon::{
     FaviconImage, FaviconImages, FaviconLoader, ProfileAvatarImages, ProfileAvatarLoader,
     physical_pixel_side,
@@ -1056,6 +1058,7 @@ fn apply_language(app: &AppWindow, preference: &str) {
         eprintln!("could not select {selected} translation: {error}");
     }
     app.set_language_mode(language_mode.into());
+    date_format::reload(app);
 }
 
 impl InboxState {
@@ -2639,6 +2642,24 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let calendar_state = Rc::new(RefCell::new(LocalCalendarState::new(calendar_today)));
     app.set_calendar_sources(Rc::clone(&calendar_state.borrow().source_rows).into());
     let calendar_editing_event_id = Rc::new(Cell::new(None::<i64>));
+
+    let app_weak = app.as_weak();
+    let state_for_dates = Rc::clone(&state);
+    let runtime_for_dates = Rc::clone(&runtime);
+    let calendar_for_dates = Rc::clone(&calendar_state);
+    let contacts_for_dates = Rc::clone(&contact_state);
+    date_format::on_change(move || {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        refresh_message_dates(&app, &state_for_dates, &runtime_for_dates);
+        apply_calendar(
+            &app,
+            &calendar_for_dates.borrow(),
+            Local::now().date_naive(),
+        );
+        apply_contact_rows(&app, &contacts_for_dates);
+    });
 
     let app_weak = app.as_weak();
     let calendar_for_navigation = Rc::clone(&calendar_state);
