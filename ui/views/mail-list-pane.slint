@@ -865,7 +865,7 @@ export component MailListPane inherits FocusScope {
                                         horizontal-alignment: right;
                                         vertical-alignment: center;
                                     }
-                                    sender-indicators := HorizontalBox {
+                                    sender-indicators := HorizontalLayout {
                                         x: mail-data.message_count > 1
                                             ? thread-count.x - self.width - (self.width > 0px ? 8px : 0px)
                                             : sender-time.x - self.width - 8px;
