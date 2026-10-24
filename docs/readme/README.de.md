@@ -75,7 +75,7 @@ Falls eine E-Mail falsch dargestellt wird, [melde das Problem](https://github.co
 
 ## 🎨 Nach deinem Geschmack
 
-Wähle die Arbeitsumgebung, die zu deinem Umgang mit E-Mails passt. Behalte die ausführliche Ansicht mit drei Bereichen bei oder wechsle zur minimalistischen Ansicht, wähle ein helles oder dunkles Design, nutze eine vorhandene Farbpalette oder erstelle eine eigene und blende Absenderbilder ein oder aus.
+Wähle die Arbeitsumgebung, die zu deinem Umgang mit E-Mails passt. Behalte die ausführliche Ansicht mit drei Bereichen bei oder wechsle zur minimalistischen Ansicht, wähle ein helles oder dunkles Design, nutze eine vorhandene Farbpalette oder erstelle eine eigene und blende Absenderbilder ein oder aus. Außerdem kannst du dem App-Symbol eine andere Farbe geben: in der Taskleiste oder im Dock, im Infobereich, im Linux-Anwendungsstarter sowie auf dem Startbildschirm von Android und iOS.
 
 Das Erscheinungsbild von Nachrichten kann dem App-Design folgen oder unabhängig davon hell oder dunkel bleiben. Die gewählte Farbpalette gilt für HTML, Klartext und den Lesemodus. Um vorübergehend die Originalfarben des Absenders zu sehen, nutze auf dem Desktop das Kontrastsymbol zwischen Suche und Lesemodus in der Nachrichtenleiste oder wähle **Originalfarben anzeigen** im Dreipunktmenü der Nachricht auf jeder Bildschirmgröße.
 
@@ -319,7 +319,7 @@ Sobald Vorschauversionen veröffentlicht werden, lade sie von [GitHub Releases](
 
 Windows-Vorschauversionen sind unsigniert; macOS-Vorschauversionen sind ad hoc signiert und nicht notarisiert. Sicherheitshinweise des Betriebssystems sind daher zu erwarten. Installiere Updates manuell.
 
-Die Flatpak-Vorschau wird als eigenständiges Testpaket bereitgestellt. Sie ist noch kein Flathub-Paket und erhält deshalb keine automatischen Flathub-Updates. Das Schließen in den Infobereich ist deaktiviert, bis dessen Backend einen mit der Sandbox kompatiblen D-Bus-Namen verwenden kann. Der automatische Start bei der Anmeldung erfolgt über das Background-Portal des Desktops und öffnet das Fenster, da ein Start im Infobereich nicht möglich ist.
+Die Flatpak-Vorschau wird als eigenständiges Testpaket bereitgestellt. Sie ist noch kein Flathub-Paket und erhält deshalb keine automatischen Flathub-Updates. Das Schließen in den Infobereich ist deaktiviert, bis dessen Backend einen mit der Sandbox kompatiblen D-Bus-Namen verwenden kann. Der automatische Start bei der Anmeldung erfolgt über das Background-Portal des Desktops und öffnet das Fenster, da ein Start im Infobereich nicht möglich ist. Das App-Symbol bleibt dort orange, weil die Sandbox das Starter-Symbol auf dem Host nicht ändern kann.
 
 Installiere das heruntergeladene Linux-Paket mit `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` oder `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak`. Starte die Flatpak-Version mit `flatpak run com.flectar.mail`.
 

@@ -13,7 +13,7 @@
 // FLECTAR_TEXT_FIT_SNAPSHOTS to a directory to save a render of each state.
 
 use flectar_mail::{
-    AccountImport, AccountRow, AppTheme, AppWindow, CalendarAgendaRow, CalendarDay,
+    AccountImport, AccountRow, AppIcon, AppTheme, AppWindow, CalendarAgendaRow, CalendarDay,
     CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ContactAccountRow, ContactRow,
     ContactSidebarRow, ContactSidebarRowKind, ContactSyncState, ContactValueRow, EmailRow,
     ImportAccountRow, ImportFailureRow, ImportFindingRow, ImportProfileRow, LocalizedMessage,
@@ -333,6 +333,9 @@ fn work_profile() -> MailProfileRow {
 
 fn apply_fixture(app: &AppWindow) {
     app.global::<MotionSettings>().set_enabled(false);
+    // Linux shows the app icon card with its longest description and note.
+    app.global::<AppIcon>().set_available(true);
+    app.global::<AppIcon>().set_platform("linux".into());
     app.set_startup_ready(true);
     app.set_startup_hydrated(true);
     app.set_connected_accounts(model(accounts()));

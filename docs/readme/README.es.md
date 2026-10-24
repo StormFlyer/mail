@@ -120,7 +120,10 @@ WebView y creados con herramientas como Tauri o Wails.
 Elige la vista que mejor se adapte a tu forma de gestionar el correo. Mantén la
 vista detallada de tres paneles, cambia a una vista minimalista, elige un tema
 claro u oscuro, selecciona una paleta de colores incluida o crea una propia,
-y muestra u oculta los avatares de los remitentes.
+y muestra u oculta los avatares de los remitentes. También puedes darle otro
+color al icono de la aplicación: en la barra de tareas o el Dock, en la bandeja
+del sistema, en el lanzador de aplicaciones de Linux y en la pantalla de inicio
+de Android e iOS.
 
 La apariencia de los mensajes puede seguir el tema de la aplicación o mantenerse
 clara u oscura de forma independiente. Usa la paleta seleccionada para HTML,
@@ -452,6 +455,8 @@ de Flathub. La opción de cerrar a la bandeja del sistema está desactivada hast
 que el componente de la bandeja pueda usar un nombre D-Bus compatible con el
 entorno aislado. El inicio automático al iniciar sesión usa el portal Background
 del escritorio y abre la ventana, ya que no hay una bandeja en la que iniciarse.
+Allí el icono de la aplicación se mantiene naranja, porque el entorno aislado no
+puede cambiar el icono del lanzador en el sistema.
 
 Instala el paquete de Linux descargado con
 `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` o

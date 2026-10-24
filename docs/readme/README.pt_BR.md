@@ -75,7 +75,7 @@ Se encontrar um e-mail exibido incorretamente, [relate o problema](https://githu
 
 ## 🎨 Do seu jeito
 
-Escolha o espaço de trabalho que combina com sua maneira de lidar com e-mails. Mantenha o layout detalhado de três painéis, mude para uma visão minimalista, escolha um tema claro ou escuro, selecione uma paleta incluída ou crie a sua e mostre ou oculte os avatares dos remetentes.
+Escolha o espaço de trabalho que combina com sua maneira de lidar com e-mails. Mantenha o layout detalhado de três painéis, mude para uma visão minimalista, escolha um tema claro ou escuro, selecione uma paleta incluída ou crie a sua e mostre ou oculte os avatares dos remetentes. Você também pode dar outra cor ao ícone do aplicativo: na barra de tarefas ou no Dock, na bandeja do sistema, no inicializador de aplicativos do Linux e na tela inicial do Android e do iOS.
 
 A aparência das mensagens pode seguir o tema do aplicativo ou permanecer clara ou escura de forma independente. A paleta selecionada se aplica ao HTML, ao texto simples e ao modo de leitura. Para mostrar temporariamente as cores originais do remetente, use o ícone de contraste entre a busca e o modo de leitura na barra de ferramentas da mensagem no desktop, ou escolha **Mostrar cores originais** no menu de três pontos da mensagem em qualquer tamanho de tela.
 
@@ -319,7 +319,7 @@ Quando versões de teste forem publicadas, baixe-as em [GitHub Releases](https:/
 
 As versões de teste do Windows não são assinadas; as do macOS têm assinatura ad hoc e não são notarizadas, então avisos de segurança do sistema operacional são esperados. Instale as atualizações manualmente.
 
-A versão de teste do Flatpak é fornecida como um pacote independente. Ainda não é um pacote do Flathub e, portanto, não recebe atualizações automáticas do Flathub. A opção de fechar para a bandeja está desativada até que o componente da bandeja possa usar um nome D-Bus compatível com o ambiente isolado. O início automático ao entrar na sessão usa o portal Background do desktop e abre a janela, pois não há bandeja para iniciar minimizado.
+A versão de teste do Flatpak é fornecida como um pacote independente. Ainda não é um pacote do Flathub e, portanto, não recebe atualizações automáticas do Flathub. A opção de fechar para a bandeja está desativada até que o componente da bandeja possa usar um nome D-Bus compatível com o ambiente isolado. O início automático ao entrar na sessão usa o portal Background do desktop e abre a janela, pois não há bandeja para iniciar minimizado. Nele, o ícone do aplicativo continua laranja, porque o ambiente isolado não pode alterar o ícone do inicializador no sistema.
 
 Instale o pacote Linux baixado com `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` ou `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak`. Inicie o Flatpak com `flatpak run com.flectar.mail`.
 
