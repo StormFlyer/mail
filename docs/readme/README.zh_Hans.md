@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="resources/app-icon/flectar-mail-masked.png" width="88" alt="Flectar Mail 徽标">
+  <img src="../../resources/app-icon/flectar-mail-masked.png" width="88" alt="Flectar Mail 徽标">
   <h1 align="center">
     Flectar Mail
   </h1>
   <p>
-    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
+    <a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
     <a href="README.fr.md">Français</a> · <a href="README.pt_BR.md">Português (Brasil)</a> · <a href="README.ru.md">Русский</a> ·
     <a href="README.hi.md">हिन्दी</a> · <a href="README.ar.md">العربية</a> · <strong>简体中文</strong>
   </p>
@@ -15,10 +15,10 @@
   <p>
     <a href="https://flectar.com">官网</a> ·
     <a href="https://github.com/flectar/mail/issues">报告问题</a> ·
-    <a href="CONTRIBUTING.md">参与贡献</a>
+    <a href="../../CONTRIBUTING.md">参与贡献</a>
   </p>
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="许可证：AGPL-3.0"></a>
+    <a href="../../LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="许可证：AGPL-3.0"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/downloads/flectar/mail/total?style=flat&label=downloads&color=16a34a" alt="各版本累计下载量"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/v/release/flectar/mail?display_name=tag&include_prereleases&sort=semver&style=flat&label=release&color=0ea5e9" alt="最新版本"></a>
     <a href="https://translate.flectar.com/engage/flectar-mail/"><img src="https://translate.flectar.com/widget/flectar-mail/svg-badge.svg" alt="翻译进度"></a>
@@ -30,9 +30,9 @@
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="macOS 上的 Flectar Mail 统一收件箱与邮件视图">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+  <img src="../../resources/screenshots/desktop-light.png" alt="macOS 上的 Flectar Mail 统一收件箱与邮件视图">
 </picture>
 
 Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、日历和联系人。它经过专门设计，能够瞬时打开、始终保持流畅，内存占用仅为常见网页版邮件客户端的一小部分。
@@ -86,9 +86,9 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
 你还可以覆盖单个账户的颜色，并在每封邮件的左边缘显示最终生效的颜色。在统一收件箱中处理邮件时，这些色标让账户易于区分；下例中「工作」使用紫色，「支持」使用橙色。
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-profiles-light.png">
-  <img src="resources/screenshots/desktop-profiles-light.png" alt="Flectar Mail 统一收件箱，带有紫色与橙色分组色标">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-profiles-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-profiles-light.png">
+  <img src="../../resources/screenshots/desktop-profiles-light.png" alt="Flectar Mail 统一收件箱，带有紫色与橙色分组色标">
 </picture>
 
 ### 🧵 会话线程
@@ -96,9 +96,9 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
 回复按时间顺序归组显示，当前邮件在阅读窗格中展开。
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-thread-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-thread-light.png">
-  <img src="resources/screenshots/desktop-thread-light.png" alt="Flectar Mail 会话，包含收到的邮件与回复">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-thread-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-thread-light.png">
+  <img src="../../resources/screenshots/desktop-thread-light.png" alt="Flectar Mail 会话，包含收到的邮件与回复">
 </picture>
 
 ### 🗂️ 标签页
@@ -108,9 +108,9 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
 **Ctrl/⌘+T** 新建标签页，**Ctrl/⌘+W** 关闭当前标签页，**Ctrl/⌘+Shift+T** 重新打开最近关闭的标签页。**Ctrl+Tab** 与 **Ctrl+Shift+Tab** 在标签页之间循环切换，**Ctrl/⌘+1–8** 跳转到对应标签页，**Ctrl/⌘+9** 跳转到最后一个标签页。
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-tabs-light.png">
-  <img src="resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail 打开了多个会话、日历、联系人与文件标签页">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-tabs-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-tabs-light.png">
+  <img src="../../resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail 打开了多个会话、日历、联系人与文件标签页">
 </picture>
 
 ### 完整与极简工作区
@@ -126,16 +126,16 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail 完整桌面工作区" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail 完整桌面工作区" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-minimal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-minimal-light.png">
-          <img src="resources/screenshots/desktop-minimal-light.png" alt="Flectar Mail 极简桌面工作区" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-minimal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-minimal-light.png">
+          <img src="../../resources/screenshots/desktop-minimal-light.png" alt="Flectar Mail 极简桌面工作区" width="100%">
         </picture>
       </td>
     </tr>
@@ -157,30 +157,30 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
     <tr>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-teal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-teal-light.png">
-          <img src="resources/screenshots/desktop-teal-light.png" alt="Flectar Mail 青绿配色" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-teal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-teal-light.png">
+          <img src="../../resources/screenshots/desktop-teal-light.png" alt="Flectar Mail 青绿配色" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-green-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-green-light.png">
-          <img src="resources/screenshots/desktop-green-light.png" alt="Flectar Mail 绿色配色" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-green-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-green-light.png">
+          <img src="../../resources/screenshots/desktop-green-light.png" alt="Flectar Mail 绿色配色" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-purple-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-purple-light.png">
-          <img src="resources/screenshots/desktop-purple-light.png" alt="Flectar Mail 紫色配色" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-purple-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-purple-light.png">
+          <img src="../../resources/screenshots/desktop-purple-light.png" alt="Flectar Mail 紫色配色" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail 自定义配色" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail 自定义配色" width="100%">
         </picture>
       </td>
     </tr>
@@ -200,16 +200,16 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/macos-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/macos-light.png">
-          <img src="resources/screenshots/frameless/macos-light.png" alt="macOS 上的 Flectar Mail 无边框窗口" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/macos-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/macos-light.png">
+          <img src="../../resources/screenshots/frameless/macos-light.png" alt="macOS 上的 Flectar Mail 无边框窗口" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/windows-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/windows-light.png">
-          <img src="resources/screenshots/frameless/windows-light.png" alt="Windows 上的 Flectar Mail 无边框窗口" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/windows-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/windows-light.png">
+          <img src="../../resources/screenshots/frameless/windows-light.png" alt="Windows 上的 Flectar Mail 无边框窗口" width="100%">
         </picture>
       </td>
     </tr>
@@ -220,16 +220,16 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-gnome-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-gnome-light.png">
-          <img src="resources/screenshots/frameless/linux-gnome-light.png" alt="GNOME 上的 Flectar Mail 无边框窗口" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-gnome-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-gnome-light.png">
+          <img src="../../resources/screenshots/frameless/linux-gnome-light.png" alt="GNOME 上的 Flectar Mail 无边框窗口" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-kde-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-kde-light.png">
-          <img src="resources/screenshots/frameless/linux-kde-light.png" alt="KDE Plasma 上的 Flectar Mail 无边框窗口" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-kde-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-kde-light.png">
+          <img src="../../resources/screenshots/frameless/linux-kde-light.png" alt="KDE Plasma 上的 Flectar Mail 无边框窗口" width="100%">
         </picture>
       </td>
     </tr>
@@ -250,23 +250,23 @@ Flectar Mail 是一个轻量、原生的客户端，用来承载你的邮件、�
     <tr>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-calendar-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-calendar-light.png">
-          <img src="resources/screenshots/desktop-calendar-light.png" alt="Flectar Mail 日历" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-calendar-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-calendar-light.png">
+          <img src="../../resources/screenshots/desktop-calendar-light.png" alt="Flectar Mail 日历" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-contacts-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-contacts-light.png">
-          <img src="resources/screenshots/desktop-contacts-light.png" alt="Flectar Mail 联系人" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-contacts-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-contacts-light.png">
+          <img src="../../resources/screenshots/desktop-contacts-light.png" alt="Flectar Mail 联系人" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-files-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-files-light.png">
-          <img src="resources/screenshots/desktop-files-light.png" alt="Flectar Mail 文件" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-files-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-files-light.png">
+          <img src="../../resources/screenshots/desktop-files-light.png" alt="Flectar Mail 文件" width="100%">
         </picture>
       </td>
     </tr>
@@ -282,9 +282,9 @@ POP3 账户会把邮件下载到本机，默认保留在服务器上；你也可
 同一导入功能还可以从 Thunderbird（配置文件夹、「工具 › 导出」生成的归档或 `prefs.js`）以及 Android 版 Thunderbird 或 K-9 Mail（`.k9s` 设置导出）迁移账户。添加之前你会逐一检查每个账户：Flectar Mail 无法沿用的设置（例如 Exchange 服务器）会说明原因，而不会被悄悄更改；POP3 账户会沿用从服务器移除邮件的规则。现有账户不会被修改，密码也永远不会被导入。
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-storage-light.png">
-  <img src="resources/screenshots/desktop-storage-light.png" alt="Flectar Mail 存储设置，包含本地用量、数据库快照与账户备份控件">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-storage-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-storage-light.png">
+  <img src="../../resources/screenshots/desktop-storage-light.png" alt="Flectar Mail 存储设置，包含本地用量、数据库快照与账户备份控件">
 </picture>
 
 ### 📱 为小屏幕而设计
@@ -293,7 +293,7 @@ POP3 账户会把邮件下载到本机，默认保留在服务器上；你也可
 
 | 浅色                                                                             | 深色                                                                            |
 |----------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| ![Flectar Mail 浅色模式下的移动端收件箱](resources/screenshots/mobile-light.png) | ![Flectar Mail 深色模式下的移动端收件箱](resources/screenshots/mobile-dark.png) |
+| ![Flectar Mail 浅色模式下的移动端收件箱](../../resources/screenshots/mobile-light.png) | ![Flectar Mail 深色模式下的移动端收件箱](../../resources/screenshots/mobile-dark.png) |
 
 ## 📥 获取 Flectar Mail
 
@@ -353,19 +353,19 @@ Flectar Mail 为所有人而构建，我们期待你帮助它支持更多语言�
 
 译文会与我们的 GitHub 仓库同步，并以拉取请求的形式提交审阅。贡献者还可以为自己的工作在 GitHub 上获得署名。
 
-README 译文在本仓库中维护。新增或更新译文的方法请参阅[翻译贡献指南](CONTRIBUTING.md#translations)。
+README 译文在本仓库中维护。新增或更新译文的方法请参阅[翻译贡献指南](../../CONTRIBUTING.md#translations)。
 
 ## ♿ 无障碍
 
-Flectar Mail 提供键盘导航、浅色和深色主题以及灵活的布局。无障碍支持仍在持续改进。有关现有功能、测试局限以及如何报告使用障碍，请参阅 [ACCESSIBILITY.md](ACCESSIBILITY.md)。
+Flectar Mail 提供键盘导航、浅色和深色主题以及灵活的布局。无障碍支持仍在持续改进。有关现有功能、测试局限以及如何报告使用障碍，请参阅 [ACCESSIBILITY.md](../../ACCESSIBILITY.md)。
 
 ## 🔒 安全
 
-如需私下报告安全漏洞，请遵循 [SECURITY.md](SECURITY.md)。请勿在公开的问题报告中披露漏洞细节。
+如需私下报告安全漏洞，请遵循 [SECURITY.md](../../SECURITY.md)。请勿在公开的问题报告中披露漏洞细节。
 
 ## 🌐 面向所有人的开源
 
-Flectar Mail 只有一个开源版本，没有单独划分的社区版。客户端采用 [GNU Affero 通用公共许可证 v3](LICENSE) 授权。实际细节请阅读[许可说明](LICENSING.md)；如需参与项目建设，请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Flectar Mail 只有一个开源版本，没有单独划分的社区版。客户端采用 [GNU Affero 通用公共许可证 v3](../../LICENSE) 授权。实际细节请阅读[许可说明](../../LICENSING.md)；如需参与项目建设，请参阅 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 
 ## 🫡 致谢
 

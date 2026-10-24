@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="resources/app-icon/flectar-mail-masked.png" width="88" alt="Логотип Flectar Mail">
+  <img src="../../resources/app-icon/flectar-mail-masked.png" width="88" alt="Логотип Flectar Mail">
   <h1 align="center">
     Flectar Mail
   </h1>
   <p>
-    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
+    <a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
     <a href="README.fr.md">Français</a> · <a href="README.pt_BR.md">Português (Brasil)</a> · <strong>Русский</strong> ·
     <a href="README.hi.md">हिन्दी</a> · <a href="README.ar.md">العربية</a> · <a href="README.zh_Hans.md">简体中文</a>
   </p>
@@ -15,10 +15,10 @@
   <p>
     <a href="https://flectar.com">Сайт</a> ·
     <a href="https://github.com/flectar/mail/issues">Сообщить о проблеме</a> ·
-    <a href="CONTRIBUTING.md">Участвовать</a>
+    <a href="../../CONTRIBUTING.md">Участвовать</a>
   </p>
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="Лицензия: AGPL-3.0"></a>
+    <a href="../../LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="Лицензия: AGPL-3.0"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/downloads/flectar/mail/total?style=flat&label=downloads&color=16a34a" alt="Загрузки всех выпусков"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/v/release/flectar/mail?display_name=tag&include_prereleases&sort=semver&style=flat&label=release&color=0ea5e9" alt="Последний выпуск"></a>
     <a href="https://translate.flectar.com/engage/flectar-mail/"><img src="https://translate.flectar.com/widget/flectar-mail/svg-badge.svg" alt="Состояние перевода"></a>
@@ -30,9 +30,9 @@
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail в macOS с общей папкой входящих и просмотром письма">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+  <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail в macOS с общей папкой входящих и просмотром письма">
 </picture>
 
 Flectar Mail — лёгкое нативное приложение для почты, календарей и контактов. Оно мгновенно запускается, быстро реагирует на действия и использует лишь небольшую часть памяти, необходимой обычному почтовому клиенту на веб-технологиях.
@@ -88,9 +88,9 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
 Можно также переопределить цвет отдельного аккаунта и показывать итоговый цвет у левого края каждого сообщения. Эти метки помогают различать аккаунты в общей папке входящих; в примере ниже для работы используется фиолетовый, а для поддержки — оранжевый.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-profiles-light.png">
-  <img src="resources/screenshots/desktop-profiles-light.png" alt="Общая папка входящих Flectar Mail с фиолетовыми и оранжевыми метками профилей">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-profiles-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-profiles-light.png">
+  <img src="../../resources/screenshots/desktop-profiles-light.png" alt="Общая папка входящих Flectar Mail с фиолетовыми и оранжевыми метками профилей">
 </picture>
 
 ### 🧵 Цепочки писем
@@ -100,9 +100,9 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
 Используйте **Вверх/Вниз** для перемещения по сообщениям, **Home/End** для перехода к первому или последнему загруженному письму и **Page Up/Page Down** для постраничного перемещения. **Enter** открывает текущее сообщение и переводит фокус на его содержимое; **Пробел** отмечает или снимает отметку для групповых действий. **Tab/Shift+Tab** переключают элементы управления. В полном интерфейсе **F6** переносит фокус между списком писем и областью чтения. В минималистичном виде стрелки выделяют письма, **Enter** открывает их, а **Escape** или **F6** возвращает к списку.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-thread-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-thread-light.png">
-  <img src="resources/screenshots/desktop-thread-light.png" alt="Переписка Flectar Mail с входящими письмами и ответами">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-thread-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-thread-light.png">
+  <img src="../../resources/screenshots/desktop-thread-light.png" alt="Переписка Flectar Mail с входящими письмами и ответами">
 </picture>
 
 ### 🗂️ Вкладки
@@ -112,9 +112,9 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
 **Ctrl/⌘+T** открывает вкладку, **Ctrl/⌘+W** закрывает текущую, а **Ctrl/⌘+Shift+T** восстанавливает последнюю закрытую. **Ctrl+Tab** и **Ctrl+Shift+Tab** переключают вкладки, **Ctrl/⌘+1–8** переходят к конкретной вкладке, а **Ctrl/⌘+9** — к последней.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-tabs-light.png">
-  <img src="resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail с вкладками переписок, календаря, контактов и файлов">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-tabs-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-tabs-light.png">
+  <img src="../../resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail с вкладками переписок, календаря, контактов и файлов">
 </picture>
 
 ### Полное и минималистичное рабочие пространства
@@ -130,16 +130,16 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Полный настольный интерфейс Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Полный настольный интерфейс Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-minimal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-minimal-light.png">
-          <img src="resources/screenshots/desktop-minimal-light.png" alt="Минималистичный настольный интерфейс Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-minimal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-minimal-light.png">
+          <img src="../../resources/screenshots/desktop-minimal-light.png" alt="Минималистичный настольный интерфейс Flectar Mail" width="100%">
         </picture>
       </td>
     </tr>
@@ -161,30 +161,30 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
     <tr>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-teal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-teal-light.png">
-          <img src="resources/screenshots/desktop-teal-light.png" alt="Бирюзовая палитра Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-teal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-teal-light.png">
+          <img src="../../resources/screenshots/desktop-teal-light.png" alt="Бирюзовая палитра Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-green-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-green-light.png">
-          <img src="resources/screenshots/desktop-green-light.png" alt="Зелёная палитра Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-green-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-green-light.png">
+          <img src="../../resources/screenshots/desktop-green-light.png" alt="Зелёная палитра Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-purple-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-purple-light.png">
-          <img src="resources/screenshots/desktop-purple-light.png" alt="Фиолетовая палитра Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-purple-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-purple-light.png">
+          <img src="../../resources/screenshots/desktop-purple-light.png" alt="Фиолетовая палитра Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Пользовательская палитра Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Пользовательская палитра Flectar Mail" width="100%">
         </picture>
       </td>
     </tr>
@@ -204,16 +204,16 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/macos-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/macos-light.png">
-          <img src="resources/screenshots/frameless/macos-light.png" alt="Окно Flectar Mail без рамки в macOS" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/macos-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/macos-light.png">
+          <img src="../../resources/screenshots/frameless/macos-light.png" alt="Окно Flectar Mail без рамки в macOS" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/windows-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/windows-light.png">
-          <img src="resources/screenshots/frameless/windows-light.png" alt="Окно Flectar Mail без рамки в Windows" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/windows-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/windows-light.png">
+          <img src="../../resources/screenshots/frameless/windows-light.png" alt="Окно Flectar Mail без рамки в Windows" width="100%">
         </picture>
       </td>
     </tr>
@@ -224,16 +224,16 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-gnome-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-gnome-light.png">
-          <img src="resources/screenshots/frameless/linux-gnome-light.png" alt="Окно Flectar Mail без рамки в GNOME" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-gnome-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-gnome-light.png">
+          <img src="../../resources/screenshots/frameless/linux-gnome-light.png" alt="Окно Flectar Mail без рамки в GNOME" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-kde-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-kde-light.png">
-          <img src="resources/screenshots/frameless/linux-kde-light.png" alt="Окно Flectar Mail без рамки в KDE Plasma" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-kde-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-kde-light.png">
+          <img src="../../resources/screenshots/frameless/linux-kde-light.png" alt="Окно Flectar Mail без рамки в KDE Plasma" width="100%">
         </picture>
       </td>
     </tr>
@@ -254,23 +254,23 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
     <tr>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-calendar-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-calendar-light.png">
-          <img src="resources/screenshots/desktop-calendar-light.png" alt="Календарь Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-calendar-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-calendar-light.png">
+          <img src="../../resources/screenshots/desktop-calendar-light.png" alt="Календарь Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-contacts-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-contacts-light.png">
-          <img src="resources/screenshots/desktop-contacts-light.png" alt="Контакты Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-contacts-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-contacts-light.png">
+          <img src="../../resources/screenshots/desktop-contacts-light.png" alt="Контакты Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-files-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-files-light.png">
-          <img src="resources/screenshots/desktop-files-light.png" alt="Файлы Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-files-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-files-light.png">
+          <img src="../../resources/screenshots/desktop-files-light.png" alt="Файлы Flectar Mail" width="100%">
         </picture>
       </td>
     </tr>
@@ -286,9 +286,9 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
 Эта же функция импортирует аккаунты из Thunderbird (папка профиля, архив из Инструменты › Экспорт или `prefs.js`), Thunderbird для Android и K-9 Mail (экспорт настроек `.k9s`). Перед добавлением вы проверяете каждый аккаунт: настройки, которые Flectar Mail не может воспроизвести, например сервер Exchange, объясняются, а не меняются незаметно. Аккаунты POP3 сохраняют правило удаления почты с сервера. Существующие аккаунты никогда не изменяются, пароли не импортируются.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-storage-light.png">
-  <img src="resources/screenshots/desktop-storage-light.png" alt="Настройки хранилища Flectar Mail с объёмом локальных данных, снимками базы данных и резервными копиями аккаунтов">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-storage-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-storage-light.png">
+  <img src="../../resources/screenshots/desktop-storage-light.png" alt="Настройки хранилища Flectar Mail с объёмом локальных данных, снимками базы данных и резервными копиями аккаунтов">
 </picture>
 
 ### 📱 Для небольших экранов
@@ -297,7 +297,7 @@ S/MIME и OpenPGP на мобильных устройствах пока не �
 
 | Светлая тема | Тёмная тема |
 | --- | --- |
-| ![Мобильная папка входящих Flectar Mail в светлой теме](resources/screenshots/mobile-light.png) | ![Мобильная папка входящих Flectar Mail в тёмной теме](resources/screenshots/mobile-dark.png) |
+| ![Мобильная папка входящих Flectar Mail в светлой теме](../../resources/screenshots/mobile-light.png) | ![Мобильная папка входящих Flectar Mail в тёмной теме](../../resources/screenshots/mobile-dark.png) |
 
 ## 📥 Скачать Flectar Mail
 
@@ -333,7 +333,7 @@ RPM предназначен для Fedora 43 и 44 на x86_64. Сборки и
 
 Оба процесса выпуска Android используют окружение GitHub `android-release`. Им нужны одинаковые секреты хранилища ключей и паролей; они сверяют публичный сертификат с `platform/android/app-signing-certificate.sha256` и вычисляют коды версий Android из версии выпуска. Отсутствующий или другой ключ блокирует публикацию. **Не создавайте заменяющий ключ и не меняйте закреплённый отпечаток для обычного выпуска.** Смена пароля сохраняет идентичность, если сохранены исходные закрытый ключ и сертификат.
 
-Команда однократной миграции, необходимые секреты, резервные копии и Play App Signing описаны в [настройке и восстановлении подписи Android](docs/android-signing.md).
+Команда однократной миграции, необходимые секреты, резервные копии и Play App Signing описаны в [настройке и восстановлении подписи Android](../android-signing.md).
 
 Локальные сборки разработчика по-прежнему могут создавать локальный тестовый ключ. Они обновляют только установки, подписанные тем же локальным ключом.
 
@@ -363,19 +363,19 @@ Flectar Mail создан для всех, и мы будем рады ваше�
 
 Переводы синхронизируются с репозиторием GitHub и отправляются на проверку в виде запросов на слияние. Авторы переводов также могут получить указание авторства в GitHub.
 
-Переводы README поддерживаются в этом репозитории. Чтобы добавить или обновить перевод, см. [руководство для переводчиков](CONTRIBUTING.md#translations).
+Переводы README поддерживаются в этом репозитории. Чтобы добавить или обновить перевод, см. [руководство для переводчиков](../../CONTRIBUTING.md#translations).
 
 ## ♿ Доступность
 
-Flectar Mail поддерживает управление с клавиатуры, светлую и тёмную темы и гибкие варианты интерфейса. Работа над доступностью продолжается. Текущие возможности, ограничения тестирования и порядок сообщения о препятствиях описаны в [ACCESSIBILITY.md](ACCESSIBILITY.md).
+Flectar Mail поддерживает управление с клавиатуры, светлую и тёмную темы и гибкие варианты интерфейса. Работа над доступностью продолжается. Текущие возможности, ограничения тестирования и порядок сообщения о препятствиях описаны в [ACCESSIBILITY.md](../../ACCESSIBILITY.md).
 
 ## 🔒 Безопасность
 
-Для конфиденциального сообщения об уязвимости следуйте [SECURITY.md](SECURITY.md). Не публикуйте сведения об уязвимостях в открытых обсуждениях проблем.
+Для конфиденциального сообщения об уязвимости следуйте [SECURITY.md](../../SECURITY.md). Не публикуйте сведения об уязвимостях в открытых обсуждениях проблем.
 
 ## 🌐 Открытый код для всех
 
-Flectar Mail — единое приложение с открытым кодом, без отдельной общественной редакции. Клиент лицензирован по [GNU Affero General Public License v3](LICENSE). Практические подробности приведены в [обзоре лицензирования](LICENSING.md); чтобы участвовать в развитии проекта, см. [CONTRIBUTING.md](CONTRIBUTING.md).
+Flectar Mail — единое приложение с открытым кодом, без отдельной общественной редакции. Клиент лицензирован по [GNU Affero General Public License v3](../../LICENSE). Практические подробности приведены в [обзоре лицензирования](../../LICENSING.md); чтобы участвовать в развитии проекта, см. [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## 🫡 Благодарности
 

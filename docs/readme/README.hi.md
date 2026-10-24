@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="resources/app-icon/flectar-mail-masked.png" width="88" alt="Flectar Mail का लोगो">
+  <img src="../../resources/app-icon/flectar-mail-masked.png" width="88" alt="Flectar Mail का लोगो">
   <h1 align="center">
     Flectar Mail
   </h1>
   <p>
-    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
+    <a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
     <a href="README.fr.md">Français</a> · <a href="README.pt_BR.md">Português (Brasil)</a> · <a href="README.ru.md">Русский</a> ·
     <strong>हिन्दी</strong> · <a href="README.ar.md">العربية</a> · <a href="README.zh_Hans.md">简体中文</a>
   </p>
@@ -15,10 +15,10 @@
   <p>
     <a href="https://flectar.com">वेबसाइट</a> ·
     <a href="https://github.com/flectar/mail/issues">समस्या की रिपोर्ट करें</a> ·
-    <a href="CONTRIBUTING.md">योगदान दें</a>
+    <a href="../../CONTRIBUTING.md">योगदान दें</a>
   </p>
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="लाइसेंस: AGPL-3.0"></a>
+    <a href="../../LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="लाइसेंस: AGPL-3.0"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/downloads/flectar/mail/total?style=flat&label=downloads&color=16a34a" alt="सभी रिलीज़ के डाउनलोड"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/v/release/flectar/mail?display_name=tag&include_prereleases&sort=semver&style=flat&label=release&color=0ea5e9" alt="नवीनतम रिलीज़"></a>
     <a href="https://translate.flectar.com/engage/flectar-mail/"><img src="https://translate.flectar.com/widget/flectar-mail/svg-badge.svg" alt="अनुवाद की स्थिति"></a>
@@ -30,9 +30,9 @@
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="macOS पर संयुक्त इनबॉक्स और संदेश दृश्य दिखाता Flectar Mail">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+  <img src="../../resources/screenshots/desktop-light.png" alt="macOS पर संयुक्त इनबॉक्स और संदेश दृश्य दिखाता Flectar Mail">
 </picture>
 
 Flectar Mail आपके ईमेल, कैलेंडर और संपर्कों के लिए एक हल्का, नेटिव ऐप है। इसे तुरंत खुलने, तेज़ी से प्रतिक्रिया देने और आम वेब-आधारित मेल क्लाइंट की तुलना में बहुत कम मेमोरी इस्तेमाल करने के लिए बनाया गया है।
@@ -88,9 +88,9 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
 आप किसी एक खाते का रंग अलग भी तय कर सकते हैं और प्रभावी रंग हर संदेश के बाएँ किनारे पर दिखा सकते हैं। इन संकेतों से संयुक्त इनबॉक्स में खातों को पहचानना आसान होता है; नीचे के उदाहरण में काम के लिए बैंगनी और सहायता के लिए नारंगी रंग है।
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-profiles-light.png">
-  <img src="resources/screenshots/desktop-profiles-light.png" alt="बैंगनी और नारंगी प्रोफ़ाइल संकेतों वाला Flectar Mail का संयुक्त इनबॉक्स">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-profiles-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-profiles-light.png">
+  <img src="../../resources/screenshots/desktop-profiles-light.png" alt="बैंगनी और नारंगी प्रोफ़ाइल संकेतों वाला Flectar Mail का संयुक्त इनबॉक्स">
 </picture>
 
 ### 🧵 बातचीत के थ्रेड
@@ -100,9 +100,9 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
 संदेशों के बीच जाने के लिए **ऊपर/नीचे**, पहले या आख़िरी लोड हुए संदेश पर जाने के लिए **Home/End** और एक पृष्ठ आगे-पीछे जाने के लिए **Page Up/Page Down** इस्तेमाल करें। **Enter** वर्तमान संदेश खोलता है और उसके कंटेंट पर फ़ोकस करता है; **Space** सामूहिक कार्रवाइयों के लिए उसे चुनता या चयन हटाता है। **Tab/Shift+Tab** कंट्रोल के बीच जाते हैं। पूर्ण कार्यक्षेत्र में **F6** संदेश सूची और रीडर के बीच फ़ोकस बदलता है। मिनिमल लेआउट में तीर कुंजियाँ संदेश हाइलाइट करती हैं और **Enter** उन्हें खोलता है; **Escape** या **F6** सूची पर लौटाता है।
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-thread-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-thread-light.png">
-  <img src="resources/screenshots/desktop-thread-light.png" alt="प्राप्त संदेशों और जवाबों वाली Flectar Mail बातचीत">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-thread-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-thread-light.png">
+  <img src="../../resources/screenshots/desktop-thread-light.png" alt="प्राप्त संदेशों और जवाबों वाली Flectar Mail बातचीत">
 </picture>
 
 ### 🗂️ टैब
@@ -112,9 +112,9 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
 **Ctrl/⌘+T** नया टैब खोलता है, **Ctrl/⌘+W** वर्तमान टैब बंद करता है और **Ctrl/⌘+Shift+T** आख़िरी बंद टैब फिर खोलता है। **Ctrl+Tab** और **Ctrl+Shift+Tab** टैब के बीच जाते हैं, **Ctrl/⌘+1–8** किसी खास टैब पर और **Ctrl/⌘+9** आख़िरी टैब पर जाता है।
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-tabs-light.png">
-  <img src="resources/screenshots/desktop-tabs-light.png" alt="कई बातचीत, कैलेंडर, संपर्क और फ़ाइलों के टैब वाला Flectar Mail">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-tabs-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-tabs-light.png">
+  <img src="../../resources/screenshots/desktop-tabs-light.png" alt="कई बातचीत, कैलेंडर, संपर्क और फ़ाइलों के टैब वाला Flectar Mail">
 </picture>
 
 ### पूर्ण और मिनिमल कार्यक्षेत्र
@@ -130,16 +130,16 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail का पूर्ण डेस्कटॉप कार्यक्षेत्र" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail का पूर्ण डेस्कटॉप कार्यक्षेत्र" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-minimal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-minimal-light.png">
-          <img src="resources/screenshots/desktop-minimal-light.png" alt="Flectar Mail का मिनिमल डेस्कटॉप कार्यक्षेत्र" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-minimal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-minimal-light.png">
+          <img src="../../resources/screenshots/desktop-minimal-light.png" alt="Flectar Mail का मिनिमल डेस्कटॉप कार्यक्षेत्र" width="100%">
         </picture>
       </td>
     </tr>
@@ -161,30 +161,30 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
     <tr>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-teal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-teal-light.png">
-          <img src="resources/screenshots/desktop-teal-light.png" alt="Flectar Mail का नीलहरित पैलेट" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-teal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-teal-light.png">
+          <img src="../../resources/screenshots/desktop-teal-light.png" alt="Flectar Mail का नीलहरित पैलेट" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-green-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-green-light.png">
-          <img src="resources/screenshots/desktop-green-light.png" alt="Flectar Mail का हरा पैलेट" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-green-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-green-light.png">
+          <img src="../../resources/screenshots/desktop-green-light.png" alt="Flectar Mail का हरा पैलेट" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-purple-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-purple-light.png">
-          <img src="resources/screenshots/desktop-purple-light.png" alt="Flectar Mail का बैंगनी पैलेट" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-purple-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-purple-light.png">
+          <img src="../../resources/screenshots/desktop-purple-light.png" alt="Flectar Mail का बैंगनी पैलेट" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail का कस्टम पैलेट" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail का कस्टम पैलेट" width="100%">
         </picture>
       </td>
     </tr>
@@ -204,16 +204,16 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/macos-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/macos-light.png">
-          <img src="resources/screenshots/frameless/macos-light.png" alt="macOS पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/macos-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/macos-light.png">
+          <img src="../../resources/screenshots/frameless/macos-light.png" alt="macOS पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/windows-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/windows-light.png">
-          <img src="resources/screenshots/frameless/windows-light.png" alt="Windows पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/windows-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/windows-light.png">
+          <img src="../../resources/screenshots/frameless/windows-light.png" alt="Windows पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
         </picture>
       </td>
     </tr>
@@ -224,16 +224,16 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-gnome-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-gnome-light.png">
-          <img src="resources/screenshots/frameless/linux-gnome-light.png" alt="GNOME पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-gnome-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-gnome-light.png">
+          <img src="../../resources/screenshots/frameless/linux-gnome-light.png" alt="GNOME पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-kde-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-kde-light.png">
-          <img src="resources/screenshots/frameless/linux-kde-light.png" alt="KDE Plasma पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-kde-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-kde-light.png">
+          <img src="../../resources/screenshots/frameless/linux-kde-light.png" alt="KDE Plasma पर Flectar Mail की बिना फ़्रेम की विंडो" width="100%">
         </picture>
       </td>
     </tr>
@@ -254,23 +254,23 @@ JMAP/WebDAV स्टोरेज देखें, ईमेल अटैचम�
     <tr>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-calendar-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-calendar-light.png">
-          <img src="resources/screenshots/desktop-calendar-light.png" alt="Flectar Mail का कैलेंडर" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-calendar-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-calendar-light.png">
+          <img src="../../resources/screenshots/desktop-calendar-light.png" alt="Flectar Mail का कैलेंडर" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-contacts-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-contacts-light.png">
-          <img src="resources/screenshots/desktop-contacts-light.png" alt="Flectar Mail के संपर्क" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-contacts-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-contacts-light.png">
+          <img src="../../resources/screenshots/desktop-contacts-light.png" alt="Flectar Mail के संपर्क" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-files-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-files-light.png">
-          <img src="resources/screenshots/desktop-files-light.png" alt="Flectar Mail की फ़ाइलें" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-files-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-files-light.png">
+          <img src="../../resources/screenshots/desktop-files-light.png" alt="Flectar Mail की फ़ाइलें" width="100%">
         </picture>
       </td>
     </tr>
@@ -286,9 +286,9 @@ POP3 खाते ईमेल इस डिवाइस पर डाउनल�
 यही आयात सुविधा Thunderbird से (प्रोफ़ाइल फ़ोल्डर, उसके टूल्स › एक्सपोर्ट का आर्काइव या `prefs.js`) और Thunderbird for Android या K-9 Mail से (`.k9s` सेटिंग्स निर्यात) खाते भी लाती है। कुछ भी जोड़ने से पहले आप हर खाते की समीक्षा करते हैं: Flectar Mail जिन सेटिंग्स को दोहरा नहीं सकता, जैसे Exchange सर्वर, उन्हें चुपचाप बदलने के बजाय समझाया जाता है। POP3 खाते सर्वर से मेल हटाने का अपना नियम बनाए रखते हैं। मौजूदा खाते कभी बदले नहीं जाते और पासवर्ड कभी आयात नहीं किए जाते।
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-storage-light.png">
-  <img src="resources/screenshots/desktop-storage-light.png" alt="स्थानीय उपयोग, डेटाबेस स्नैपशॉट और खाता बैकअप कंट्रोल वाली Flectar Mail की स्टोरेज सेटिंग्स">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-storage-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-storage-light.png">
+  <img src="../../resources/screenshots/desktop-storage-light.png" alt="स्थानीय उपयोग, डेटाबेस स्नैपशॉट और खाता बैकअप कंट्रोल वाली Flectar Mail की स्टोरेज सेटिंग्स">
 </picture>
 
 ### 📱 छोटी स्क्रीन के लिए
@@ -297,7 +297,7 @@ POP3 खाते ईमेल इस डिवाइस पर डाउनल�
 
 | हल्का | गहरा |
 | --- | --- |
-| ![हल्के मोड में Flectar Mail का मोबाइल इनबॉक्स](resources/screenshots/mobile-light.png) | ![गहरे मोड में Flectar Mail का मोबाइल इनबॉक्स](resources/screenshots/mobile-dark.png) |
+| ![हल्के मोड में Flectar Mail का मोबाइल इनबॉक्स](../../resources/screenshots/mobile-light.png) | ![गहरे मोड में Flectar Mail का मोबाइल इनबॉक्स](../../resources/screenshots/mobile-dark.png) |
 
 ## 📥 Flectar Mail पाएँ
 
@@ -333,7 +333,7 @@ alpha 8 से Android के alpha, beta, रिलीज़-कैंडिड
 
 दोनों Android रिलीज़ वर्कफ़्लो GitHub का `android-release` एनवायरनमेंट इस्तेमाल करते हैं। उन्हें वही कीस्टोर और पासवर्ड सीक्रेट चाहिए; वे सार्वजनिक प्रमाणपत्र को `platform/android/app-signing-certificate.sha256` से जाँचते हैं और रिलीज़ संस्करण से Android संस्करण कोड निकालते हैं। कुंजी गायब या अलग होने पर प्रकाशन रुकता है। **सामान्य रिलीज़ के लिए नई प्रतिस्थापन कुंजी न बनाएँ और तय फ़िंगरप्रिंट न बदलें।** मूल निजी कुंजी और प्रमाणपत्र रखे जाएँ तो पासवर्ड बदलने पर पहचान बनी रहती है।
 
-एक बार चलाने वाला माइग्रेशन कमांड, आवश्यक सीक्रेट, बैकअप और Play App Signing के लिए [Android हस्ताक्षर सेटअप और पुनर्प्राप्ति](docs/android-signing.md) देखें।
+एक बार चलाने वाला माइग्रेशन कमांड, आवश्यक सीक्रेट, बैकअप और Play App Signing के लिए [Android हस्ताक्षर सेटअप और पुनर्प्राप्ति](../android-signing.md) देखें।
 
 स्थानीय डेवलपर बिल्ड अब भी स्थानीय परीक्षण कुंजी बना सकते हैं। वे केवल उसी स्थानीय कुंजी से हस्ताक्षरित इंस्टॉलेशन अपडेट करते हैं।
 
@@ -363,19 +363,19 @@ Flectar Mail सबके लिए बना है और इसे अधि�
 
 अनुवाद हमारे GitHub रिपॉज़िटरी से सिंक होते हैं और समीक्षा के लिए पुल अनुरोध के रूप में भेजे जाते हैं। योगदानकर्ताओं को GitHub पर उनके काम का श्रेय भी मिल सकता है।
 
-README के अनुवाद इस रिपॉज़िटरी में बनाए रखे जाते हैं। नया अनुवाद जोड़ने या अपडेट करने के लिए [अनुवाद में योगदान](CONTRIBUTING.md#translations) देखें।
+README के अनुवाद इस रिपॉज़िटरी में बनाए रखे जाते हैं। नया अनुवाद जोड़ने या अपडेट करने के लिए [अनुवाद में योगदान](../../CONTRIBUTING.md#translations) देखें।
 
 ## ♿ सुगम्यता
 
-Flectar Mail में कीबोर्ड नेविगेशन, हल्की और गहरी थीम तथा लचीले लेआउट हैं। सुगम्यता पर काम जारी है। वर्तमान सुविधाओं, परीक्षण की सीमाओं और बाधा की रिपोर्ट करने के तरीके के लिए [ACCESSIBILITY.md](ACCESSIBILITY.md) देखें।
+Flectar Mail में कीबोर्ड नेविगेशन, हल्की और गहरी थीम तथा लचीले लेआउट हैं। सुगम्यता पर काम जारी है। वर्तमान सुविधाओं, परीक्षण की सीमाओं और बाधा की रिपोर्ट करने के तरीके के लिए [ACCESSIBILITY.md](../../ACCESSIBILITY.md) देखें।
 
 ## 🔒 सुरक्षा
 
-किसी सुरक्षा कमज़ोरी की निजी रूप से रिपोर्ट करने के लिए [SECURITY.md](SECURITY.md) का पालन करें। सुरक्षा कमज़ोरियों का विवरण सार्वजनिक इश्यू में न दें।
+किसी सुरक्षा कमज़ोरी की निजी रूप से रिपोर्ट करने के लिए [SECURITY.md](../../SECURITY.md) का पालन करें। सुरक्षा कमज़ोरियों का विवरण सार्वजनिक इश्यू में न दें।
 
 ## 🌐 सबके लिए ओपन सोर्स
 
-Flectar Mail एक ही ओपन-सोर्स ऐप है। इसका अलग कम्युनिटी संस्करण नहीं है। क्लाइंट [GNU Affero General Public License v3](LICENSE) के अंतर्गत है। व्यावहारिक जानकारी के लिए [लाइसेंस का अवलोकन](LICENSING.md) पढ़ें या परियोजना में योगदान के लिए [CONTRIBUTING.md](CONTRIBUTING.md) देखें।
+Flectar Mail एक ही ओपन-सोर्स ऐप है। इसका अलग कम्युनिटी संस्करण नहीं है। क्लाइंट [GNU Affero General Public License v3](../../LICENSE) के अंतर्गत है। व्यावहारिक जानकारी के लिए [लाइसेंस का अवलोकन](../../LICENSING.md) पढ़ें या परियोजना में योगदान के लिए [CONTRIBUTING.md](../../CONTRIBUTING.md) देखें।
 
 ## 🫡 आभार
 

@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="resources/app-icon/flectar-mail-masked.png" width="88" alt="Logotipo do Flectar Mail">
+  <img src="../../resources/app-icon/flectar-mail-masked.png" width="88" alt="Logotipo do Flectar Mail">
   <h1 align="center">
     Flectar Mail
   </h1>
   <p>
-    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
+    <a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
     <a href="README.fr.md">Français</a> · <strong>Português (Brasil)</strong> · <a href="README.ru.md">Русский</a> ·
     <a href="README.hi.md">हिन्दी</a> · <a href="README.ar.md">العربية</a> · <a href="README.zh_Hans.md">简体中文</a>
   </p>
@@ -15,10 +15,10 @@
   <p>
     <a href="https://flectar.com">Site</a> ·
     <a href="https://github.com/flectar/mail/issues">Relatar um problema</a> ·
-    <a href="CONTRIBUTING.md">Contribuir</a>
+    <a href="../../CONTRIBUTING.md">Contribuir</a>
   </p>
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="Licença: AGPL-3.0"></a>
+    <a href="../../LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="Licença: AGPL-3.0"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/downloads/flectar/mail/total?style=flat&label=downloads&color=16a34a" alt="Downloads de todas as versões"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/v/release/flectar/mail?display_name=tag&include_prereleases&sort=semver&style=flat&label=release&color=0ea5e9" alt="Última versão"></a>
     <a href="https://translate.flectar.com/engage/flectar-mail/"><img src="https://translate.flectar.com/widget/flectar-mail/svg-badge.svg" alt="Status da tradução"></a>
@@ -30,9 +30,9 @@
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail no macOS com a caixa de entrada unificada e a visualização da mensagem">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+  <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail no macOS com a caixa de entrada unificada e a visualização da mensagem">
 </picture>
 
 O Flectar Mail é um aplicativo nativo e leve para seus e-mails, calendários e contatos. Foi projetado para abrir instantaneamente, responder com agilidade e usar uma fração da memória de um cliente de e-mail típico baseado em tecnologias web.
@@ -88,9 +88,9 @@ Agrupe contas relacionadas em perfis com nomes como Trabalho ou Pessoal e dê um
 Você também pode substituir a cor de uma conta individual e mostrar a cor resultante na borda esquerda de cada mensagem. Os marcadores facilitam distinguir contas na caixa de entrada unificada; o exemplo abaixo usa roxo para Trabalho e laranja para Suporte.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-profiles-light.png">
-  <img src="resources/screenshots/desktop-profiles-light.png" alt="Caixa de entrada unificada do Flectar Mail com marcadores de perfil roxos e laranjas">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-profiles-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-profiles-light.png">
+  <img src="../../resources/screenshots/desktop-profiles-light.png" alt="Caixa de entrada unificada do Flectar Mail com marcadores de perfil roxos e laranjas">
 </picture>
 
 ### 🧵 Conversas
@@ -100,9 +100,9 @@ As respostas ficam agrupadas em ordem cronológica, com a mensagem ativa expandi
 Use **Cima/Baixo** para navegar pelas mensagens, **Home/End** para ir à primeira ou à última mensagem carregada e **Page Up/Page Down** para avançar uma página por vez. **Enter** abre a mensagem atual e leva o foco ao conteúdo; **Espaço** marca ou desmarca a mensagem para ações em lote. **Tab/Shift+Tab** alternam entre controles. No espaço completo, **F6** move o foco entre a lista e o leitor. No layout minimalista, as setas destacam mensagens e **Enter** as abre; **Escape** ou **F6** retorna à lista.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-thread-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-thread-light.png">
-  <img src="resources/screenshots/desktop-thread-light.png" alt="Conversa do Flectar Mail com mensagens recebidas e respostas">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-thread-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-thread-light.png">
+  <img src="../../resources/screenshots/desktop-thread-light.png" alt="Conversa do Flectar Mail com mensagens recebidas e respostas">
 </picture>
 
 ### 🗂️ Abas
@@ -112,9 +112,9 @@ Mantenha vários espaços abertos ao mesmo tempo com abas como as de um navegado
 **Ctrl/⌘+T** abre uma nova aba, **Ctrl/⌘+W** fecha a atual e **Ctrl/⌘+Shift+T** reabre a última aba fechada. **Ctrl+Tab** e **Ctrl+Shift+Tab** alternam entre abas, **Ctrl/⌘+1–8** vão para uma aba específica e **Ctrl/⌘+9** vai para a última.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-tabs-light.png">
-  <img src="resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail com abas de várias conversas, calendário, contatos e arquivos">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-tabs-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-tabs-light.png">
+  <img src="../../resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail com abas de várias conversas, calendário, contatos e arquivos">
 </picture>
 
 ### Espaços de trabalho completo e minimalista
@@ -130,16 +130,16 @@ Mantenha vários espaços abertos ao mesmo tempo com abas como as de um navegado
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Espaço de trabalho completo do Flectar Mail no desktop" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Espaço de trabalho completo do Flectar Mail no desktop" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-minimal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-minimal-light.png">
-          <img src="resources/screenshots/desktop-minimal-light.png" alt="Espaço de trabalho minimalista do Flectar Mail no desktop" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-minimal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-minimal-light.png">
+          <img src="../../resources/screenshots/desktop-minimal-light.png" alt="Espaço de trabalho minimalista do Flectar Mail no desktop" width="100%">
         </picture>
       </td>
     </tr>
@@ -161,30 +161,30 @@ Mantenha vários espaços abertos ao mesmo tempo com abas como as de um navegado
     <tr>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-teal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-teal-light.png">
-          <img src="resources/screenshots/desktop-teal-light.png" alt="Paleta verde-azulada do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-teal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-teal-light.png">
+          <img src="../../resources/screenshots/desktop-teal-light.png" alt="Paleta verde-azulada do Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-green-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-green-light.png">
-          <img src="resources/screenshots/desktop-green-light.png" alt="Paleta verde do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-green-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-green-light.png">
+          <img src="../../resources/screenshots/desktop-green-light.png" alt="Paleta verde do Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-purple-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-purple-light.png">
-          <img src="resources/screenshots/desktop-purple-light.png" alt="Paleta roxa do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-purple-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-purple-light.png">
+          <img src="../../resources/screenshots/desktop-purple-light.png" alt="Paleta roxa do Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="Paleta personalizada do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="Paleta personalizada do Flectar Mail" width="100%">
         </picture>
       </td>
     </tr>
@@ -204,16 +204,16 @@ Ative **Janela sem moldura** em Configurações → Geral → Interface para sub
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/macos-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/macos-light.png">
-          <img src="resources/screenshots/frameless/macos-light.png" alt="Janela sem moldura do Flectar Mail no macOS" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/macos-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/macos-light.png">
+          <img src="../../resources/screenshots/frameless/macos-light.png" alt="Janela sem moldura do Flectar Mail no macOS" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/windows-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/windows-light.png">
-          <img src="resources/screenshots/frameless/windows-light.png" alt="Janela sem moldura do Flectar Mail no Windows" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/windows-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/windows-light.png">
+          <img src="../../resources/screenshots/frameless/windows-light.png" alt="Janela sem moldura do Flectar Mail no Windows" width="100%">
         </picture>
       </td>
     </tr>
@@ -224,16 +224,16 @@ Ative **Janela sem moldura** em Configurações → Geral → Interface para sub
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-gnome-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-gnome-light.png">
-          <img src="resources/screenshots/frameless/linux-gnome-light.png" alt="Janela sem moldura do Flectar Mail no GNOME" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-gnome-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-gnome-light.png">
+          <img src="../../resources/screenshots/frameless/linux-gnome-light.png" alt="Janela sem moldura do Flectar Mail no GNOME" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-kde-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-kde-light.png">
-          <img src="resources/screenshots/frameless/linux-kde-light.png" alt="Janela sem moldura do Flectar Mail no KDE Plasma" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-kde-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-kde-light.png">
+          <img src="../../resources/screenshots/frameless/linux-kde-light.png" alt="Janela sem moldura do Flectar Mail no KDE Plasma" width="100%">
         </picture>
       </td>
     </tr>
@@ -254,23 +254,23 @@ Ative **Janela sem moldura** em Configurações → Geral → Interface para sub
     <tr>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-calendar-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-calendar-light.png">
-          <img src="resources/screenshots/desktop-calendar-light.png" alt="Calendário do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-calendar-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-calendar-light.png">
+          <img src="../../resources/screenshots/desktop-calendar-light.png" alt="Calendário do Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-contacts-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-contacts-light.png">
-          <img src="resources/screenshots/desktop-contacts-light.png" alt="Contatos do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-contacts-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-contacts-light.png">
+          <img src="../../resources/screenshots/desktop-contacts-light.png" alt="Contatos do Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-files-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-files-light.png">
-          <img src="resources/screenshots/desktop-files-light.png" alt="Arquivos do Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-files-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-files-light.png">
+          <img src="../../resources/screenshots/desktop-files-light.png" alt="Arquivos do Flectar Mail" width="100%">
         </picture>
       </td>
     </tr>
@@ -286,9 +286,9 @@ Contas POP3 baixam e-mails para este dispositivo e os deixam no servidor, a meno
 A mesma importação também traz contas do Thunderbird (uma pasta de perfil, seu arquivo de Ferramentas › Exportar ou `prefs.js`), do Thunderbird para Android ou do K-9 Mail (exportações de configurações `.k9s`). Você revisa cada conta antes de qualquer adição: configurações que o Flectar Mail não pode reproduzir, como um servidor Exchange, são explicadas em vez de alteradas silenciosamente, e as contas POP3 mantêm sua regra de remoção de e-mails do servidor. Contas existentes nunca são modificadas e senhas nunca são importadas.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-storage-light.png">
-  <img src="resources/screenshots/desktop-storage-light.png" alt="Configurações de armazenamento do Flectar Mail com uso local, instantâneos dos bancos de dados e backups das contas">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-storage-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-storage-light.png">
+  <img src="../../resources/screenshots/desktop-storage-light.png" alt="Configurações de armazenamento do Flectar Mail com uso local, instantâneos dos bancos de dados e backups das contas">
 </picture>
 
 ### 📱 Feito para telas menores
@@ -297,7 +297,7 @@ A interface compacta mantém as ações importantes ao alcance e dá a tela inte
 
 | Claro | Escuro |
 | --- | --- |
-| ![Caixa de entrada móvel do Flectar Mail no modo claro](resources/screenshots/mobile-light.png) | ![Caixa de entrada móvel do Flectar Mail no modo escuro](resources/screenshots/mobile-dark.png) |
+| ![Caixa de entrada móvel do Flectar Mail no modo claro](../../resources/screenshots/mobile-light.png) | ![Caixa de entrada móvel do Flectar Mail no modo escuro](../../resources/screenshots/mobile-dark.png) |
 
 ## 📥 Baixe o Flectar Mail
 
@@ -333,7 +333,7 @@ A partir da alpha 8, as versões alpha, beta, candidatas a lançamento e estáve
 
 Os dois fluxos de lançamento do Android usam o ambiente GitHub `android-release`. Exigem os mesmos segredos de armazenamento de chaves e senhas, verificam o certificado público com `platform/android/app-signing-certificate.sha256` e derivam os códigos de versão do Android da versão do lançamento. Uma chave ausente ou diferente bloqueia a publicação. **Não gere uma chave substituta nem altere a impressão digital fixada em um lançamento de rotina.** Alterações de senha preservam a identidade quando a chave privada e o certificado originais são mantidos.
 
-Consulte a [configuração e recuperação da assinatura Android](docs/android-signing.md) para o comando de migração executado uma única vez, os segredos necessários, os backups e o Play App Signing.
+Consulte a [configuração e recuperação da assinatura Android](../android-signing.md) para o comando de migração executado uma única vez, os segredos necessários, os backups e o Play App Signing.
 
 Compilações locais de desenvolvimento ainda podem gerar uma chave de teste local. Elas só atualizam instalações assinadas com essa mesma chave.
 
@@ -363,19 +363,19 @@ Usamos o [Weblate](https://translate.flectar.com/) para gerenciar as traduções
 
 As traduções são sincronizadas com nosso repositório GitHub e enviadas como pull requests para revisão. As pessoas que contribuem também podem receber crédito pelo trabalho no GitHub.
 
-As traduções do README são mantidas neste repositório. Consulte [Como contribuir com traduções](CONTRIBUTING.md#translations) para adicionar ou atualizar uma.
+As traduções do README são mantidas neste repositório. Consulte [Como contribuir com traduções](../../CONTRIBUTING.md#translations) para adicionar ou atualizar uma.
 
 ## ♿ Acessibilidade
 
-O Flectar Mail inclui navegação por teclado, temas claros e escuros e layouts flexíveis. O trabalho de acessibilidade está em andamento. Consulte [ACCESSIBILITY.md](ACCESSIBILITY.md) para conhecer os recursos atuais, as limitações dos testes e como relatar uma barreira.
+O Flectar Mail inclui navegação por teclado, temas claros e escuros e layouts flexíveis. O trabalho de acessibilidade está em andamento. Consulte [ACCESSIBILITY.md](../../ACCESSIBILITY.md) para conhecer os recursos atuais, as limitações dos testes e como relatar uma barreira.
 
 ## 🔒 Segurança
 
-Para relatar uma vulnerabilidade de forma privada, siga [SECURITY.md](SECURITY.md). Não publique detalhes de vulnerabilidades em issues públicas.
+Para relatar uma vulnerabilidade de forma privada, siga [SECURITY.md](../../SECURITY.md). Não publique detalhes de vulnerabilidades em issues públicas.
 
 ## 🌐 Código aberto para todos
 
-O Flectar Mail é um único aplicativo de código aberto. Não existe uma edição comunitária separada. O cliente é licenciado sob a [GNU Affero General Public License v3](LICENSE). Leia a [visão geral do licenciamento](LICENSING.md) para os detalhes práticos ou consulte [CONTRIBUTING.md](CONTRIBUTING.md) para ajudar a construir o projeto.
+O Flectar Mail é um único aplicativo de código aberto. Não existe uma edição comunitária separada. O cliente é licenciado sob a [GNU Affero General Public License v3](../../LICENSE). Leia a [visão geral do licenciamento](../../LICENSING.md) para os detalhes práticos ou consulte [CONTRIBUTING.md](../../CONTRIBUTING.md) para ajudar a construir o projeto.
 
 ## 🫡 Agradecimentos
 

@@ -16,10 +16,14 @@ and safe for a mail client that handles private user data.
 Translate the application through [Weblate](https://translate.flectar.com/).
 README translations are maintained directly in this repository:
 
-- Use [README.md](README.md) as the source and add a root-level
-  `README.<locale>.md`, following `README.es.md` or `README.zh_Hans.md`.
+- Use [README.md](README.md) as the source and add
+  `docs/readme/README.<locale>.md`, following
+  [Spanish](docs/readme/README.es.md) or
+  [Simplified Chinese](docs/readme/README.zh_Hans.md).
 - Translate the complete document, including image alternative text, while
-  preserving links, commands, filenames, and technical identifiers.
+  preserving link destinations, commands, filenames, and technical identifiers.
+  Resolve relative links from `docs/readme/`: use `../../resources/` for images,
+  `../../README.md` for English, and sibling filenames for other translations.
 - Add the language's native name to the language selector in every README
   translation and in the English README. Highlight each file's own language.
 - Keep the same sections and shared screenshots. When updating documentation,

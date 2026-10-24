@@ -4,9 +4,9 @@
     Flectar Mail
   </h1>
   <p>
-    <strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
-    <a href="README.fr.md">Français</a> · <a href="README.pt_BR.md">Português (Brasil)</a> · <a href="README.ru.md">Русский</a> ·
-    <a href="README.hi.md">हिन्दी</a> · <a href="README.ar.md">العربية</a> · <a href="README.zh_Hans.md">简体中文</a>
+    <strong>English</strong> · <a href="docs/readme/README.es.md">Español</a> · <a href="docs/readme/README.de.md">Deutsch</a> ·
+    <a href="docs/readme/README.fr.md">Français</a> · <a href="docs/readme/README.pt_BR.md">Português (Brasil)</a> · <a href="docs/readme/README.ru.md">Русский</a> ·
+    <a href="docs/readme/README.hi.md">हिन्दी</a> · <a href="docs/readme/README.ar.md">العربية</a> · <a href="docs/readme/README.zh_Hans.md">简体中文</a>
   </p>
   <div align="center">
     <h3>Email, made fast again</h3>

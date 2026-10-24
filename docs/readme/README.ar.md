@@ -1,10 +1,10 @@
 <div align="center" dir="rtl">
-  <img src="resources/app-icon/flectar-mail-masked.png" width="88" alt="شعار Flectar Mail">
+  <img src="../../resources/app-icon/flectar-mail-masked.png" width="88" alt="شعار Flectar Mail">
   <h1 align="center">
     Flectar Mail
   </h1>
   <p dir="ltr">
-    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
+    <a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
     <a href="README.fr.md">Français</a> · <a href="README.pt_BR.md">Português (Brasil)</a> · <a href="README.ru.md">Русский</a> ·
     <a href="README.hi.md">हिन्दी</a> · <strong>العربية</strong> · <a href="README.zh_Hans.md">简体中文</a>
   </p>
@@ -15,10 +15,10 @@
   <p>
     <a href="https://flectar.com">الموقع</a> ·
     <a href="https://github.com/flectar/mail/issues">الإبلاغ عن مشكلة</a> ·
-    <a href="CONTRIBUTING.md">المساهمة</a>
+    <a href="../../CONTRIBUTING.md">المساهمة</a>
   </p>
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="الترخيص: AGPL-3.0"></a>
+    <a href="../../LICENSE"><img src="https://img.shields.io/github/license/flectar/mail?style=flat&label=license&color=2563eb" alt="الترخيص: AGPL-3.0"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/downloads/flectar/mail/total?style=flat&label=downloads&color=16a34a" alt="التنزيلات عبر جميع الإصدارات"></a>
     <a href="https://github.com/flectar/mail/releases"><img src="https://img.shields.io/github/v/release/flectar/mail?display_name=tag&include_prereleases&sort=semver&style=flat&label=release&color=0ea5e9" alt="أحدث إصدار"></a>
     <a href="https://translate.flectar.com/engage/flectar-mail/"><img src="https://translate.flectar.com/widget/flectar-mail/svg-badge.svg" alt="حالة الترجمة"></a>
@@ -30,9 +30,9 @@
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail على macOS يعرض صندوق الوارد الموحد وواجهة الرسالة">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+  <img src="../../resources/screenshots/desktop-light.png" alt="Flectar Mail على macOS يعرض صندوق الوارد الموحد وواجهة الرسالة">
 </picture>
 
 يُعد Flectar Mail تطبيقًا أصيلًا وخفيفًا لبريدك الإلكتروني وتقويماتك وجهات اتصالك. صُمم ليفتح فورًا ويحافظ على سرعة الاستجابة، مع استهلاك جزء صغير من الذاكرة التي يحتاج إليها عميل بريد تقليدي مبني على تقنيات الويب.
@@ -88,9 +88,9 @@
 يمكنك أيضًا تخصيص لون حساب بعينه وعرض اللون الفعلي على الحافة اليسرى لكل رسالة. تساعد العلامات على تمييز الحسابات أثناء العمل في صندوق الوارد الموحد؛ ويستخدم المثال أدناه البنفسجي للعمل والبرتقالي للدعم.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-profiles-light.png">
-  <img src="resources/screenshots/desktop-profiles-light.png" alt="صندوق الوارد الموحد في Flectar Mail بعلامات ملفات شخصية بنفسجية وبرتقالية">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-profiles-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-profiles-light.png">
+  <img src="../../resources/screenshots/desktop-profiles-light.png" alt="صندوق الوارد الموحد في Flectar Mail بعلامات ملفات شخصية بنفسجية وبرتقالية">
 </picture>
 
 ### 🧵 سلاسل المحادثات
@@ -100,9 +100,9 @@
 استخدم **أعلى/أسفل** للتنقل بين الرسائل، و**Home/End** للانتقال إلى أول رسالة محملة أو آخرها، و**Page Up/Page Down** للتحرك صفحة في كل مرة. يفتح **Enter** الرسالة الحالية وينقل التركيز إلى محتواها؛ ويحدد **Space** الرسالة أو يلغي تحديدها للإجراءات الجماعية. ينقل **Tab/Shift+Tab** التركيز بين عناصر التحكم. في مساحة العمل الكاملة، ينقل **F6** التركيز بين القائمة والقارئ. في التخطيط المبسط، تبرز مفاتيح الأسهم الرسائل ويفتحها **Enter**؛ ويعيد **Escape** أو **F6** إلى القائمة.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-thread-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-thread-light.png">
-  <img src="resources/screenshots/desktop-thread-light.png" alt="محادثة Flectar Mail تتضمن الرسائل الواردة والردود">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-thread-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-thread-light.png">
+  <img src="../../resources/screenshots/desktop-thread-light.png" alt="محادثة Flectar Mail تتضمن الرسائل الواردة والردود">
 </picture>
 
 ### 🗂️ علامات التبويب
@@ -112,9 +112,9 @@
 يفتح **Ctrl/⌘+T** علامة جديدة، ويغلق **Ctrl/⌘+W** الحالية، ويعيد **Ctrl/⌘+Shift+T** فتح آخر علامة أغلقتها. يتنقل **Ctrl+Tab** و**Ctrl+Shift+Tab** بين العلامات، وينتقل **Ctrl/⌘+1–8** إلى علامة محددة، و**Ctrl/⌘+9** إلى الأخيرة.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-tabs-light.png">
-  <img src="resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail بعلامات تبويب لعدة محادثات والتقويم وجهات الاتصال والملفات">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-tabs-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-tabs-light.png">
+  <img src="../../resources/screenshots/desktop-tabs-light.png" alt="Flectar Mail بعلامات تبويب لعدة محادثات والتقويم وجهات الاتصال والملفات">
 </picture>
 
 ### مساحتا العمل الكاملة والمبسطة
@@ -130,16 +130,16 @@
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="مساحة عمل Flectar Mail الكاملة على سطح المكتب" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="مساحة عمل Flectar Mail الكاملة على سطح المكتب" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-minimal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-minimal-light.png">
-          <img src="resources/screenshots/desktop-minimal-light.png" alt="مساحة عمل Flectar Mail المبسطة على سطح المكتب" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-minimal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-minimal-light.png">
+          <img src="../../resources/screenshots/desktop-minimal-light.png" alt="مساحة عمل Flectar Mail المبسطة على سطح المكتب" width="100%">
         </picture>
       </td>
     </tr>
@@ -161,30 +161,30 @@
     <tr>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-teal-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-teal-light.png">
-          <img src="resources/screenshots/desktop-teal-light.png" alt="لوحة Flectar Mail الزرقاء المخضرة" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-teal-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-teal-light.png">
+          <img src="../../resources/screenshots/desktop-teal-light.png" alt="لوحة Flectar Mail الزرقاء المخضرة" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-green-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-green-light.png">
-          <img src="resources/screenshots/desktop-green-light.png" alt="لوحة Flectar Mail الخضراء" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-green-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-green-light.png">
+          <img src="../../resources/screenshots/desktop-green-light.png" alt="لوحة Flectar Mail الخضراء" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-purple-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-purple-light.png">
-          <img src="resources/screenshots/desktop-purple-light.png" alt="لوحة Flectar Mail البنفسجية" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-purple-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-purple-light.png">
+          <img src="../../resources/screenshots/desktop-purple-light.png" alt="لوحة Flectar Mail البنفسجية" width="100%">
         </picture>
       </td>
       <td width="25%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-          <img src="resources/screenshots/desktop-light.png" alt="لوحة ألوان Flectar Mail المخصصة" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-light.png">
+          <img src="../../resources/screenshots/desktop-light.png" alt="لوحة ألوان Flectar Mail المخصصة" width="100%">
         </picture>
       </td>
     </tr>
@@ -204,16 +204,16 @@
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/macos-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/macos-light.png">
-          <img src="resources/screenshots/frameless/macos-light.png" alt="نافذة Flectar Mail بلا إطار على macOS" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/macos-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/macos-light.png">
+          <img src="../../resources/screenshots/frameless/macos-light.png" alt="نافذة Flectar Mail بلا إطار على macOS" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/windows-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/windows-light.png">
-          <img src="resources/screenshots/frameless/windows-light.png" alt="نافذة Flectar Mail بلا إطار على Windows" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/windows-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/windows-light.png">
+          <img src="../../resources/screenshots/frameless/windows-light.png" alt="نافذة Flectar Mail بلا إطار على Windows" width="100%">
         </picture>
       </td>
     </tr>
@@ -224,16 +224,16 @@
     <tr>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-gnome-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-gnome-light.png">
-          <img src="resources/screenshots/frameless/linux-gnome-light.png" alt="نافذة Flectar Mail بلا إطار على GNOME" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-gnome-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-gnome-light.png">
+          <img src="../../resources/screenshots/frameless/linux-gnome-light.png" alt="نافذة Flectar Mail بلا إطار على GNOME" width="100%">
         </picture>
       </td>
       <td width="50%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/frameless/linux-kde-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/frameless/linux-kde-light.png">
-          <img src="resources/screenshots/frameless/linux-kde-light.png" alt="نافذة Flectar Mail بلا إطار على KDE Plasma" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/frameless/linux-kde-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/frameless/linux-kde-light.png">
+          <img src="../../resources/screenshots/frameless/linux-kde-light.png" alt="نافذة Flectar Mail بلا إطار على KDE Plasma" width="100%">
         </picture>
       </td>
     </tr>
@@ -254,23 +254,23 @@
     <tr>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-calendar-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-calendar-light.png">
-          <img src="resources/screenshots/desktop-calendar-light.png" alt="تقويم Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-calendar-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-calendar-light.png">
+          <img src="../../resources/screenshots/desktop-calendar-light.png" alt="تقويم Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-contacts-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-contacts-light.png">
-          <img src="resources/screenshots/desktop-contacts-light.png" alt="جهات اتصال Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-contacts-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-contacts-light.png">
+          <img src="../../resources/screenshots/desktop-contacts-light.png" alt="جهات اتصال Flectar Mail" width="100%">
         </picture>
       </td>
       <td width="33.33%">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-files-dark.png">
-          <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-files-light.png">
-          <img src="resources/screenshots/desktop-files-light.png" alt="ملفات Flectar Mail" width="100%">
+          <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-files-dark.png">
+          <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-files-light.png">
+          <img src="../../resources/screenshots/desktop-files-light.png" alt="ملفات Flectar Mail" width="100%">
         </picture>
       </td>
     </tr>
@@ -286,9 +286,9 @@
 تجلب وظيفة الاستيراد نفسها الحسابات من Thunderbird (مجلد ملف شخصي، أو أرشيف أدوات › تصدير، أو `prefs.js`) ومن Thunderbird لأندرويد أو K-9 Mail (تصدير إعدادات `.k9s`). تراجع كل حساب قبل إضافة أي شيء: تُشرح الإعدادات التي لا يستطيع Flectar Mail تمثيلها، مثل خادم Exchange، بدلًا من تغييرها بصمت، وتحتفظ حسابات POP3 بقاعدة إزالة البريد من الخادم. لا تُعدّل الحسابات الموجودة أبدًا ولا تُستورد كلمات المرور.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-storage-light.png">
-  <img src="resources/screenshots/desktop-storage-light.png" alt="إعدادات تخزين Flectar Mail مع الاستخدام المحلي ولقطات قواعد البيانات وخيارات النسخ الاحتياطي للحسابات">
+  <source media="(prefers-color-scheme: dark)" srcset="../../resources/screenshots/desktop-storage-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../resources/screenshots/desktop-storage-light.png">
+  <img src="../../resources/screenshots/desktop-storage-light.png" alt="إعدادات تخزين Flectar Mail مع الاستخدام المحلي ولقطات قواعد البيانات وخيارات النسخ الاحتياطي للحسابات">
 </picture>
 
 ### 📱 للشاشات الصغيرة
@@ -297,7 +297,7 @@
 
 | فاتح | داكن |
 | --- | --- |
-| ![صندوق الوارد المحمول في Flectar Mail بالوضع الفاتح](resources/screenshots/mobile-light.png) | ![صندوق الوارد المحمول في Flectar Mail بالوضع الداكن](resources/screenshots/mobile-dark.png) |
+| ![صندوق الوارد المحمول في Flectar Mail بالوضع الفاتح](../../resources/screenshots/mobile-light.png) | ![صندوق الوارد المحمول في Flectar Mail بالوضع الداكن](../../resources/screenshots/mobile-dark.png) |
 
 ## 📥 احصل على Flectar Mail
 
@@ -333,7 +333,7 @@
 
 يستخدم مسارا نشر Android بيئة GitHub المسماة `android-release`. ويحتاجان إلى الأسرار نفسها لمخزن المفاتيح وكلمات المرور، ويتحققان من الشهادة العامة مقابل `platform/android/app-signing-certificate.sha256`، ويستخرجان رموز إصدار Android من رقم الإصدار المنشور. يمنع المفتاح المفقود أو المختلف النشر. **لا تنشئ مفتاحًا بديلًا ولا تغيّر البصمة المثبتة لإصدار اعتيادي.** يحافظ تغيير كلمة المرور على الهوية ما دام المفتاح الخاص والشهادة الأصليان محفوظين.
 
-راجع [إعداد توقيع Android واستعادته](docs/android-signing.md) لأمر الترحيل الذي يُنفذ مرة واحدة، والأسرار المطلوبة، والنسخ الاحتياطية، وPlay App Signing.
+راجع [إعداد توقيع Android واستعادته](../android-signing.md) لأمر الترحيل الذي يُنفذ مرة واحدة، والأسرار المطلوبة، والنسخ الاحتياطية، وPlay App Signing.
 
 ما زال بإمكان نسخ التطوير المحلية إنشاء مفتاح اختبار محلي. وهي لا تحدّث إلا التثبيتات الموقعة بالمفتاح المحلي نفسه.
 
@@ -367,19 +367,19 @@ cargo run --bin flectar-mail
 
 تُزامن الترجمات مع مستودع GitHub وتُرسل كطلبات سحب للمراجعة. ويمكن أيضًا نسب المساهمات إلى أصحابها على GitHub.
 
-تُصان ترجمات README في هذا المستودع. راجع [المساهمة في الترجمات](CONTRIBUTING.md#translations) لإضافة ترجمة أو تحديثها.
+تُصان ترجمات README في هذا المستودع. راجع [المساهمة في الترجمات](../../CONTRIBUTING.md#translations) لإضافة ترجمة أو تحديثها.
 
 ## ♿ إمكانية الوصول
 
-يوفر Flectar Mail التنقل بلوحة المفاتيح والسمات الفاتحة والداكنة والتخطيطات المرنة. يستمر العمل على إمكانية الوصول. راجع [ACCESSIBILITY.md](ACCESSIBILITY.md) للاطلاع على الميزات الحالية وحدود الاختبار وكيفية الإبلاغ عن عائق.
+يوفر Flectar Mail التنقل بلوحة المفاتيح والسمات الفاتحة والداكنة والتخطيطات المرنة. يستمر العمل على إمكانية الوصول. راجع [ACCESSIBILITY.md](../../ACCESSIBILITY.md) للاطلاع على الميزات الحالية وحدود الاختبار وكيفية الإبلاغ عن عائق.
 
 ## 🔒 الأمان
 
-للإبلاغ عن ثغرة بصورة خاصة، اتبع [SECURITY.md](SECURITY.md). يرجى عدم نشر تفاصيل الثغرات في البلاغات العامة.
+للإبلاغ عن ثغرة بصورة خاصة، اتبع [SECURITY.md](../../SECURITY.md). يرجى عدم نشر تفاصيل الثغرات في البلاغات العامة.
 
 ## 🌐 مفتوح المصدر للجميع
 
-Flectar Mail تطبيق واحد مفتوح المصدر، ولا توجد نسخة مجتمعية منفصلة. العميل مرخّص بموجب [GNU Affero General Public License v3](LICENSE). اقرأ [نظرة عامة على الترخيص](LICENSING.md) للتفاصيل العملية، أو راجع [CONTRIBUTING.md](CONTRIBUTING.md) للمساعدة في تطوير المشروع.
+Flectar Mail تطبيق واحد مفتوح المصدر، ولا توجد نسخة مجتمعية منفصلة. العميل مرخّص بموجب [GNU Affero General Public License v3](../../LICENSE). اقرأ [نظرة عامة على الترخيص](../../LICENSING.md) للتفاصيل العملية، أو راجع [CONTRIBUTING.md](../../CONTRIBUTING.md) للمساعدة في تطوير المشروع.
 
 ## 🫡 شكر وتقدير
 
