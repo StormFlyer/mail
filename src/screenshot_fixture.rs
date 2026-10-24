@@ -262,16 +262,25 @@ fixture_row!(AccountRow {
     smtp_host,
     smtp_port,
     mail_history,
-    calendar_connected,
-    calendar_enabled,
-    calendar_status,
-    caldav_url,
-    caldav_username,
+    calendar_connections,
+    provider_calendar_connected,
+    provider_calendar_error,
     carddav_connected,
     carddav_enabled,
     carddav_status,
     carddav_url,
     carddav_username
+});
+fixture_row!(CalendarConnectionRow {
+    id,
+    kind,
+    base_url,
+    host,
+    username,
+    calendar_name,
+    calendar_count,
+    enabled,
+    error
 });
 fixture_row!(MailProfileRow {
     id,

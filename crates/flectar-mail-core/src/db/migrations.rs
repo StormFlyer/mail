@@ -177,6 +177,23 @@ fn apply(conn: &mut Connection, migration: &Migration, target: i64) -> Result<()
 }
 
 fn rebuild(conn: &mut Connection, sql: &str, target: i64) -> Result<()> {
+    rebuild_tables(conn, "mail", target, |tx| {
+        tx.execute_batch(sql)?;
+        convert(tx, target)
+    })
+}
+
+/// Applies schema step `target` of the `store` database with foreign-key
+/// enforcement off, as SQLite's procedure for rebuilding a referenced table
+/// requires: dropping the old table then neither cascades into nor is
+/// blocked by the referencing rows. The step only commits when it introduced
+/// no foreign-key violation.
+pub(super) fn rebuild_tables(
+    conn: &mut Connection,
+    store: &str,
+    target: i64,
+    step: impl FnOnce(&Connection) -> Result<()>,
+) -> Result<()> {
     let enforced: bool = conn.pragma_query_value(None, "foreign_keys", |row| row.get(0))?;
     // The setting is ignored inside a transaction, so change it first.
     conn.pragma_update(None, "foreign_keys", false)?;
@@ -185,12 +202,11 @@ fn rebuild(conn: &mut Connection, sql: &str, target: i64) -> Result<()> {
         // Compare instead of requiring zero so a violation left by an older
         // build elsewhere in the profile cannot block this upgrade.
         let before = foreign_key_violations(&tx)?;
-        tx.execute_batch(sql)?;
-        convert(&tx, target)?;
+        step(&tx)?;
         let after = foreign_key_violations(&tx)?;
         if after > before {
             return Err(CoreError::Other(format!(
-                "mail database migration {target} would orphan existing data; the profile has not been changed."
+                "{store} database migration {target} would orphan existing data; the profile has not been changed."
             )));
         }
         tx.pragma_update(None, "user_version", target)?;
@@ -382,7 +398,12 @@ mod tests {
             ["account_id", "starred_count"]
         );
 
-        for forbidden in ["calendar_events", "calendars", "caldav_config"] {
+        for forbidden in [
+            "calendar_events",
+            "calendars",
+            "caldav_config",
+            "calendar_connections",
+        ] {
             assert!(!application_tables(&conn).contains(forbidden));
         }
         let seeded: i64 = conn

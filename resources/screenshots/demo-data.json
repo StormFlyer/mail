@@ -563,9 +563,31 @@
       "incoming_port": "993",
       "smtp_host": "smtp.gmail.com",
       "smtp_port": "465",
-      "calendar_connected": true,
-      "calendar_enabled": true,
-      "calendar_status": "Synced"
+      "calendar_connections": [
+        {
+          "id": 1,
+          "kind": "google",
+          "base_url": "https://apidata.googleusercontent.com/caldav/v2/alex%40flectar.com/events",
+          "host": "apidata.googleusercontent.com",
+          "username": "",
+          "calendar_name": "Alex",
+          "calendar_count": 3,
+          "enabled": true,
+          "error": ""
+        },
+        {
+          "id": 3,
+          "kind": "generic",
+          "base_url": "https://www.google.com/calendar/dav/team@flectar.com/events/",
+          "host": "www.google.com",
+          "username": "alex@flectar.com",
+          "calendar_name": "Flectar Team",
+          "calendar_count": 1,
+          "enabled": true,
+          "error": ""
+        }
+      ],
+      "provider_calendar_connected": true
     },
     {
       "id": 2,
@@ -582,9 +604,20 @@
       "incoming_port": "993",
       "smtp_host": "smtp.office365.com",
       "smtp_port": "587",
-      "calendar_connected": true,
-      "calendar_enabled": true,
-      "calendar_status": "Synced"
+      "calendar_connections": [
+        {
+          "id": 2,
+          "kind": "microsoft",
+          "base_url": "https://graph.microsoft.com/v1.0",
+          "host": "graph.microsoft.com",
+          "username": "",
+          "calendar_name": "Calendar",
+          "calendar_count": 2,
+          "enabled": true,
+          "error": ""
+        }
+      ],
+      "provider_calendar_connected": true
     }
   ],
   "FilesUi": {

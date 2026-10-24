@@ -6,7 +6,7 @@ use flectar_mail_core::{
     events::CoreEvent,
     models::{
         Account, AccountConfig, ActionKind, ActionParams, AddPasswordAccountArgs, Address,
-        CalendarConnection, CalendarEvent, CardDavConnection, ConnectCalendarArgs,
+        CalendarConnection, CalendarEvent, CardDavConnection, ConnectCaldavArgs,
         ConnectCardDavArgs, ContactRecordCursor, ContactRecordPage, CreateEventArgs, CustomTheme,
         DraftAttachmentIn, FolderInfo, Label, MailHistory, MailProfile, MailProtocol,
         MailboxBadgeCounts, MessageDetail, PerformActionArgs, PortableAccountConfig, Provider,
@@ -1592,24 +1592,27 @@ impl CoreMailSource {
                 .connect_microsoft_calendar(account_id, open_url)
                 .await
                 .map_err(|error| error.to_string())?,
-            Provider::Generic => return Err("use CalDAV for an IMAP account".into()),
+            Provider::Generic => return Err("add a CalDAV calendar for this account".into()),
         };
         Ok(())
     }
 
+    /// Add a CalDAV server to the account, or change the connection with
+    /// `connection_id`; an empty password keeps the one saved for it.
     pub async fn connect_caldav(
         &self,
         account_id: i64,
+        connection_id: Option<i64>,
         url: String,
         username: String,
         password: String,
     ) -> Result<(), String> {
         self.core
-            .connect_calendar(ConnectCalendarArgs {
+            .connect_caldav(ConnectCaldavArgs {
                 account_id,
-                kind: "generic".into(),
-                url: Some(url),
-                username: Some(username),
+                connection_id,
+                url,
+                username,
                 password: Some(password),
             })
             .await
@@ -1617,13 +1620,20 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
-    pub async fn set_account_calendar_enabled(
+    pub async fn set_calendar_connection_enabled(
         &self,
-        account_id: i64,
+        connection_id: i64,
         enabled: bool,
     ) -> Result<(), String> {
         self.core
-            .set_account_calendar_enabled(account_id, enabled)
+            .set_calendar_connection_enabled(connection_id, enabled)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn remove_calendar_connection(&self, connection_id: i64) -> Result<(), String> {
+        self.core
+            .remove_calendar_connection(connection_id)
             .await
             .map_err(|error| error.to_string())
     }
