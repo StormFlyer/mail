@@ -469,6 +469,9 @@ export struct MailAttachment {
     name: string,
     detail: string,
     previewable: bool,
+    // pdf, document, spreadsheet, presentation, image, video, audio,
+    // archive, code, calendar or file.
+    kind: string,
     thumbnail: image,
     has_thumbnail: bool,
 }

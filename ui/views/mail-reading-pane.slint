@@ -8,6 +8,7 @@ import { Button } from "../components/button.slint";
 import { IconButton, LineEdit, TextEdit, ToolbarIconButton } from "../components/controls.slint";
 import { DetailEmptyState } from "../components/detail-empty-state.slint";
 import { EmailLinkContextArea } from "../components/email-link-context-area.slint";
+import { FileTypeIcon } from "../components/file-type-icon.slint";
 import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
 import { LabelChip } from "../components/label-chip.slint";
 import { LoadingSkeletonBlock } from "../components/loading-skeleton.slint";
@@ -1675,15 +1676,12 @@ export component MailReadingPane inherits FocusScope {
                                                         image-fit: cover;
                                                         accessible-role: none;
                                                     }
-                                                    if !attachment.has_thumbnail : Image {
+                                                    if !attachment.has_thumbnail : FileTypeIcon {
                                                         x: 9px;
                                                         y: 9px;
                                                         width: 18px;
                                                         height: 18px;
-                                                        source: @image-url("../icons/lucide/outline/file.svg");
-                                                        colorize: root.secondary-text;
-                                                        image-fit: contain;
-                                                        accessible-role: none;
+                                                        kind: attachment.kind;
                                                     }
                                                 }
 
