@@ -657,6 +657,12 @@ struct InboxState {
     favicon_tx: UiSender<FaviconUpdate>,
     connected_accounts: Vec<Account>,
     account_configs: Vec<AccountConfig>,
+    /// Mail imported into folders on this device, which belongs to no
+    /// account.
+    local_mail: Option<flectar_mail_core::models::LocalMail>,
+    /// Counts reloads of `local_mail`, so an earlier one never lands after a
+    /// later one.
+    local_mail_reloads: u64,
     account_presentation: AccountPresentationSettings,
     /// The active profile's accounts, sorted. The mail view shows only these;
     /// `None` shows every connected account.
@@ -953,17 +959,25 @@ fn perform_mail_list_action(
         } else {
             vec![trigger_id]
         };
+        // Local mail has no archive or spam, so a selection that includes
+        // some moves only the rest.
+        let local_mail = state.local_mail.map(|local| local.account_id);
+        let needs_roles = matches!(action, "archive" | "unarchive" | "spam" | "not_spam");
         let operations = ids
             .into_iter()
-            .map(|id| {
-                let thread_id = state
-                    .messages
-                    .iter()
-                    .find(|message| message.id == id)
-                    .ok_or_else(|| "message is no longer available".to_owned())?
-                    .thread_id
-                    .ok_or_else(|| "message thread is unavailable".to_owned())?;
-                Ok((id, thread_id))
+            .filter_map(|id| {
+                let Some(message) = state.messages.iter().find(|message| message.id == id) else {
+                    return Some(Err("message is no longer available".to_owned()));
+                };
+                if needs_roles && Some(message.account_id) == local_mail {
+                    return None;
+                }
+                Some(
+                    message
+                        .thread_id
+                        .map(|thread_id| (id, thread_id))
+                        .ok_or_else(|| "message thread is unavailable".to_owned()),
+                )
             })
             .collect::<Result<Vec<_>, String>>()?;
         (
@@ -1121,6 +1135,8 @@ impl InboxState {
             favicon_tx,
             connected_accounts: Vec::new(),
             account_configs: Vec::new(),
+            local_mail: None,
+            local_mail_reloads: 0,
             account_presentation: AccountPresentationSettings::default(),
             profile_accounts: None,
             calendar_connections: Vec::new(),
@@ -1152,11 +1168,14 @@ impl InboxState {
     }
 
     /// Whether the mail view shows this account's mail: every account's
-    /// unless a profile is active.
+    /// unless a profile is active. Every profile shows local mail.
     fn shows_account(&self, account_id: i64) -> bool {
-        self.profile_accounts
-            .as_ref()
-            .is_none_or(|accounts| accounts.binary_search(&account_id).is_ok())
+        self.local_mail
+            .is_some_and(|local| local.account_id == account_id)
+            || self
+                .profile_accounts
+                .as_ref()
+                .is_none_or(|accounts| accounts.binary_search(&account_id).is_ok())
     }
 
     /// The connected accounts the mail view shows.
@@ -1166,6 +1185,12 @@ impl InboxState {
             .filter(|account| self.shows_account(account.id))
             .cloned()
             .collect()
+    }
+
+    /// Whether there is any mail to show: an account's, or mail kept on this
+    /// device.
+    fn has_mail(&self) -> bool {
+        !self.connected_accounts.is_empty() || self.local_mail.is_some()
     }
 
     /// Whether `scope` belongs to a shown account, or to none. Folders and
@@ -3575,6 +3600,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     let mail_metadata_state = Rc::clone(&state);
+    let mail_metadata_runtime = Rc::clone(&runtime);
     let mail_metadata_app = app.as_weak();
     let mail_metadata_refresh_in_progress_for_result =
         Rc::clone(&mail_metadata_refresh_in_progress);
@@ -3590,10 +3616,27 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         continue;
                     }
                     let mut state = mail_metadata_state.borrow_mut();
+                    // An import created local mail, or its mail was deleted.
+                    let local_mail = metadata.local_mail;
+                    let local_mail_changed =
+                        local_mail != state.local_mail.map(|local| local.account_id);
                     state.mailboxes = metadata.mailboxes;
                     state.unified_mailboxes = metadata.unified_mailboxes;
                     state.inbox_count = metadata.inbox_count;
                     drop(state);
+                    if local_mail_changed {
+                        // Its section is named at once; its size follows.
+                        apply_local_mail(
+                            &app,
+                            &mail_metadata_state,
+                            local_mail.map(|account_id| flectar_mail_core::models::LocalMail {
+                                account_id,
+                                messages: 0,
+                                bytes: 0,
+                            }),
+                        );
+                        refresh_local_mail(&app, &mail_metadata_state, &mail_metadata_runtime);
+                    }
                     refresh_list_metadata(&app, &mail_metadata_state);
                 }
                 Err(error) => {
@@ -4129,6 +4172,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         remote_images_enabled,
                         accounts,
                         account_configs,
+                        local_mail,
                         settings,
                     } = snapshot;
 
@@ -4149,6 +4193,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         // accounts, which also become the source of truth.
                         let _ = state.set_connected_accounts(accounts);
                         state.account_configs = account_configs;
+                        state.local_mail = local_mail;
                         state.set_scope(scope);
                         state.remote_images_enabled = allow_remote_images;
                         state.mark_read_on_open = settings
@@ -4165,7 +4210,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         } else {
                             None
                         };
-                        if let Some(page) = page.filter(|page| page.account_count > 0) {
+                        if let Some(page) =
+                            page.filter(|page| page.account_count > 0 || local_mail.is_some())
+                        {
                             state.using_core = true;
                             if state.scope == Scope::UNIFIED_INBOX {
                                 state.inbox_count = page.messages.len();
@@ -4220,7 +4267,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         startup_state.borrow().remote_images_enabled,
                     );
 
-                    refresh_connected_accounts(&app, &startup_state);
+                    apply_local_mail(&app, &startup_state, local_mail);
                     refresh_rows_only(&app, &startup_state, &startup_runtime);
                     refresh_list_metadata(&app, &startup_state);
                     app.set_startup_hydrated(true);
@@ -4625,11 +4672,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             if let Some(removal) = update.account_removal.as_mut().filter(|removal| removal.removed) {
                 let current_page = {
                     let mut state = ui_task_state.borrow_mut();
-                    if let Some(metadata) = removal
-                        .metadata
-                        .take()
-                        .filter(|_| !state.connected_accounts.is_empty())
-                    {
+                    if let Some(metadata) = removal.metadata.take().filter(|_| state.has_mail()) {
                         state.mailboxes = metadata.mailboxes;
                         state.unified_mailboxes = metadata.unified_mailboxes;
                         state.inbox_count = metadata.inbox_count;
@@ -4658,7 +4701,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 clear_contact_form(&app);
                 apply_calendar(&app, &removal_calendar.borrow(), Local::now().date_naive());
                 let _ = render_current(&app, &ui_task_state, &ui_task_runtime);
-                if !current_page && !ui_task_state.borrow().connected_accounts.is_empty() {
+                if !current_page && ui_task_state.borrow().has_mail() {
                     let _ = refresh_from_source(&app, &ui_task_state, &ui_task_runtime, false, &[]);
                 }
                 removal_metadata_requested.set(true);
@@ -4779,15 +4822,20 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         }
         let account_id = i64::from(account_id);
-        let (core, scope, query, limit, profile) = {
+        let (core, scope, query, limit, profile, local) = {
             let state = state_for_account_delete.borrow();
             let Some(core) = state.core.clone() else {
                 return;
             };
-            if !state
-                .connected_accounts
-                .iter()
-                .any(|account| account.id == account_id)
+            // Mail kept on this device is deleted like an account.
+            let local = state
+                .local_mail
+                .is_some_and(|local| local.account_id == account_id);
+            if !local
+                && !state
+                    .connected_accounts
+                    .iter()
+                    .any(|account| account.id == account_id)
             {
                 return;
             }
@@ -4805,18 +4853,31 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 state.query.clone(),
                 limit,
                 state.profile_accounts.clone(),
+                local,
             )
         };
         let calendar_month = calendar_for_account_delete.borrow().visible_month;
         app.set_account_setup_in_progress(true);
-        app.set_sync_status(UiMessage::plain("Removing account…"));
+        app.set_sync_status(if local {
+            UiMessage::plain("Deleting mail on this device…")
+        } else {
+            UiMessage::plain("Removing account…")
+        });
         let updates = ui_task_tx_for_account_delete.clone();
         runtime_for_account_delete.spawn(async move {
             let result = core.remove_account(account_id).await;
             let accounts = core.load_account_snapshot().await.ok();
             // Core deletion is journaled across stores. A late cleanup error
             // can occur after the account row was deleted; reflect that fact.
-            let removed = account_was_removed(account_id, &result, accounts.as_ref());
+            let removed = if local {
+                result.is_ok()
+                    || core
+                        .load_local_mail()
+                        .await
+                        .is_ok_and(|local| local.is_none_or(|local| local.account_id != account_id))
+            } else {
+                account_was_removed(account_id, &result, accounts.as_ref())
+            };
             // Match the selection `reconcile_removed_account` will leave.
             let scope = accounts.as_ref().map_or(scope, |snapshot| {
                 let shown = snapshot
@@ -4857,6 +4918,17 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     None
                 };
             let message = match result {
+                Ok(()) if local && (metadata.is_none() || page.is_none()) => {
+                    UiMessage::plain("Mail on this device deleted. Mail refresh will retry.")
+                }
+                Ok(()) if local => UiMessage::plain("Mail on this device deleted."),
+                Err(error) if local && removed => UiMessage::detail(
+                    "Mail on this device deleted; local cleanup needs a retry: {}",
+                    error,
+                ),
+                Err(error) if local => {
+                    UiMessage::detail("Could not delete mail on this device: {}", error)
+                }
                 Ok(()) if metadata.is_none() || page.is_none() => {
                     UiMessage::plain("Account removed. Mail refresh will retry.")
                 }
@@ -5944,12 +6016,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     let app_weak = app.as_weak();
+    let state_for_open = Rc::clone(&state);
     let intent_for_open = Rc::clone(&compose_intent);
     let document_for_open = Rc::clone(&compose_document);
     let editor_for_open = Rc::clone(&compose_editor);
     app.on_open_compose(move || {
         if let Some(app) = app_weak.upgrade() {
             if app.get_compose_open() {
+                return;
+            }
+            // Only local mail is here: nothing could send it.
+            if state_for_open.borrow().connected_accounts.is_empty() {
+                app.set_render_status(UiMessage::plain("Add an account to send mail."));
                 return;
             }
             *intent_for_open.borrow_mut() = ComposeIntent::default();
@@ -6120,6 +6198,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         }
 
+        // Local mail is answered from an account.
+        if state_for_message_compose
+            .borrow()
+            .connected_accounts
+            .is_empty()
+        {
+            app.set_render_status(UiMessage::plain("Add an account to send mail."));
+            return;
+        }
         let source = match runtime_for_message_compose
             .block_on(core.load_compose_source(&row, conversation_message_id))
         {
