@@ -21,7 +21,6 @@ use crate::db::repo::{
 };
 use crate::error::{CoreError, Result};
 use crate::events::CoreEvent;
-use crate::mime::ParsedBody;
 use crate::models::{
     AccountConfig, AccountSettings, ConnectionSecurity, KeepOnServer, now_ms, roles,
 };
@@ -796,7 +795,7 @@ async fn store(
     raw: Vec<u8>,
     live: bool,
 ) -> Result<()> {
-    let (parsed, raw) = tokio::task::spawn_blocking(move || (parse(&raw), raw))
+    let (parsed, raw) = tokio::task::spawn_blocking(move || (ingest::parse_or_text(&raw), raw))
         .await
         .map_err(|error| CoreError::Other(error.to_string()))?;
     let path = new_original_path(ctx, account_id);
@@ -874,20 +873,6 @@ async fn store(
         });
     }
     Ok(())
-}
-
-/// Every retrieved message is kept: one that can't be parsed is stored
-/// whole and shown as text.
-fn parse(raw: &[u8]) -> ParsedBody {
-    crate::mime::parse_message(raw).unwrap_or_else(|error| {
-        tracing::warn!(%error, "storing an unparseable POP3 message as text");
-        let text = String::from_utf8_lossy(raw).into_owned();
-        ParsedBody {
-            snippet: crate::mime::make_body_snippet(Some(&text), None),
-            text: Some(text),
-            ..ParsedBody::default()
-        }
-    })
 }
 
 /// Download a stored message's original again after its file went missing

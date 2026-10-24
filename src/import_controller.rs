@@ -88,6 +88,7 @@ fn source_error(error: SourceError) -> (&'static str, String) {
         SourceError::MultipleProfiles => ("multiple-profiles", String::new()),
         SourceError::NotAProfile => ("not-a-profile", String::new()),
         SourceError::NetworkProfile => ("network-profile", String::new()),
+        SourceError::NoMail => ("unknown-format", String::new()),
     }
 }
 
@@ -242,6 +243,9 @@ pub(super) fn register_import_callbacks(
                         Ok(Source::Accounts(inventory)) => inventory,
                         Ok(Source::FlectarBackup(bytes)) => {
                             return Ok(Ok(Inspected::Backup(bytes)));
+                        }
+                        Ok(Source::Mail(_)) => {
+                            return Ok(Err(source_error(SourceError::UnknownFormat)));
                         }
                         Err(error) => return Ok(Err(source_error(error))),
                     };

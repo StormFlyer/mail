@@ -21,6 +21,7 @@ pub mod graphcal;
 mod http_body;
 pub mod imap;
 pub mod jmap;
+pub mod mail_import;
 pub mod mail_security;
 mod mbox;
 pub mod migration;
@@ -64,6 +65,10 @@ const MAX_DRAFT_ATTACHMENTS: usize = 32;
 const MAX_DRAFT_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 const MAX_DRAFT_BODY_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHED_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
+/// Originals written durably before the transaction that refers to them
+/// commits. One nothing refers to was left by an interrupted write.
+const DURABLE_ORIGINAL_SUFFIXES: [&str; 2] =
+    [sync::pop3::ORIGINAL_SUFFIX, mail_import::ORIGINAL_SUFFIX];
 const MAX_CACHED_HEADER_BYTES: usize = 256 * 1024;
 const SEND_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 const SEND_STATUS_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
@@ -2116,9 +2121,10 @@ impl Core {
     }
 
     /// Remove what interrupted mail writes left behind: temporary files, and
-    /// POP3 originals nothing refers to because their download stopped
-    /// before it was committed. That session never sent QUIT, so the server
-    /// still has those messages. Runs before any account worker writes.
+    /// POP3 and imported originals nothing refers to because their
+    /// transaction never committed. A POP3 session that stopped then never
+    /// sent QUIT, so the server still has those messages, and an import can
+    /// be run again. Runs before any account worker writes.
     async fn remove_interrupted_mail_files(&self) -> Result<usize> {
         let mut accounts = match tokio::fs::read_dir(self.paths.mail_root()).await {
             Ok(accounts) => accounts,
@@ -2128,10 +2134,12 @@ impl Core {
         let stored: HashSet<std::ffi::OsString> = self
             .db
             .read(|conn| {
-                let mut statement =
-                    conn.prepare("SELECT raw_path FROM messages WHERE raw_path LIKE '%' || ?1")?;
+                let mut statement = conn.prepare(
+                    "SELECT raw_path FROM messages
+                     WHERE raw_path LIKE '%' || ?1 OR raw_path LIKE '%' || ?2",
+                )?;
                 let paths = statement
-                    .query_map([sync::pop3::ORIGINAL_SUFFIX], |row| row.get::<_, String>(0))?
+                    .query_map(DURABLE_ORIGINAL_SUFFIXES, |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 Ok(paths
                     .iter()
@@ -2149,10 +2157,11 @@ impl Core {
             let mut files = tokio::fs::read_dir(account.path()).await?;
             while let Some(file) = files.next_entry().await? {
                 let name = file.file_name();
-                if name
-                    .to_str()
-                    .is_some_and(|name| name.ends_with(sync::pop3::ORIGINAL_SUFFIX))
-                    && !stored.contains(&name)
+                if name.to_str().is_some_and(|name| {
+                    DURABLE_ORIGINAL_SUFFIXES
+                        .iter()
+                        .any(|suffix| name.ends_with(suffix))
+                }) && !stored.contains(&name)
                     && file.file_type().await?.is_file()
                 {
                     tokio::fs::remove_file(file.path()).await?;
