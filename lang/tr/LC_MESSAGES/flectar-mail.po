@@ -4453,6 +4453,10 @@ msgid "GPU — WGPU"
 msgstr "GPU — WGPU"
 
 #: ui/dialogs/settings-dialog.slint:1396
+msgid "GPU — WGPU could not start, so CPU — Low Memory is active."
+msgstr ""
+
+#: ui/dialogs/settings-dialog.slint:1396
 msgid "Restart required. Your current renderer is still active."
 msgstr "Yeniden başlatma gerekiyor. Geçerli görüntüleyiciniz hâlâ etkin."
 

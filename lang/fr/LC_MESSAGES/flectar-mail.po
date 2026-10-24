@@ -5217,6 +5217,10 @@ msgid "GPU — WGPU"
 msgstr "GPU — WGPU"
 
 #: ui/dialogs/settings-dialog.slint:1396
+msgid "GPU — WGPU could not start, so CPU — Low Memory is active."
+msgstr ""
+
+#: ui/dialogs/settings-dialog.slint:1396
 #, fuzzy
 msgid "Restart required. Your current renderer is still active."
 msgstr "Redémarrage nécessaire. Le moteur de rendu actuel reste actif."

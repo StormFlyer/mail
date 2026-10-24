@@ -647,6 +647,7 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         crate::renderer_preferences::RendererMode::Cpu,
         false,
         true,
+        false,
     );
     let renderer_settings = app.global::<RendererSettings>();
     renderer_settings.invoke_choose("gpu".into());
@@ -674,10 +675,23 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         crate::renderer_preferences::RendererMode::Cpu,
         false,
         true,
+        false,
     );
     renderer_settings.invoke_choose("gpu".into());
     assert_eq!(renderer_settings.get_preferred(), "cpu");
     assert!(!renderer_settings.get_error().is_empty());
+    // After a failed GPU startup the app restarts in CPU mode and says so.
+    crate::renderer_preferences::register(
+        &app,
+        preference_path.clone(),
+        crate::renderer_preferences::RendererMode::Gpu,
+        false,
+        true,
+        true,
+    );
+    assert!(renderer_settings.get_gpu_failed());
+    assert_eq!(renderer_settings.get_preferred(), "gpu");
+    assert_eq!(renderer_settings.get_active(), "cpu");
     app.set_settings_open(false);
     app.set_active_view("contacts".into());
     app.set_contacts(ModelRc::default());
