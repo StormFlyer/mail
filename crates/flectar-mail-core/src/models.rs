@@ -1628,6 +1628,54 @@ impl TimeFormat {
     }
 }
 
+/// The application icon shown by the window, tray, Dock, and launcher.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppIcon {
+    #[default]
+    Orange,
+    Graphite,
+    Light,
+    Blue,
+    Green,
+    Purple,
+}
+
+impl AppIcon {
+    pub const ALL: [Self; 6] = [
+        Self::Orange,
+        Self::Graphite,
+        Self::Light,
+        Self::Blue,
+        Self::Green,
+        Self::Purple,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Orange => "orange",
+            Self::Graphite => "graphite",
+            Self::Light => "light",
+            Self::Blue => "blue",
+            Self::Green => "green",
+            Self::Purple => "purple",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|icon| icon.as_str() == value)
+    }
+}
+
+/// Unknown values, including those written by newer versions, fall back to
+/// the default icon instead of failing the whole settings blob.
+impl<'de> Deserialize<'de> for AppIcon {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::parse(&value).unwrap_or_default())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -1665,6 +1713,8 @@ pub struct Settings {
     /// the default semantic palette.
     #[serde(default)]
     pub monochrome_sidebar_icons: bool,
+    #[serde(default)]
+    pub app_icon: AppIcon,
     /// UI language: "system" follows the OS locale, otherwise a code like "en".
     #[serde(default = "default_language")]
     pub language: String,
@@ -1941,6 +1991,7 @@ pub struct StartupPresentation {
     /// Whether a background launch may stay in the system tray without
     /// first showing the window.
     pub close_to_tray: bool,
+    pub app_icon: AppIcon,
 }
 fn default_theme_preset() -> String {
     "default".into()
@@ -1959,6 +2010,7 @@ impl Default for Settings {
             workspace_list_pane_width: default_workspace_list_pane_width(),
             window_frame: default_window_frame(),
             monochrome_sidebar_icons: false,
+            app_icon: AppIcon::default(),
             language: "system".into(),
             time_format: TimeFormat::default(),
             calendar_week_start: default_calendar_week_start(),
@@ -2281,6 +2333,7 @@ mod tests {
         assert_eq!(s.ai_base_url, crate::ai::DEFAULT_BASE_URL);
         assert!(s.show_avatars);
         assert_eq!(s.message_appearance, MessageAppearance::System);
+        assert_eq!(s.app_icon, AppIcon::Orange);
         assert!(s.group_mail_by_date);
         assert_eq!(s.workspace_layout, "default");
         assert_eq!(s.workspace_list_pane_width, MIN_WORKSPACE_LIST_PANE_WIDTH);
@@ -2305,6 +2358,22 @@ mod tests {
             assert_eq!(restored.time_format, format);
         }
         assert_eq!(TimeFormat::parse("system"), None);
+    }
+
+    #[test]
+    fn app_icon_round_trips_and_tolerates_unknown_values() {
+        for icon in AppIcon::ALL {
+            assert_eq!(AppIcon::parse(icon.as_str()), Some(icon));
+            let json = serde_json::to_string(&icon).unwrap();
+            assert_eq!(json, format!("\"{}\"", icon.as_str()));
+            assert_eq!(serde_json::from_str::<AppIcon>(&json).unwrap(), icon);
+        }
+        assert_eq!(AppIcon::parse("Graphite"), None);
+        let settings: Settings = serde_json::from_str(
+            r#"{"theme":"system","undoSendSeconds":10,"appIcon":"from-a-newer-version"}"#,
+        )
+        .unwrap();
+        assert_eq!(settings.app_icon, AppIcon::Orange);
     }
 
     #[test]

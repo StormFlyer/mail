@@ -75,7 +75,7 @@ Si un e-mail s’affiche incorrectement, [signalez-le](https://github.com/flecta
 
 ## 🎨 À votre image
 
-Choisissez l’espace de travail adapté à votre façon de gérer vos e-mails. Conservez la disposition détaillée à trois volets, passez à une vue minimaliste, choisissez un thème clair ou sombre, sélectionnez une palette intégrée ou créez la vôtre, et affichez ou masquez les avatars des expéditeurs.
+Choisissez l’espace de travail adapté à votre façon de gérer vos e-mails. Conservez la disposition détaillée à trois volets, passez à une vue minimaliste, choisissez un thème clair ou sombre, sélectionnez une palette intégrée ou créez la vôtre, et affichez ou masquez les avatars des expéditeurs. Vous pouvez aussi changer la couleur de l’icône de l’application : dans la barre des tâches ou le Dock, dans la zone de notification, dans le lanceur d’applications Linux et sur l’écran d’accueil d’Android et d’iOS.
 
 L’apparence des messages peut suivre le thème de l’application ou rester claire ou sombre indépendamment. La palette choisie s’applique au HTML, au texte brut et au mode lecture. Pour afficher temporairement les couleurs d’origine de l’expéditeur, utilisez l’icône de contraste entre la recherche et le mode lecture dans la barre d’outils du message sur ordinateur, ou choisissez **Afficher les couleurs d’origine** dans le menu à trois points du message, quelle que soit la taille de l’écran.
 
@@ -319,7 +319,7 @@ Lorsque des versions de test sont publiées, téléchargez-les depuis [GitHub Re
 
 Les préversions Windows ne sont pas signées ; celles de macOS portent une signature ad hoc et ne sont pas notariées. Les avertissements de sécurité du système sont donc attendus. Installez les mises à jour manuellement.
 
-La préversion Flatpak est fournie comme paquet de test indépendant. Elle n’est pas encore disponible sur Flathub et ne reçoit donc pas ses mises à jour automatiques. L’option de fermeture dans la zone de notification est désactivée tant que son composant ne peut pas utiliser un nom D-Bus compatible avec le bac à sable. Le démarrage automatique à l’ouverture de session passe par le portail Background du bureau et ouvre la fenêtre, puisqu’il n’y a pas de zone de notification où démarrer.
+La préversion Flatpak est fournie comme paquet de test indépendant. Elle n’est pas encore disponible sur Flathub et ne reçoit donc pas ses mises à jour automatiques. L’option de fermeture dans la zone de notification est désactivée tant que son composant ne peut pas utiliser un nom D-Bus compatible avec le bac à sable. Le démarrage automatique à l’ouverture de session passe par le portail Background du bureau et ouvre la fenêtre, puisqu’il n’y a pas de zone de notification où démarrer. L’icône de l’application y reste orange, car le bac à sable ne peut pas modifier l’icône du lanceur sur le système hôte.
 
 Installez le paquet Linux téléchargé avec `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` ou `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak`. Lancez la version Flatpak avec `flatpak run com.flectar.mail`.
 
