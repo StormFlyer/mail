@@ -158,13 +158,14 @@ pub struct JmapLeftover {
     pub received_at: i64,
 }
 
-/// The account's own drafts and queued sends are not leftovers: they are
-/// created on the server later.
+/// Only mail that came from a server waits for its copy here: the account's
+/// own drafts and the sent mail only this device holds are kept, and queued
+/// sends are created on the server later.
 pub fn jmap_leftovers(conn: &Connection, account_id: i64) -> Result<Vec<JmapLeftover>> {
     let mut stmt = conn.prepare_cached(
         "SELECT m.id, m.thread_id, m.raw_path, COALESCE(m.internal_date, m.date)
          FROM messages m
-         WHERE m.account_id = ?1 AND m.jmap_id IS NULL
+         WHERE m.account_id = ?1 AND m.jmap_id IS NULL AND m.relink_pending = 1
            AND NOT EXISTS (SELECT 1 FROM drafts_meta d WHERE d.message_id = m.id)",
     )?;
     let rows = stmt
@@ -351,11 +352,11 @@ pub fn set_uid_and_folder(
     Ok(())
 }
 
-/// What an IMAP server said about the account's mail, or a folder's, no
-/// longer holds: another server or protocol took over, or the mailbox was
-/// recreated. Its UIDs go, and the mail that came from a server waits to be
-/// matched by Message-ID with its copy on this one. The account's own drafts
-/// and the sent mail only this device holds keep their place.
+/// What the server said about the account's mail, or a folder's, no longer
+/// holds: another server or protocol took over, or the mailbox was recreated.
+/// UIDs go, and the mail that came from a server waits to be matched by
+/// Message-ID with its copy on the current one. The account's own drafts and
+/// the sent mail only this device holds keep their place.
 pub fn await_relink(conn: &Connection, account_id: i64, folder_id: Option<i64>) -> Result<()> {
     conn.execute(
         "UPDATE messages SET relink_pending = 1
@@ -429,35 +430,12 @@ pub fn drop_unrelinked_imap_mail(
         }
         paths.extend(path);
     }
-    let stranded = conn
-        .prepare(
-            "SELECT m.id, m.thread_id,
-                    COALESCE(f.role, CASE
-                      WHEN EXISTS (SELECT 1 FROM drafts_meta d WHERE d.message_id = m.id)
-                        THEN 'drafts'
-                      WHEN m.is_outgoing = 1 THEN 'sent'
-                    END)
-             FROM messages m JOIN folders f ON f.id = m.folder_id
-             WHERE m.account_id = ?1 AND m.relink_pending = 0
-               AND (f.missing_on_server = 1 OR f.jmap_id IS NOT NULL)",
-        )?
-        .query_map(params![account_id], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, Option<i64>>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (id, thread_id, role) in stranded {
-        let Some(role) = role else { continue };
-        let Some(home) = super::folders::by_role(conn, account_id, &role)? else {
-            continue;
-        };
-        set_uid_and_folder(conn, id, home.id, None)?;
-        if let Some(thread_id) = thread_id
-            && !thread_ids.contains(&thread_id)
-        {
+    for thread_id in rehome_mail(
+        conn,
+        account_id,
+        "f.missing_on_server = 1 OR f.jmap_id IS NOT NULL",
+    )? {
+        if !thread_ids.contains(&thread_id) {
             thread_ids.push(thread_id);
         }
     }
@@ -471,6 +449,52 @@ pub fn drop_unrelinked_imap_mail(
         params![account_id],
     )?;
     Ok((thread_ids, paths))
+}
+
+/// Moves the account's mail out of the folders `leaving` selects (as `f`):
+/// to the account's folder for the same purpose as the one it is in, or else
+/// to Drafts for its drafts and Sent for its sent mail. Mail still waiting
+/// for its copy on the server, and mail without such a folder, stays.
+/// Returns the threads of mail that moved.
+pub(crate) fn rehome_mail(conn: &Connection, account_id: i64, leaving: &str) -> Result<Vec<i64>> {
+    let stranded = conn
+        .prepare(&format!(
+            "SELECT m.id, m.thread_id, f.role,
+                    CASE
+                      WHEN EXISTS (SELECT 1 FROM drafts_meta d WHERE d.message_id = m.id)
+                        THEN 'drafts'
+                      WHEN m.is_outgoing = 1 THEN 'sent'
+                    END
+             FROM messages m JOIN folders f ON f.id = m.folder_id
+             WHERE m.account_id = ?1 AND m.relink_pending = 0 AND ({leaving})"
+        ))?
+        .query_map(params![account_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<i64>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut thread_ids = Vec::new();
+    for (id, thread_id, folder_role, own_role) in stranded {
+        let mut home = None;
+        for role in [folder_role, own_role].into_iter().flatten() {
+            home = super::folders::by_role(conn, account_id, &role)?;
+            if home.is_some() {
+                break;
+            }
+        }
+        let Some(home) = home else { continue };
+        set_uid_and_folder(conn, id, home.id, None)?;
+        if let Some(thread_id) = thread_id
+            && !thread_ids.contains(&thread_id)
+        {
+            thread_ids.push(thread_id);
+        }
+    }
+    Ok(thread_ids)
 }
 
 pub fn set_flags(conn: &Connection, id: i64, is_read: bool, is_starred: bool) -> Result<()> {

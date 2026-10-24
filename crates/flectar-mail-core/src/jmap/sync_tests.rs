@@ -1199,7 +1199,9 @@ async fn full_sync_after_a_server_change_keeps_only_mail_on_the_new_server() {
                    (2, 1, 'Inbox', 'inbox', 'inbox-remote'),
                    (3, 1, 'Archive', 'archive', NULL),
                    (4, 1, 'Drafts', 'drafts', NULL),
-                   (5, 1, 'Drafts on the server', 'drafts', 'drafts-remote');",
+                   (5, 1, 'Drafts on the server', 'drafts', 'drafts-remote'),
+                   (6, 1, 'Sent', 'sent', NULL),
+                   (7, 1, 'Sent on the server', 'sent', 'sent-remote');",
             )?;
             let imap_copy =
                 |folder: i64, uid: i64, message_id: &str, at: chrono::DateTime<chrono::Utc>| {
@@ -1224,8 +1226,23 @@ async fn full_sync_after_a_server_change_keeps_only_mail_on_the_new_server() {
             let draft = imap_copy(4, 3, "draft@mail.example", recent)?;
             conn.execute("UPDATE messages SET is_draft=1 WHERE id=?1", [draft])?;
             conn.execute("INSERT INTO drafts_meta (message_id) VALUES (?1)", [draft])?;
+            // Sent mail the IMAP server never had a copy of, in its folder and
+            // in one this server has nothing like.
+            for (folder, message_id) in [
+                (6, "sent-here@mail.example"),
+                (3, "filed-here@mail.example"),
+            ] {
+                conn.execute(
+                    "INSERT INTO messages (account_id, folder_id, message_id, subject,
+                       from_addr, date, internal_date, is_outgoing)
+                     VALUES (1, ?1, ?2, 'Conversation', 'me@test.dev', ?3, ?3, 1)",
+                    params![folder, message_id, recent.timestamp_millis()],
+                )?;
+            }
             let gone_action =
                 repo::actions::enqueue(conn, 1, "trash", Some(gone), None, &json!({}), None)?;
+            // As the account's move to this server left it.
+            repo::messages::await_relink(conn, 1, None)?;
             Ok((gone_action, draft))
         })
         .await
@@ -1278,14 +1295,22 @@ async fn full_sync_after_a_server_change_keeps_only_mail_on_the_new_server() {
                     ("email-new".to_owned(), 2, None),
                     ("email-old".to_owned(), 2, None),
                     ("email-recent".to_owned(), 2, None),
+                    ("filed-here@mail.example".to_owned(), 7, None),
+                    ("sent-here@mail.example".to_owned(), 7, None),
                 ]
             );
+            let waiting: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM messages WHERE relink_pending = 1",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(waiting, 0);
             assert!(repo::messages::get_row(conn, draft)?.is_some());
             let folders = conn
                 .prepare("SELECT id FROM folders ORDER BY id")?
                 .query_map([], |row| row.get::<_, i64>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            assert_eq!(folders, [2, 5]);
+            assert_eq!(folders, [2, 5, 7]);
             assert_eq!(
                 repo::actions::get(conn, gone_action)?.unwrap().state,
                 "cancelled"

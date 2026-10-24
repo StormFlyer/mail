@@ -331,18 +331,21 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
     {
         super::pop3::forget_server(conn, id)?;
     }
-    // UIDs only identify messages on the IMAP server that issued them. Mail
-    // from the previous server or protocol keeps its local state and waits to
-    // be matched by Message-ID with its copy on this server; the IMAP worker
-    // removes what isn't there once every folder has its history. Sending,
-    // and filing what was sent, don't depend on the old server, so they stay
-    // queued. This runs before the JMAP identities below are forgotten: they
-    // tell the mail that came from a server apart from the sent mail only
-    // this device holds.
     let imap_identity_changed = a.mail_protocol == MailProtocol::Imap
         && (old_protocol != MailProtocol::Imap
             || !old_incoming_host.eq_ignore_ascii_case(a.incoming_host)
             || old_outgoing.2 != a.username);
+    // Mail from the previous server or protocol keeps its local state and
+    // waits to be matched by Message-ID with its copy on the new server; what
+    // isn't there goes once the new server's mail has been gone through. This
+    // runs before the identities below are forgotten: they tell the mail that
+    // came from a server apart from the sent mail only this device holds.
+    if imap_identity_changed || jmap_identity_changed {
+        super::messages::await_relink(conn, id, None)?;
+    }
+    // UIDs only identify messages on the IMAP server that issued them.
+    // Sending, and filing what was sent, don't depend on the old server, so
+    // they stay queued.
     if imap_identity_changed {
         conn.execute(
             "UPDATE pending_actions
@@ -352,7 +355,6 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
                AND kind NOT IN ('send','append_sent')",
             params![id, now_ms()],
         )?;
-        super::messages::await_relink(conn, id, None)?;
         conn.execute(
             "UPDATE folders SET uidvalidity=NULL, uidnext=NULL, highestmodseq=NULL,
                     last_seen_uid=0, backfill_cursor=NULL, backfill_done=0
@@ -361,12 +363,7 @@ pub fn update_password(conn: &Connection, id: i64, a: &NewAccount) -> Result<()>
         )?;
         conn.execute("DELETE FROM sync_failures WHERE account_id=?1", params![id])?;
     } else if a.mail_protocol != MailProtocol::Imap {
-        // Only the IMAP worker settles these.
-        conn.execute(
-            "UPDATE messages SET relink_pending=0
-             WHERE account_id=?1 AND relink_pending=1",
-            params![id],
-        )?;
+        // Only an IMAP server leaves folders out of its list.
         conn.execute(
             "UPDATE folders SET missing_on_server=0
              WHERE account_id=?1 AND missing_on_server=1",
@@ -895,7 +892,17 @@ mod tests {
         )
         .unwrap();
         crate::db::repo::actions::set_state(&conn, send, "inflight", None).unwrap();
+        let waiting = |conn: &Connection| {
+            conn.query_row(
+                "SELECT relink_pending FROM messages WHERE account_id=?1",
+                params![id],
+                |row| row.get::<_, bool>(0),
+            )
+            .unwrap()
+        };
+        assert!(!waiting(&conn));
         update_password(&conn, id, &changed).unwrap();
+        assert!(waiting(&conn), "mail of the old server waits for its copy");
         assert!(
             conn.query_row(
                 "SELECT email_state FROM jmap_sync_state WHERE account_id=?1",
@@ -1189,10 +1196,15 @@ mod tests {
         .unwrap();
         assert_eq!(relink_state(&conn, received), (true, None));
 
-        // Only the IMAP worker settles what waits.
+        // A JMAP server matches the same mail, and has no missing folders.
         conn.execute(
             "UPDATE folders SET missing_on_server = 1 WHERE id = ?1",
             params![sent],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE messages SET uid = 6, relink_pending = 0 WHERE id = ?1",
+            params![filed],
         )
         .unwrap();
         update_password(
@@ -1206,7 +1218,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(relink_state(&conn, received), (false, None));
+        assert_eq!(relink_state(&conn, received), (true, None));
+        assert_eq!(relink_state(&conn, filed), (true, None));
+        assert_eq!(relink_state(&conn, only_here), (false, None));
+        assert_eq!(relink_state(&conn, draft), (false, None));
         let missing: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM folders WHERE missing_on_server = 1",

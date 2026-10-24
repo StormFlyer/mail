@@ -549,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn relink_upgrade_flags_imap_mail_without_a_uid() {
+    fn relink_upgrade_flags_mail_an_earlier_switch_left() {
         let mut conn = staged(19);
         seed_mail_graph(&conn);
         conn.execute_batch(
@@ -558,12 +558,14 @@ mod tests {
                incoming_port, smtp_host, smtp_port, created_at, settings_json
              ) VALUES (2, 'jmap@test.dev', 'generic', 'password', 'jmap', 'me', 'h', 993,
                        'h', 587, 0, '{}');
-             INSERT INTO messages (id, account_id, thread_id, folder_id, subject, date,
-                                   is_outgoing)
-             VALUES (2, 1, 1, 1, 'Left by a switch from JMAP', 1, 0),
-                    (3, 1, 1, 1, 'Sent from this device', 1, 1),
-                    (4, 1, 1, 1, 'Draft', 1, 0),
-                    (5, 2, NULL, NULL, 'JMAP mail', 1, 0);
+             INSERT INTO messages (id, account_id, thread_id, folder_id, uid, jmap_id,
+                                   subject, date, is_outgoing)
+             VALUES (2, 1, 1, 1, NULL, NULL, 'Left by a switch from JMAP', 1, 0),
+                    (3, 1, 1, 1, NULL, NULL, 'Sent from this device', 1, 1),
+                    (4, 1, 1, 1, NULL, NULL, 'Draft', 1, 0),
+                    (5, 2, NULL, NULL, 9, NULL, 'Left by a switch to JMAP', 1, 0),
+                    (6, 2, NULL, NULL, NULL, 'email-6', 'On the JMAP server', 1, 0),
+                    (7, 2, NULL, NULL, NULL, NULL, 'Sent from this device', 1, 1);
              INSERT INTO drafts_meta (message_id) VALUES (4);",
         )
         .unwrap();
@@ -578,7 +580,7 @@ mod tests {
             .unwrap()
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap();
-        assert_eq!(waiting, [2]);
+        assert_eq!(waiting, [2, 5]);
         let missing: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM folders WHERE missing_on_server = 1",

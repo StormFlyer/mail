@@ -1316,7 +1316,13 @@ async fn finish_email_sync(
                     stale_paths.extend(leftover.raw_path);
                     repo::messages::delete(&tx, leftover.id)?;
                 }
-                repo::folders::drop_jmap_leftovers(&tx, account_id)?;
+                // Everything an earlier server or protocol left has now been
+                // matched with its copy here or removed.
+                tx.execute(
+                    "UPDATE messages SET relink_pending=0 WHERE account_id=?1 AND relink_pending=1",
+                    params![account_id],
+                )?;
+                changed_threads.extend(repo::folders::drop_jmap_leftovers(&tx, account_id)?);
             }
             for thread_id in &changed_threads {
                 repo::threads::recompute(&tx, *thread_id)?;
