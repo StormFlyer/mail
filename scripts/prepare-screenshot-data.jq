@@ -146,8 +146,6 @@ def favicon_path(address):
     is_header: false,
     group_key: "",
     group_kind: "",
-    group_month: 0,
-    group_year: 0,
     group_count: 0,
     expanded: false,
     show_row: true,
