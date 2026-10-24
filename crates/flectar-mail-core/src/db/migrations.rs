@@ -37,6 +37,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/018_jmap_full_sync_progress.sql")),
     Migration::Plain(include_str!("migrations/019_clean_snippets.sql")),
     Migration::Plain(include_str!("migrations/020_server_relink.sql")),
+    Migration::Plain(include_str!("migrations/021_search_leftovers.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -1518,6 +1519,31 @@ mod tests {
             .is_err(),
             "settings are always written explicitly"
         );
+    }
+
+    #[test]
+    fn upgrade_drops_search_entries_of_removed_mail() {
+        let mut conn = staged(20);
+        seed_mail_graph(&conn);
+        conn.execute_batch(
+            "INSERT INTO messages_fts (rowid, subject, from_text, to_text, body)
+             VALUES (1, 'Schema contract', '', '', 'keptterm'),
+                    (2, 'Removed account', '', '', 'leftoverterm')",
+        )
+        .unwrap();
+
+        upgrade_to(&mut conn, 21).unwrap();
+
+        let matches = |term: &str| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH ?1",
+                params![term],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(matches("keptterm"), 1);
+        assert_eq!(matches("leftoverterm"), 0);
     }
 
     #[test]

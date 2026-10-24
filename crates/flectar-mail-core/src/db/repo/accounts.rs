@@ -421,6 +421,13 @@ pub fn update_oauth_identity(
 }
 
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
+    // Search entries don't cascade, and a message stored later can be given
+    // the id of one of these.
+    conn.execute(
+        "DELETE FROM messages_fts
+         WHERE rowid IN (SELECT id FROM messages WHERE account_id = ?1)",
+        params![id],
+    )?;
     conn.execute("DELETE FROM accounts WHERE id = ?1", params![id])?;
     Ok(())
 }
@@ -493,6 +500,26 @@ pub fn reorder(conn: &mut Connection, source_id: i64, target_id: i64, after: boo
 mod tests {
     use super::*;
     use crate::db::testutil::account_settings as settings;
+
+    #[test]
+    fn deleting_an_account_drops_its_search_entries() {
+        let conn = crate::db::testutil::conn();
+        crate::db::testutil::seed_account(&conn);
+        let (_, message_id) =
+            crate::db::testutil::seed_message(&conn, "sender@test.dev", "leftover", false);
+        super::super::search::index_message(&conn, message_id).unwrap();
+
+        delete(&conn, 1).unwrap();
+
+        let entries: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH 'leftover'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(entries, 0);
+    }
 
     #[test]
     fn password_edits_keep_declared_identities_and_the_display_name() {
