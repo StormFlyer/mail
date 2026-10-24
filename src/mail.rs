@@ -78,6 +78,14 @@ pub struct MailMessage {
     /// Empty, or the strongest receiver-reported authentication kind:
     /// domain, microsoft, bimi, or brand.
     pub sender_verification: String,
+    /// The one-time code the message asks its reader to enter.
+    pub verification_code: Option<String>,
+    /// Gmail labels are tags; other accounts file labels like folders.
+    pub account_uses_labels: bool,
+    /// The conversation's first file and how many files it holds, for the
+    /// list; `attachments` holds the open message's files.
+    pub first_attachment: Option<flectar_mail_core::models::AttachmentMeta>,
+    pub attachment_total: i64,
 }
 
 impl MailMessage {
@@ -111,6 +119,10 @@ impl MailMessage {
             text: None,
             body_pending: false,
             sender_verification: String::new(),
+            verification_code: None,
+            account_uses_labels: false,
+            first_attachment: None,
+            attachment_total: 0,
         }
     }
 }
@@ -2265,9 +2277,10 @@ fn summary_to_message(
             rest.len()
         ),
     };
-    let account = accounts
+    let thread_account = accounts
         .iter()
-        .find(|account| account.id == thread.account_id)
+        .find(|account| account.id == thread.account_id);
+    let account = thread_account
         .map(account_label)
         .unwrap_or_else(|| thread.account_email.clone());
     let domain = domain_from_address(&address).unwrap_or_default();
@@ -2304,6 +2317,11 @@ fn summary_to_message(
         text: None,
         body_pending: true,
         sender_verification: String::new(),
+        verification_code: thread.verification_code,
+        account_uses_labels: thread_account
+            .is_some_and(|account| account.mail_protocol == MailProtocol::Gmail),
+        first_attachment: thread.first_attachment,
+        attachment_total: thread.attachment_total,
     })
 }
 
@@ -2408,6 +2426,10 @@ fn detail_to_message(row: &MailMessage, message: &MessageDetail, body_loaded: bo
         },
         body_pending: message.body_state != "cached",
         sender_verification: message.sender_verification.as_str().to_owned(),
+        verification_code: row.verification_code.clone(),
+        account_uses_labels: row.account_uses_labels,
+        first_attachment: row.first_attachment.clone(),
+        attachment_total: row.attachment_total,
     }
 }
 
@@ -2772,51 +2794,73 @@ mod tests {
 
     #[test]
     fn thread_summary_projects_participants_and_message_count() {
-        let row = summary_to_message(
-            ThreadSummary {
-                id: 22,
-                account_id: 1,
-                account_email: "person@example.com".into(),
-                account_addresses: vec!["PERSON@EXAMPLE.COM".into()],
-                subject: "Re: Launch review".into(),
-                snippet: "Tuesday works for everyone.".into(),
-                participants: vec![
-                    Address {
-                        name: Some("Me".into()),
-                        email: "person@example.com".into(),
-                    },
-                    Address {
-                        name: Some("Maya".into()),
-                        email: "maya@example.com".into(),
-                    },
-                    Address {
-                        name: Some("Alex".into()),
-                        email: "alex@example.com".into(),
-                    },
-                    Address {
-                        name: None,
-                        email: "lee@example.com".into(),
-                    },
-                ],
-                last_message_at: 0,
-                message_count: 4,
-                unread_count: 1,
-                is_starred: false,
-                has_attachments: false,
-                has_replied: true,
-                snoozed_until: None,
-                labels: Vec::new(),
-            },
-            &[test_account()],
-            "Inbox",
-        )
-        .unwrap();
+        let thread = ThreadSummary {
+            id: 22,
+            account_id: 1,
+            account_email: "person@example.com".into(),
+            account_addresses: vec!["PERSON@EXAMPLE.COM".into()],
+            subject: "Re: Launch review".into(),
+            snippet: "Tuesday works for everyone.".into(),
+            participants: vec![
+                Address {
+                    name: Some("Me".into()),
+                    email: "person@example.com".into(),
+                },
+                Address {
+                    name: Some("Maya".into()),
+                    email: "maya@example.com".into(),
+                },
+                Address {
+                    name: Some("Alex".into()),
+                    email: "alex@example.com".into(),
+                },
+                Address {
+                    name: None,
+                    email: "lee@example.com".into(),
+                },
+            ],
+            last_message_at: 0,
+            message_count: 4,
+            unread_count: 1,
+            is_starred: false,
+            has_attachments: false,
+            has_replied: true,
+            snoozed_until: None,
+            labels: Vec::new(),
+            verification_code: Some("482913".into()),
+            first_attachment: Some(flectar_mail_core::models::AttachmentMeta {
+                id: 7,
+                filename: Some("Launch plan.pdf".into()),
+                mime_type: Some("application/pdf".into()),
+                size: Some(2048),
+                is_inline: false,
+            }),
+            attachment_total: 2,
+        };
+        let row = summary_to_message(thread.clone(), &[test_account()], "Inbox").unwrap();
 
         assert_eq!(row.sender, "Maya, Alex +1");
         assert_eq!(row.address, "maya@example.com");
         assert_eq!(row.subject, "Launch review");
         assert_eq!(row.message_count, 4);
         assert_eq!(row.id, 22);
+        assert_eq!(row.verification_code.as_deref(), Some("482913"));
+        assert_eq!(row.first_attachment.as_ref().map(|file| file.id), Some(7));
+        assert_eq!(row.attachment_total, 2);
+        assert!(
+            !row.account_uses_labels,
+            "IMAP labels are filed like folders"
+        );
+        let gmail = Account {
+            provider: Provider::Gmail,
+            mail_protocol: MailProtocol::Gmail,
+            ..test_account()
+        };
+        assert!(
+            summary_to_message(thread, &[gmail], "Inbox")
+                .unwrap()
+                .account_uses_labels
+        );
     }
 
     #[test]

@@ -944,6 +944,13 @@ pub struct ThreadSummary {
     pub snoozed_until: Option<i64>,
     /// Ids of labels present on any message in the thread.
     pub labels: Vec<i64>,
+    /// The one-time code the newest message asks its reader to enter.
+    pub verification_code: Option<String>,
+    /// The thread's first file, from its newest message that has one.
+    /// Inline images are not files.
+    pub first_attachment: Option<AttachmentMeta>,
+    /// How many files the thread holds.
+    pub attachment_total: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

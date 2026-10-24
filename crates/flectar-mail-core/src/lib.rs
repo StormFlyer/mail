@@ -38,6 +38,7 @@ pub mod signatures;
 pub mod smtp;
 pub mod sync;
 pub mod unsubscribe;
+pub mod verification_code;
 
 use crate::accounts::credentials::{self, CredentialStoreHandle, Slot};
 use crate::config::Paths;
@@ -820,6 +821,13 @@ impl Core {
             tokio::spawn(async move { c.ai_router_loop().await });
         }
 
+        // Verification codes past a message's preview reach the list without
+        // the message being opened.
+        {
+            let c = core.clone();
+            tokio::spawn(async move { c.code_body_loop().await });
+        }
+
         Ok(core)
     }
 
@@ -841,6 +849,49 @@ impl Core {
                         }
                     }
                 },
+                Ok(_) => {}
+                Err(RecvError::Lagged(_)) => continue,
+                Err(RecvError::Closed) => break,
+            }
+        }
+    }
+
+    /// Long-lived loop: on every mail change, reads the bodies of recent
+    /// received messages that mention a code their subject and preview do
+    /// not show. Gmail and JMAP read bodies only when a message is opened,
+    /// and IMAP's background reading can be far behind, while a code is
+    /// wanted now.
+    async fn code_body_loop(&self) {
+        use tokio::sync::broadcast::error::RecvError;
+        // Older codes have expired.
+        const RECENT_MS: i64 = 24 * 60 * 60 * 1000;
+        // Bodies read for one change at most, newest first.
+        const LIMIT: usize = 32;
+        let mut rx = self.bus.subscribe();
+        loop {
+            match rx.recv().await {
+                Ok(CoreEvent::MailUpdated { thread_ids }) => {
+                    let since = now_ms() - RECENT_MS;
+                    let pending = self
+                        .db
+                        .read(move |conn| {
+                            repo::messages::pending_code_bodies(conn, &thread_ids, since)
+                        })
+                        .await
+                        .unwrap_or_else(|error| {
+                            tracing::warn!("finding bodies for verification codes failed: {error}");
+                            Vec::new()
+                        });
+                    for (message_id, account_id, _, _) in pending
+                        .into_iter()
+                        .filter(|(_, _, subject, snippet)| {
+                            verification_code::mentioned(subject, snippet)
+                        })
+                        .take(LIMIT)
+                    {
+                        self.request_body(account_id, message_id).await;
+                    }
+                }
                 Ok(_) => {}
                 Err(RecvError::Lagged(_)) => continue,
                 Err(RecvError::Closed) => break,

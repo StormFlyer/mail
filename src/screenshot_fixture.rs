@@ -208,8 +208,20 @@ fixture_row!(EmailRow {
     message_count,
     label_summary,
     labels,
+    account_uses_labels,
+    verification_code,
+    verification_code_spelled,
+    attachment,
+    attachment_total,
     selected,
     checked
+});
+fixture_row!(ListAttachment {
+    id,
+    stem,
+    extension,
+    kind,
+    previewable
 });
 fixture_row!(MailListEntry {
     is_header,
