@@ -36,7 +36,7 @@ import { SettingsDialog } from "dialogs/settings-dialog.slint";
 import { AccountImport, ImportDialog } from "dialogs/import-dialog.slint";
 export { LocalMailUi } from "local-mail.slint";
 import { LocalMailUi } from "local-mail.slint";
-export { AccountImport, ImportAccountRow, ImportFailureRow, ImportFindingRow, ImportProfileRow } from "dialogs/import-dialog.slint";
+export { AccountImport, ImportAccountRow, ImportFailureRow, ImportFindingRow, ImportMailRow, ImportProfileRow } from "dialogs/import-dialog.slint";
 export { ThemeDraft } from "components/theme-editor.slint";
 import { ThemeDraft } from "components/theme-editor.slint";
 import { MailView } from "views/mail-view.slint";
@@ -354,9 +354,9 @@ export global I18n {
         if (key == "Connect an account before creating a backup.") { return @tr("Connect an account before creating a backup."); }
         if (key == "Export Flectar Mail account backup") { return @tr("Export Flectar Mail account backup"); }
         if (key == "Flectar Mail backup") { return @tr("Flectar Mail backup"); }
-        if (key == "Import accounts") { return @tr("Import accounts"); }
-        if (key == "Account settings") { return @tr("Account settings"); }
-        if (key == "Choose a Thunderbird profile folder") { return @tr("Choose a Thunderbird profile folder"); }
+        if (key == "Import accounts and mail") { return @tr("Import accounts and mail"); }
+        if (key == "Choose a Thunderbird profile or a folder of mail") { return @tr("Choose a Thunderbird profile or a folder of mail"); }
+        if (key == "Imported messages") { return @tr("Imported messages"); }
         if (key == "Choose where to export the database snapshot") { return @tr("Choose where to export the database snapshot"); }
         if (key == "Backup exported. Passwords and OAuth tokens were not included.") { return @tr("Backup exported. Passwords and OAuth tokens were not included."); }
         if (key == "Could not export backup: {}") { return @tr("Could not export backup: {}", argument); }
@@ -2177,6 +2177,10 @@ export component AppWindow inherits Window {
         open-accounts => {
             root.settings_tab = "Accounts";
             root.settings_open = true;
+        }
+        show-mail => {
+            root.active_view = "mail";
+            root.settings_open = false;
         }
     }
 

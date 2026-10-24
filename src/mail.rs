@@ -924,6 +924,18 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn import_mail(
+        &self,
+        request: flectar_mail_core::mail_import::MailImportRequest,
+        progress: tokio::sync::watch::Sender<flectar_mail_core::mail_import::MailImportProgress>,
+        stop: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<flectar_mail_core::mail_import::MailImportReport, String> {
+        self.core
+            .import_mail(request, progress, stop)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn save_settings(&self, settings: Settings) -> Result<(), String> {
         self.core
             .set_settings(settings)
