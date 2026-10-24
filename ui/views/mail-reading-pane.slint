@@ -450,9 +450,9 @@ export component MailReadingPane inherits FocusScope {
         email-surface.height - root.thread-header-height - root.renderer-controls-height
     );
     private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);
-    // Slint's software renderer (CPU mode, Android) panics when it paints a
-    // rectangle past ±32767 physical pixels (#35). Surfaces that grow with the
-    // message paint only the visible scroll content, with a margin for cut edges.
+    // Slint's software renderer (CPU mode) panics when it paints a rectangle
+    // past ±32767 physical pixels (#35). Surfaces that grow with the message
+    // paint only the visible scroll content, with a margin for cut edges.
     // Remove this clamping once a Slint release fixes slint-ui/slint#14250.
     private property <length> paint-margin: 32px;
     private property <length> paint-left: -email-scroll.content-x - root.paint-margin;

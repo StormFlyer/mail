@@ -1,6 +1,6 @@
-//! Slint's software renderer (CPU mode, Android) panics when it paints a
-//! rectangle reaching past ±32767 physical pixels (#35). Surfaces that grow
-//! with their content must keep painting what is on screen, and only that.
+//! Slint's software renderer (CPU mode) panics when it paints a rectangle
+//! reaching past ±32767 physical pixels (#35). Surfaces that grow with their
+//! content must keep painting what is on screen, and only that.
 use super::*;
 use slint::Rgb8Pixel;
 use slint::platform::{
