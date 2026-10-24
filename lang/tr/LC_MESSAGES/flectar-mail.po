@@ -3119,7 +3119,7 @@ msgid "Revert"
 msgstr "Eski haline dön"
 
 #: ui/components/theme-editor.slint:785 ui/dialogs/folder-dialog.slint:135
-#: ui/views/mail-reading-pane.slint:2033
+#: ui/views/mail-reading-pane.slint:2036
 msgid "Save"
 msgstr "Kaydet"
 
@@ -3387,7 +3387,7 @@ msgstr "En üst düzeyde oluştur"
 msgid "Inside “{}”"
 msgstr "“{}” içinde"
 
-#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1982
+#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1985
 msgid "Create label"
 msgstr "Etiket oluştur"
 
@@ -3922,7 +3922,7 @@ msgid "Save settings"
 msgstr "Ayarları kaydet"
 
 #: ui/dialogs/rendering-info-dialog.slint:25
-#: ui/views/mail-reading-pane.slint:383 ui/views/mail-reading-pane.slint:1901
+#: ui/views/mail-reading-pane.slint:383 ui/views/mail-reading-pane.slint:1904
 msgid "About email rendering"
 msgstr "E-posta görüntüleme hakkında"
 
@@ -4992,7 +4992,7 @@ msgstr "İletide bul"
 msgid "Reset zoom"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2256 ui/views/mail-reading-pane.slint:1591
+#: ui/dialogs/settings-dialog.slint:2256 ui/views/mail-reading-pane.slint:1594
 msgid "Caret browsing"
 msgstr "İmleçle gezinme"
 
@@ -5337,7 +5337,7 @@ msgstr "Profil adı"
 msgid "Personal or Work"
 msgstr "Kişisel veya İş"
 
-#: ui/dialogs/settings-dialog.slint:2957 ui/views/mail-reading-pane.slint:1997
+#: ui/dialogs/settings-dialog.slint:2957 ui/views/mail-reading-pane.slint:2000
 msgid "Color"
 msgstr "Renk"
 
@@ -6296,7 +6296,7 @@ msgstr "Gönderen etki alanı DMARC ve DKIM ile doğrulandı"
 msgid "to {}"
 msgstr "{} kişisine"
 
-#: ui/views/mail-reading-pane.slint:367 ui/views/mail-reading-pane.slint:1885
+#: ui/views/mail-reading-pane.slint:367 ui/views/mail-reading-pane.slint:1888
 msgid "Continue editing"
 msgstr "Düzenlemeye devam et"
 
@@ -6367,7 +6367,7 @@ msgstr "Kullanılabilir etiketler"
 msgid "Smart category"
 msgstr "Akıllı kategori"
 
-#: ui/views/mail-reading-pane.slint:973 ui/views/mail-reading-pane.slint:1982
+#: ui/views/mail-reading-pane.slint:973 ui/views/mail-reading-pane.slint:1985
 msgid "Edit label"
 msgstr "Etiketi düzenle"
 
@@ -6403,7 +6403,7 @@ msgstr "Aramayı kapat"
 msgid "Some images could not be loaded."
 msgstr "Bazı görseller yüklenemedi."
 
-#: ui/views/mail-reading-pane.slint:1281 ui/views/mail-reading-pane.slint:1589
+#: ui/views/mail-reading-pane.slint:1281 ui/views/mail-reading-pane.slint:1592
 msgid "Retry images"
 msgstr "Görselleri yeniden dene"
 
@@ -6411,103 +6411,103 @@ msgstr "Görselleri yeniden dene"
 msgid "Reload message"
 msgstr "İletiyi yeniden yükle"
 
-#: ui/views/mail-reading-pane.slint:1345
+#: ui/views/mail-reading-pane.slint:1348
 msgid "Remote images were blocked to protect your privacy."
 msgstr "Gizliliğinizi korumak için uzak görseller engellendi."
 
-#: ui/views/mail-reading-pane.slint:1354
+#: ui/views/mail-reading-pane.slint:1357
 msgid "Load images"
 msgstr "Görselleri yükle"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Loading image…"
 msgstr "Görsel yükleniyor…"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Blocked image"
 msgstr "Engellenmiş görsel"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Image exceeds limits"
 msgstr "Görsel sınırları aşıyor"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Image unavailable"
 msgstr "Görsel kullanılamıyor"
 
-#: ui/views/mail-reading-pane.slint:1538
+#: ui/views/mail-reading-pane.slint:1541
 msgid "Show rendered email"
 msgstr "Görüntülenen e-postayı göster"
 
-#: ui/views/mail-reading-pane.slint:1561
+#: ui/views/mail-reading-pane.slint:1564
 msgid "Copy this HTML into your GitHub rendering issue."
 msgstr "Bu HTML'i GitHub'daki görüntüleme sorun kaydınıza yapıştırın."
 
-#: ui/views/mail-reading-pane.slint:1578
+#: ui/views/mail-reading-pane.slint:1581
 msgid "Show email"
 msgstr "E-postayı göster"
 
-#: ui/views/mail-reading-pane.slint:1588
+#: ui/views/mail-reading-pane.slint:1591
 msgid "View original plain text"
 msgstr "Özgün düz metni görüntüle"
 
-#: ui/views/mail-reading-pane.slint:1590
+#: ui/views/mail-reading-pane.slint:1593
 msgid "Copy formatted selection"
 msgstr "Biçimli seçimi kopyala"
 
-#: ui/views/mail-reading-pane.slint:1594
+#: ui/views/mail-reading-pane.slint:1597
 msgid "Copy selected text"
 msgstr "Seçili metni kopyala"
 
-#: ui/views/mail-reading-pane.slint:1604
+#: ui/views/mail-reading-pane.slint:1607
 msgid "Copy all email text"
 msgstr "Tüm e-posta metnini kopyala"
 
-#: ui/views/mail-reading-pane.slint:1614
+#: ui/views/mail-reading-pane.slint:1617
 msgid "Select all email text"
 msgstr "Tüm e-posta metnini seç"
 
-#: ui/views/mail-reading-pane.slint:1632
+#: ui/views/mail-reading-pane.slint:1635
 msgid "Link: {}"
 msgstr "Bağlantı: {}"
 
-#: ui/views/mail-reading-pane.slint:1824
+#: ui/views/mail-reading-pane.slint:1827
 msgid "Heading: {}"
 msgstr "Başlık: {}"
 
-#: ui/views/mail-reading-pane.slint:1946
+#: ui/views/mail-reading-pane.slint:1949
 msgid "No message selected"
 msgstr "İleti seçilmedi"
 
-#: ui/views/mail-reading-pane.slint:1947
+#: ui/views/mail-reading-pane.slint:1950
 msgid "Choose an email to read it here."
 msgstr "Burada okumak için bir e-posta seçin."
 
-#: ui/views/mail-reading-pane.slint:1989
+#: ui/views/mail-reading-pane.slint:1992
 msgid "Label name"
 msgstr "Etiket adı"
 
-#: ui/views/mail-reading-pane.slint:2007
+#: ui/views/mail-reading-pane.slint:2010
 msgid "Blue"
 msgstr "Mavi"
 
-#: ui/views/mail-reading-pane.slint:2009
+#: ui/views/mail-reading-pane.slint:2012
 msgid "Pink"
 msgstr "Pembe"
 
-#: ui/views/mail-reading-pane.slint:2010
+#: ui/views/mail-reading-pane.slint:2013
 msgid "Red"
 msgstr "Kırmızı"
 
-#: ui/views/mail-reading-pane.slint:2011
+#: ui/views/mail-reading-pane.slint:2014
 msgid "Amber"
 msgstr "Kehribar"
 
-#: ui/views/mail-reading-pane.slint:2014
+#: ui/views/mail-reading-pane.slint:2017
 msgid "Slate"
 msgstr "Kurşuni"
 
-#: ui/views/mail-reading-pane.slint:2019
+#: ui/views/mail-reading-pane.slint:2022
 msgid "Use across all accounts (local only)"
 msgstr "Tüm hesaplarda kullan (yalnızca yerel)"
 

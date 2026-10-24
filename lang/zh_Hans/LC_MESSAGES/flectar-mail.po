@@ -3092,7 +3092,7 @@ msgid "Revert"
 msgstr "还原"
 
 #: ui/components/theme-editor.slint:785 ui/dialogs/folder-dialog.slint:135
-#: ui/views/mail-reading-pane.slint:2033
+#: ui/views/mail-reading-pane.slint:2036
 msgid "Save"
 msgstr "保存"
 
@@ -3360,7 +3360,7 @@ msgstr "在顶层创建"
 msgid "Inside “{}”"
 msgstr "在“{}”内"
 
-#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1982
+#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1985
 msgid "Create label"
 msgstr "创建标签"
 
@@ -3844,7 +3844,7 @@ msgid "Save settings"
 msgstr "保存设置"
 
 #: ui/dialogs/rendering-info-dialog.slint:25
-#: ui/views/mail-reading-pane.slint:383 ui/views/mail-reading-pane.slint:1901
+#: ui/views/mail-reading-pane.slint:383 ui/views/mail-reading-pane.slint:1904
 msgid "About email rendering"
 msgstr "关于邮件渲染"
 
@@ -4866,7 +4866,7 @@ msgstr "在邮件中查找"
 msgid "Reset zoom"
 msgstr ""
 
-#: ui/dialogs/settings-dialog.slint:2256 ui/views/mail-reading-pane.slint:1591
+#: ui/dialogs/settings-dialog.slint:2256 ui/views/mail-reading-pane.slint:1594
 msgid "Caret browsing"
 msgstr "光标浏览"
 
@@ -5211,7 +5211,7 @@ msgstr "分组名称"
 msgid "Personal or Work"
 msgstr "个人或工作"
 
-#: ui/dialogs/settings-dialog.slint:2957 ui/views/mail-reading-pane.slint:1997
+#: ui/dialogs/settings-dialog.slint:2957 ui/views/mail-reading-pane.slint:2000
 msgid "Color"
 msgstr "颜色"
 
@@ -6155,7 +6155,7 @@ msgstr "发件人域名已通过 DMARC 和 DKIM 认证"
 msgid "to {}"
 msgstr "发送至 {}"
 
-#: ui/views/mail-reading-pane.slint:367 ui/views/mail-reading-pane.slint:1885
+#: ui/views/mail-reading-pane.slint:367 ui/views/mail-reading-pane.slint:1888
 msgid "Continue editing"
 msgstr "继续编辑"
 
@@ -6226,7 +6226,7 @@ msgstr "可用标签"
 msgid "Smart category"
 msgstr "智能分类"
 
-#: ui/views/mail-reading-pane.slint:973 ui/views/mail-reading-pane.slint:1982
+#: ui/views/mail-reading-pane.slint:973 ui/views/mail-reading-pane.slint:1985
 msgid "Edit label"
 msgstr "编辑标签"
 
@@ -6262,7 +6262,7 @@ msgstr "关闭查找"
 msgid "Some images could not be loaded."
 msgstr "部分图片无法加载。"
 
-#: ui/views/mail-reading-pane.slint:1281 ui/views/mail-reading-pane.slint:1589
+#: ui/views/mail-reading-pane.slint:1281 ui/views/mail-reading-pane.slint:1592
 msgid "Retry images"
 msgstr "重试加载图片"
 
@@ -6270,103 +6270,103 @@ msgstr "重试加载图片"
 msgid "Reload message"
 msgstr "重新加载邮件"
 
-#: ui/views/mail-reading-pane.slint:1345
+#: ui/views/mail-reading-pane.slint:1348
 msgid "Remote images were blocked to protect your privacy."
 msgstr "为保护您的隐私，远程图片已被阻止。"
 
-#: ui/views/mail-reading-pane.slint:1354
+#: ui/views/mail-reading-pane.slint:1357
 msgid "Load images"
 msgstr "加载图片"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Loading image…"
 msgstr "正在加载图片…"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Blocked image"
 msgstr "已阻止的图片"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Image exceeds limits"
 msgstr "图片超出限制"
 
-#: ui/views/mail-reading-pane.slint:1392
+#: ui/views/mail-reading-pane.slint:1395
 msgid "Image unavailable"
 msgstr "图片不可用"
 
-#: ui/views/mail-reading-pane.slint:1538
+#: ui/views/mail-reading-pane.slint:1541
 msgid "Show rendered email"
 msgstr "显示渲染后的邮件"
 
-#: ui/views/mail-reading-pane.slint:1561
+#: ui/views/mail-reading-pane.slint:1564
 msgid "Copy this HTML into your GitHub rendering issue."
 msgstr "请将此 HTML 复制到您的 GitHub 渲染问题反馈中。"
 
-#: ui/views/mail-reading-pane.slint:1578
+#: ui/views/mail-reading-pane.slint:1581
 msgid "Show email"
 msgstr "显示邮件"
 
-#: ui/views/mail-reading-pane.slint:1588
+#: ui/views/mail-reading-pane.slint:1591
 msgid "View original plain text"
 msgstr "查看原始纯文本"
 
-#: ui/views/mail-reading-pane.slint:1590
+#: ui/views/mail-reading-pane.slint:1593
 msgid "Copy formatted selection"
 msgstr "复制保留格式的选区"
 
-#: ui/views/mail-reading-pane.slint:1594
+#: ui/views/mail-reading-pane.slint:1597
 msgid "Copy selected text"
 msgstr "复制选中文本"
 
-#: ui/views/mail-reading-pane.slint:1604
+#: ui/views/mail-reading-pane.slint:1607
 msgid "Copy all email text"
 msgstr "复制全部邮件正文"
 
-#: ui/views/mail-reading-pane.slint:1614
+#: ui/views/mail-reading-pane.slint:1617
 msgid "Select all email text"
 msgstr "全选邮件正文"
 
-#: ui/views/mail-reading-pane.slint:1632
+#: ui/views/mail-reading-pane.slint:1635
 msgid "Link: {}"
 msgstr "链接：{}"
 
-#: ui/views/mail-reading-pane.slint:1824
+#: ui/views/mail-reading-pane.slint:1827
 msgid "Heading: {}"
 msgstr "标题：{}"
 
-#: ui/views/mail-reading-pane.slint:1946
+#: ui/views/mail-reading-pane.slint:1949
 msgid "No message selected"
 msgstr "未选择邮件"
 
-#: ui/views/mail-reading-pane.slint:1947
+#: ui/views/mail-reading-pane.slint:1950
 msgid "Choose an email to read it here."
 msgstr "选择一封邮件即可在此阅读。"
 
-#: ui/views/mail-reading-pane.slint:1989
+#: ui/views/mail-reading-pane.slint:1992
 msgid "Label name"
 msgstr "标签名称"
 
-#: ui/views/mail-reading-pane.slint:2007
+#: ui/views/mail-reading-pane.slint:2010
 msgid "Blue"
 msgstr "蓝色"
 
-#: ui/views/mail-reading-pane.slint:2009
+#: ui/views/mail-reading-pane.slint:2012
 msgid "Pink"
 msgstr "粉色"
 
-#: ui/views/mail-reading-pane.slint:2010
+#: ui/views/mail-reading-pane.slint:2013
 msgid "Red"
 msgstr "红色"
 
-#: ui/views/mail-reading-pane.slint:2011
+#: ui/views/mail-reading-pane.slint:2014
 msgid "Amber"
 msgstr "琥珀色"
 
-#: ui/views/mail-reading-pane.slint:2014
+#: ui/views/mail-reading-pane.slint:2017
 msgid "Slate"
 msgstr "石板色"
 
-#: ui/views/mail-reading-pane.slint:2019
+#: ui/views/mail-reading-pane.slint:2022
 msgid "Use across all accounts (local only)"
 msgstr "在所有账户中使用（仅本地）"
 

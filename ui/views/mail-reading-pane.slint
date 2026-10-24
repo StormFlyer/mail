@@ -1327,10 +1327,13 @@ export component MailReadingPane inherits FocusScope {
                                         accessible-role: none;
                                     }
 
+                                    // Like the card, the banner keeps its place
+                                    // while a wide message scrolls sideways, so
+                                    // its button stays in view.
                                     if root.remote-images-blocked && !root.text_mode && !root.source_mode && !EmailReader.reader-mode : Rectangle {
-                                        x: 12px;
+                                        x: -email-scroll.content-x + 12px;
                                         y: 12px;
-                                        width: parent.width - 24px;
+                                        width: root.email-viewport-width - 24px;
                                         height: 36px;
                                         background: root.control-bg;
                                         border-radius: 6px;
