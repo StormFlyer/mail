@@ -1986,7 +1986,7 @@ msgstr ""
 msgid "Permanently delete this conversation from Trash?"
 msgstr "Supprimer définitivement cette conversation de la corbeille ?"
 
-#: ui/app.slint:2146 ui/components/calendar.slint:940
+#: ui/app.slint:2146 ui/components/calendar.slint:942
 #, fuzzy
 msgid "This action cannot be undone."
 msgstr "Cette action est irréversible."
@@ -2606,65 +2606,65 @@ msgid "Reset filters"
 msgstr "Réinitialiser les filtres"
 
 #: ui/components/calendar-agenda.slint:290 ui/components/calendar.slint:112
-#: ui/components/calendar.slint:751
+#: ui/components/calendar.slint:753
 #, fuzzy
 msgid "New event"
 msgstr "Nouvel événement"
 
-#: ui/components/calendar.slint:141 ui/components/calendar.slint:749
+#: ui/components/calendar.slint:141 ui/components/calendar.slint:751
 #, fuzzy
 msgid "Previous month"
 msgstr "Mois précédent"
 
-#: ui/components/calendar.slint:155 ui/components/calendar.slint:750
+#: ui/components/calendar.slint:155 ui/components/calendar.slint:752
 #, fuzzy
 msgid "Next month"
 msgstr "Mois suivant"
 
-#: ui/components/calendar.slint:160 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:160 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Monday initial"
 msgid "M"
 msgstr "L"
 
-#: ui/components/calendar.slint:161 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:161 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Tuesday initial"
 msgid "T"
 msgstr "M"
 
-#: ui/components/calendar.slint:162 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:162 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Wednesday initial"
 msgid "W"
 msgstr "M"
 
-#: ui/components/calendar.slint:163 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:163 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Thursday initial"
 msgid "T"
 msgstr "J"
 
-#: ui/components/calendar.slint:164 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:164 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Friday initial"
 msgid "F"
 msgstr "V"
 
-#: ui/components/calendar.slint:165 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:165 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Saturday initial"
 msgid "S"
 msgstr "S"
 
-#: ui/components/calendar.slint:166 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:166 ui/components/calendar.slint:795
 #, fuzzy
 msgctxt "Sunday initial"
 msgid "S"
 msgstr "D"
 
 #: ui/components/calendar.slint:212 ui/components/calendar.slint:622
-#: ui/components/calendar.slint:823
+#: ui/components/calendar.slint:825
 #, fuzzy
 msgid "Select {}"
 msgstr "Sélectionner {}"
@@ -2767,47 +2767,47 @@ msgstr "Période suivante"
 msgid "Week"
 msgstr "Semaine"
 
-#: ui/components/calendar.slint:578 ui/components/calendar.slint:762
+#: ui/components/calendar.slint:578 ui/components/calendar.slint:764
 #, fuzzy
 msgid "Month"
 msgstr "Mois"
 
-#: ui/components/calendar.slint:579 ui/components/calendar.slint:763
+#: ui/components/calendar.slint:579 ui/components/calendar.slint:765
 #, fuzzy
 msgid "Agenda"
 msgstr "Agenda"
 
-#: ui/components/calendar.slint:593 ui/components/calendar.slint:775
+#: ui/components/calendar.slint:593 ui/components/calendar.slint:777
 #, fuzzy
 msgid "Local time · {}"
 msgstr "Heure locale · {}"
 
-#: ui/components/calendar.slint:834
+#: ui/components/calendar.slint:836
 #, fuzzy
 msgid "Agenda · {}"
 msgstr "Agenda · {}"
 
-#: ui/components/calendar.slint:869
+#: ui/components/calendar.slint:871
 #, fuzzy
 msgid "No events for this date"
 msgstr "Aucun événement à cette date"
 
-#: ui/components/calendar.slint:938
+#: ui/components/calendar.slint:940
 #, fuzzy
 msgid "Delete this event?"
 msgstr "Supprimer cet événement ?"
 
-#: ui/components/calendar.slint:939
+#: ui/components/calendar.slint:941
 #, fuzzy
 msgid "This event will be removed from your calendar."
 msgstr "Cet événement sera retiré de votre calendrier."
 
-#: ui/components/calendar.slint:941
+#: ui/components/calendar.slint:943
 #, fuzzy
 msgid "Delete event"
 msgstr "Supprimer l’événement"
 
-#: ui/components/calendar.slint:942
+#: ui/components/calendar.slint:944
 #, fuzzy
 msgid "Keep event"
 msgstr "Conserver l’événement"
