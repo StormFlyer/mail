@@ -1393,7 +1393,7 @@ export component SettingsDialog inherits Rectangle {
                                         padding: 0px;
                                         padding-left: root.compact ? 8px : 16px;
                                         Text {
-                                            text: RendererSettings.error != "" ? RendererSettings.error : RendererSettings.restart-required ? @tr("Restart required. Your current renderer is still active.") : RendererSettings.active == "gpu" ? @tr("Active: GPU — WGPU") : @tr("Active: CPU — Low Memory");
+                                            text: RendererSettings.error != "" ? RendererSettings.error : RendererSettings.gpu-failed && RendererSettings.preferred == "gpu" ? @tr("GPU — WGPU could not start, so CPU — Low Memory is active.") : RendererSettings.restart-required ? @tr("Restart required. Your current renderer is still active.") : RendererSettings.active == "gpu" ? @tr("Active: GPU — WGPU") : @tr("Active: CPU — Low Memory");
                                             color: root.faint-text;
                                             font-size: TypeScale.caption;
                                             overflow: elide;
@@ -1799,7 +1799,9 @@ export component SettingsDialog inherits Rectangle {
                                     root.reorder_account(source, account.id, event.position.y > self.height / 2);
                                     return DragAction.move;
                                 }
-                                Rectangle {
+                                OnScreenSurface {
+                                    width: parent.width;
+                                    height: parent.height;
                                     background: drop-target.has-drag ? root.accent-soft : root.surface;
                                     border-radius: 10px;
                                     border-width: drop-target.has-drag ? 2px : 1px;

@@ -1465,7 +1465,7 @@ pub fn run_desktop(platform: PlatformContext) -> Result<(), Box<dyn std::error::
     #[cfg(desktop)]
     if let Err(error) = &result
         && error.is::<renderer_preferences::GpuStartupError>()
-        && std::env::var_os("FLECTAR_GPU_FALLBACK").is_none()
+        && !renderer_preferences::gpu_startup_failed()
     {
         return renderer_preferences::restart_cpu(error.as_ref());
     }
@@ -1597,6 +1597,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         preferred_renderer,
         use_wgpu,
         renderer_preferences::GPU_SUPPORTED,
+        renderer_preferences::gpu_startup_failed(),
     );
     app.global::<ZoomApi>()
         .on_resolve(|action, current, minimum, maximum| {
