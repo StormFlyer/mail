@@ -5732,6 +5732,13 @@ impl Core {
         credentials::check_available_async(self.credentials.clone()).await?;
         let password = match (&submitted_password, &existing) {
             (Some(password), _) => password.clone(),
+            // A saved password only goes back to the server it was saved for,
+            // so a mistyped address cannot receive it.
+            (None, Some(connection)) if !same_origin(&connection.base_url, &url) => {
+                return Err(CoreError::CalDav(
+                    "enter the app password again for a different server".into(),
+                ));
+            }
             (None, Some(connection)) => {
                 caldav::task::connection_password(
                     &self.calendar_db,
@@ -8422,6 +8429,14 @@ pub(crate) async fn remove_staged_attachment(root: &std::path::Path, path: &str)
     }
 }
 
+/// Whether two addresses share scheme, host and port.
+fn same_origin(left: &str, right: &str) -> bool {
+    match (url::Url::parse(left), url::Url::parse(right)) {
+        (Ok(left), Ok(right)) => left.origin() == right.origin(),
+        _ => false,
+    }
+}
+
 /// Store what a CalDAV discovery found for `connection`: its collections
 /// are exactly these now, and the account keeps or gains a default calendar.
 fn store_discovered_calendars(
@@ -10548,6 +10563,22 @@ mod calendar_connection_tests {
             .await
             .unwrap();
         assert_eq!(changed.id, shared.id);
+        // Moving it to another server needs the password again; the new
+        // server never sees the saved one.
+        let (moved, elsewhere) =
+            dav_server(&[("/dav/shared/", "Team", "me:shared-password")]).await;
+        let refused = core
+            .connect_caldav(caldav(
+                Some(shared.id),
+                &format!("{moved}/dav/shared/"),
+                None,
+            ))
+            .await
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(refused.contains("different server"), "{refused}");
+        assert!(elsewhere.requests.lock().unwrap().is_empty());
         // A connection belongs to its account and its kind of server.
         assert!(
             core.connect_caldav(ConnectCaldavArgs {
