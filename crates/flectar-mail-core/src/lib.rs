@@ -3984,11 +3984,14 @@ impl Core {
                     None
                 };
 
-                // Thread: replies join the parent's thread.
-                let thread_id = if let Some(parent_id) = args.in_reply_to_message_id {
-                    repo::messages::get_row(&tx, parent_id)?.and_then(|r| r.thread_id)
-                } else {
-                    None
+                // Thread: replies join the parent's thread when it is this
+                // account's. A reply sent from another account, such as one
+                // to local mail, starts a thread of its own there.
+                let thread_id = match args.in_reply_to_message_id {
+                    Some(parent_id) => repo::messages::get_row(&tx, parent_id)?
+                        .filter(|parent| parent.account_id == args.account_id)
+                        .and_then(|parent| parent.thread_id),
+                    None => None,
                 };
 
                 let draft_id = match args.draft_id {
@@ -9299,6 +9302,81 @@ mod draft_staging_tests {
                 filename: filename.into(),
             }],
         }
+    }
+
+    #[tokio::test]
+    async fn replies_join_threads_of_their_own_account_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::start_mail_ui(Paths::for_tests(temp.path()))
+            .await
+            .unwrap();
+        let (own_thread, own_parent, other_parent) = core
+            .db
+            .write(|conn| {
+                db::testutil::seed_account(conn);
+                conn.execute(
+                    "INSERT INTO accounts (id, email, provider, auth_kind, username,
+                     incoming_host, incoming_port, smtp_host, smtp_port, created_at,
+                     mail_protocol, settings_json)
+                     VALUES (2, 'other@test.dev', 'generic', 'password', 'other', 'h', 993,
+                             'h', 587, 0, 'imap',
+                             '{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
+                    [],
+                )?;
+                let (own_thread, own_parent) =
+                    db::testutil::seed_message(conn, "sender@test.dev", "here", false);
+                let (_, other_parent) =
+                    db::testutil::seed_message(conn, "sender@test.dev", "elsewhere", false);
+                conn.execute(
+                    "UPDATE threads SET account_id = 2 WHERE id =
+                       (SELECT thread_id FROM messages WHERE id = ?1)",
+                    [other_parent],
+                )?;
+                conn.execute(
+                    "UPDATE messages SET account_id = 2, folder_id = NULL WHERE id = ?1",
+                    [other_parent],
+                )?;
+                Ok((own_thread, own_parent, other_parent))
+            })
+            .await
+            .unwrap();
+        let reply = |parent: i64| SaveDraftArgs {
+            draft_id: None,
+            account_id: 1,
+            from: None,
+            to: Vec::new(),
+            cc: Vec::new(),
+            bcc: Vec::new(),
+            subject: "Re: reply".into(),
+            body_text: "body".into(),
+            body_html: None,
+            mode: "reply".into(),
+            in_reply_to_message_id: Some(parent),
+            attachments: Vec::new(),
+        };
+        let thread_of = |message_id: i64| {
+            let core = core.clone();
+            async move {
+                core.db
+                    .read(move |conn| {
+                        Ok(conn.query_row(
+                            "SELECT t.id, t.account_id FROM messages m
+                             JOIN threads t ON t.id = m.thread_id WHERE m.id = ?1",
+                            [message_id],
+                            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                        )?)
+                    })
+                    .await
+                    .unwrap()
+            }
+        };
+
+        let own_reply = core.save_draft(reply(own_parent)).await.unwrap();
+        assert_eq!(thread_of(own_reply).await, (own_thread, 1));
+        let other_reply = core.save_draft(reply(other_parent)).await.unwrap();
+        let (thread, account) = thread_of(other_reply).await;
+        assert_eq!(account, 1);
+        assert_ne!(thread, thread_of(other_parent).await.0);
     }
 
     #[tokio::test]
