@@ -52,8 +52,6 @@ const MAX_BACKOFF: Duration = Duration::from_secs(300);
 /// with each refusal up to a day.
 const REFUSED_RETRY_MS: i64 = 15 * 60 * 1000;
 const MAX_REFUSED_RETRY_MS: i64 = 24 * 60 * 60 * 1000;
-/// Finished actions are kept this long for undo history.
-const ACTION_HISTORY_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 const MISSING_ORIGINAL: &str = "the original of this message is missing from this device, and the mail server no longer has it";
 
 /// Everything a POP3 account worker listens to.
@@ -73,7 +71,7 @@ pub(crate) async fn run(ctx: SyncCtx, mut config: AccountConfig, mut inputs: Inp
     let mut backoff = Duration::from_secs(1);
     let mut unexplained_refusal = false;
     loop {
-        if let Err(error) = complete_actions(&ctx, &config).await {
+        if let Err(error) = super::complete_device_actions(&ctx, account_id).await {
             tracing::warn!(account_id, %error, "completing local POP3 actions failed");
         }
         if next_sync.is_some_and(|at| at <= Instant::now()) {
@@ -220,16 +218,6 @@ async fn respect_login_delay(
 }
 
 /// Finish queued actions. For mail on this device nothing waits on a server.
-async fn complete_actions(ctx: &SyncCtx, config: &AccountConfig) -> Result<()> {
-    while crate::queue::execute_due_on_device(ctx, config.id)
-        .await?
-        .due_remaining
-    {}
-    ctx.db
-        .write(|conn| repo::actions::gc(conn, now_ms() - ACTION_HISTORY_MS))
-        .await
-}
-
 /// What a failed sign-in or session means for the account.
 #[derive(Debug)]
 enum Failure {

@@ -56,7 +56,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Account>> {
                 a.mail_protocol, a.sync_state, a.sync_error, a.can_create_top_level_mailbox,
                 s.expire
          FROM accounts a LEFT JOIN pop3_sync_state s ON s.account_id = a.id
-         WHERE a.sync_state <> ?1
+         WHERE a.sync_state <> ?1 AND a.mail_protocol <> 'local'
          ORDER BY a.sort_order, a.id",
     )?;
     let rows = stmt
@@ -71,7 +71,7 @@ pub fn list_configs(conn: &Connection) -> Result<Vec<AccountConfig>> {
                 mail_protocol, username, jmap_url, jmap_account_id, incoming_host,
                 incoming_port, smtp_host, smtp_port, settings_json
          FROM accounts
-         WHERE sync_state <> ?1
+         WHERE sync_state <> ?1 AND mail_protocol <> 'local'
          ORDER BY sort_order, id",
     )?;
     let rows = stmt
@@ -85,7 +85,7 @@ pub fn get_config(conn: &Connection, id: i64) -> Result<Option<AccountConfig>> {
         "SELECT id, email, display_name, avatar_url, provider, auth_kind,
                 mail_protocol, username, jmap_url, jmap_account_id, incoming_host,
                 incoming_port, smtp_host, smtp_port, settings_json
-         FROM accounts WHERE id = ?1",
+         FROM accounts WHERE id = ?1 AND mail_protocol <> 'local'",
     )?;
     Ok(stmt.query_row(params![id], config_from_row).optional()?)
 }
@@ -96,7 +96,7 @@ pub fn get(conn: &Connection, id: i64) -> Result<Option<Account>> {
                 a.mail_protocol, a.sync_state, a.sync_error, a.can_create_top_level_mailbox,
                 s.expire
          FROM accounts a LEFT JOIN pop3_sync_state s ON s.account_id = a.id
-         WHERE a.id = ?1",
+         WHERE a.id = ?1 AND a.mail_protocol <> 'local'",
     )?;
     Ok(stmt.query_row(params![id], account_from_row).optional()?)
 }
@@ -112,6 +112,19 @@ pub fn find_by_email(conn: &Connection, email: &str) -> Result<Option<Account>> 
     )?;
     Ok(stmt
         .query_row(params![email], account_from_row)
+        .optional()?)
+}
+
+/// The protocol of any account, including the one holding mail kept on
+/// this device, which the other functions here leave out: it has no address,
+/// server, or settings.
+pub fn protocol(conn: &Connection, id: i64) -> Result<Option<MailProtocol>> {
+    Ok(conn
+        .query_row(
+            "SELECT mail_protocol FROM accounts WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
         .optional()?)
 }
 
@@ -156,6 +169,11 @@ pub fn insert_with_sync_state(
     let can_create_top_level_mailbox = match a.mail_protocol {
         MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Pop3 => true,
         MailProtocol::Jmap => false,
+        MailProtocol::Local => {
+            return Err(crate::error::CoreError::Other(
+                "mail kept on this device has no account settings".into(),
+            ));
+        }
     };
     conn.execute(
         "INSERT INTO accounts (email, display_name, avatar_url, provider, auth_kind, mail_protocol, username,
@@ -197,6 +215,7 @@ pub fn insert_with_sync_state(
         MailProtocol::Pop3 => super::pop3::create_account_state(conn, account_id)?,
         // Folders come from the server.
         MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {}
+        MailProtocol::Local => unreachable!("refused above"),
     }
     Ok(account_id)
 }
@@ -470,7 +489,9 @@ pub fn reorder(conn: &mut Connection, source_id: i64, target_id: i64, after: boo
         return Ok(());
     }
     let mut ids = {
-        let mut stmt = conn.prepare("SELECT id FROM accounts ORDER BY sort_order, id")?;
+        let mut stmt = conn.prepare(
+            "SELECT id FROM accounts WHERE mail_protocol <> 'local' ORDER BY sort_order, id",
+        )?;
         stmt.query_map([], |row| row.get::<_, i64>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?
     };

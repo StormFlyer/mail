@@ -6816,7 +6816,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             match MailProtocol::parse(app.get_account_protocol().as_str()) {
                 Some(MailProtocol::Imap) => (MailProtocol::Imap, "993"),
                 Some(MailProtocol::Pop3) => (MailProtocol::Pop3, "995"),
-                Some(MailProtocol::Gmail | MailProtocol::Jmap) | None => return,
+                Some(MailProtocol::Gmail | MailProtocol::Jmap | MailProtocol::Local) | None => {
+                    return;
+                }
             };
         let transport_matches_last_suggestion = last_suggested_transport
             .borrow()
@@ -6942,7 +6944,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         },
                     )
                 }
-                MailProtocol::Gmail => {
+                MailProtocol::Gmail | MailProtocol::Local => {
                     unsupported();
                     return;
                 }

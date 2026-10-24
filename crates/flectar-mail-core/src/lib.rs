@@ -216,6 +216,8 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
         MailProtocol::Jmap | MailProtocol::Pop3 => {
             account_kind == (Provider::Generic, AuthKind::Password)
         }
+        // Mail kept on this device has no server to sign in to again.
+        MailProtocol::Local => false,
     };
     if !supported {
         return Err(CoreError::Other(format!(
@@ -249,6 +251,7 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
                 && config.smtp_port != 0
         }
         MailProtocol::Jmap => !config.username.trim().is_empty(),
+        MailProtocol::Local => false,
     };
     if !complete {
         return Err(CoreError::Other(format!(
@@ -261,14 +264,14 @@ pub(crate) fn validate_portable_account(config: &PortableAccountConfig) -> Resul
 
 /// Separator between the levels of a stored folder path. JMAP paths are
 /// composed by Flectar from mailbox names; IMAP servers and Gmail labels
-/// report their own, and POP3 folders exist only on this device.
+/// report their own, and POP3 and local folders exist only on this device.
 fn folder_path_delimiter(protocol: MailProtocol, folder: &repo::folders::Folder) -> String {
     match protocol {
         MailProtocol::Jmap => " / ".to_owned(),
         MailProtocol::Gmail | MailProtocol::Imap => {
             folder.delimiter.clone().unwrap_or_else(|| "/".into())
         }
-        MailProtocol::Pop3 => repo::pop3::FOLDER_DELIMITER.to_owned(),
+        MailProtocol::Pop3 | MailProtocol::Local => repo::folders::DEVICE_DELIMITER.to_owned(),
     }
 }
 
@@ -325,6 +328,10 @@ fn folder_exists() -> CoreError {
 /// Gmail mail is only reachable through Google sign-in.
 fn gmail_needs_google_sign_in() -> CoreError {
     CoreError::Auth("Gmail accounts sign in with Google, not with a password".into())
+}
+
+fn local_mail_has_no_server() -> CoreError {
+    CoreError::Auth("mail kept on this device has no server to sign in to".into())
 }
 
 fn normalize_account_password(value: String) -> String {
@@ -719,6 +726,11 @@ impl Core {
                 for cfg in configs {
                     core.spawn_actor(cfg).await;
                 }
+                match core.db.read(|conn| repo::local::id(conn)).await {
+                    Ok(Some(account_id)) => core.spawn_local_actor(account_id).await,
+                    Ok(None) => {}
+                    Err(error) => tracing::error!("finding local mail for startup: {error}"),
+                }
                 events::sync_diagnostic("startup_workers", None, "ready");
                 // Calendar sync tasks for accounts with a connected CalDAV server.
                 if core.paths.calendar_db_file().exists()
@@ -884,6 +896,14 @@ impl Core {
         self.handles.write().await.insert(handle.account_id, handle);
     }
 
+    /// Starts local mail's worker unless it runs already.
+    async fn spawn_local_actor(&self, account_id: i64) {
+        let mut handles = self.handles.write().await;
+        if let std::collections::hash_map::Entry::Vacant(entry) = handles.entry(account_id) {
+            entry.insert(sync::engine::spawn_local(self.sync_ctx(), account_id));
+        }
+    }
+
     async fn spawn_cal_task(&self, account_id: i64) {
         let handle = caldav::task::spawn(
             self.calendar_db.clone(),
@@ -952,6 +972,29 @@ impl Core {
 
     pub async fn list_accounts(&self) -> Result<Vec<Account>> {
         self.db.read(|conn| repo::accounts::list(conn)).await
+    }
+
+    /// The account of local mail, once an import has created it. Cheaper
+    /// than [`Self::local_mail`], which also measures it.
+    pub async fn local_mail_account(&self) -> Result<Option<i64>> {
+        self.db.read(|conn| repo::local::id(conn)).await
+    }
+
+    /// Mail kept on this device, once an import has created it.
+    pub async fn local_mail(&self) -> Result<Option<LocalMail>> {
+        self.db
+            .read(|conn| {
+                let Some(account_id) = repo::local::id(conn)? else {
+                    return Ok(None);
+                };
+                let contents = repo::local::contents(conn, account_id)?;
+                Ok(Some(LocalMail {
+                    account_id,
+                    messages: contents.messages,
+                    bytes: contents.bytes,
+                }))
+            })
+            .await
     }
 
     /// Native settings surfaces need the editable server fields alongside the
@@ -1055,6 +1098,11 @@ impl Core {
                     // The next sync weighs skipped server messages against
                     // the new boundary.
                     MailProtocol::Pop3 => {}
+                    MailProtocol::Local => {
+                        return Err(CoreError::Other(
+                            "mail kept on this device has no server history".into(),
+                        ));
+                    }
                 }
                 transaction.commit()?;
                 Ok(Some(config.settings))
@@ -1089,6 +1137,11 @@ impl Core {
                             "POP3 accounts keep sent mail on this device".into(),
                         ));
                     }
+                    MailProtocol::Local => {
+                        return Err(CoreError::Other(
+                            "mail kept on this device is never sent".into(),
+                        ));
+                    }
                 }
                 config.settings.sent_copy_policy = policy;
                 repo::accounts::set_settings(&tx, account_id, &config.settings)?;
@@ -1118,7 +1171,10 @@ impl Core {
                     .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
                 match config.mail_protocol {
                     MailProtocol::Pop3 => {}
-                    MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
+                    MailProtocol::Gmail
+                    | MailProtocol::Imap
+                    | MailProtocol::Jmap
+                    | MailProtocol::Local => {
                         return Err(CoreError::Other(
                             "only POP3 accounts remove downloaded mail from their server".into(),
                         ));
@@ -1161,6 +1217,7 @@ impl Core {
                 .map(drop)
                 .map_err(|error| error.to_string()),
             MailProtocol::Gmail => Err(gmail_needs_google_sign_in().to_string()),
+            MailProtocol::Local => Err(local_mail_has_no_server().to_string()),
         };
         match result {
             Ok(()) => ConnectionTestResult {
@@ -1251,6 +1308,7 @@ impl Core {
                     crate::jmap::client::normalize_base_url(&args.jmap_url, &args.email)?;
             }
             MailProtocol::Gmail => return Err(gmail_needs_google_sign_in()),
+            MailProtocol::Local => return Err(local_mail_has_no_server()),
         }
 
         credentials::check_available_async(self.credentials.clone()).await?;
@@ -1299,6 +1357,7 @@ impl Core {
                 None
             }
             MailProtocol::Gmail => return Err(gmail_needs_google_sign_in()),
+            MailProtocol::Local => return Err(local_mail_has_no_server()),
         };
         let is_new_account = existing.is_none();
 
@@ -1935,7 +1994,15 @@ impl Core {
                 Ok(())
             })
             .await?;
-        credentials::delete_all_async(self.credentials.clone(), account_id).await?;
+        // Local mail never signs in. A removal resumed after its row is gone
+        // clears the credentials again.
+        let protocol = self
+            .db
+            .read(move |conn| repo::accounts::protocol(conn, account_id))
+            .await?;
+        if protocol != Some(MailProtocol::Local) {
+            credentials::delete_all_async(self.credentials.clone(), account_id).await?;
+        }
         self.db
             .write(move |conn| {
                 conn.execute(
@@ -2297,20 +2364,20 @@ impl Core {
         Ok(())
     }
 
-    /// Write a POP3 account's mail to a new directory as one mbox file per
-    /// folder, so mail that exists only on this device can be kept before it
-    /// is removed. The directory must not exist yet.
+    /// Write the mail of a POP3 account, or the mail kept on this device, to
+    /// a new directory as one mbox file per folder, so mail that exists only
+    /// here can be kept before it is removed. The directory must not exist
+    /// yet.
     pub async fn export_account_mail(
         &self,
         account_id: i64,
         destination: std::path::PathBuf,
     ) -> Result<MailExport> {
-        let config = self.folder_account_config(account_id).await?;
-        match config.mail_protocol {
-            MailProtocol::Pop3 => {}
+        match self.account_protocol(account_id).await? {
+            MailProtocol::Pop3 | MailProtocol::Local => {}
             MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
                 return Err(CoreError::Other(
-                    "only POP3 accounts keep their mail on this device alone".into(),
+                    "only POP3 accounts and mail kept on this device are here alone".into(),
                 ));
             }
         }
@@ -3259,13 +3326,14 @@ impl Core {
         name: String,
     ) -> Result<()> {
         let name = validate_folder_leaf(&name)?;
-        let config = self.folder_account_config(account_id).await?;
+        let protocol = self.account_protocol(account_id).await?;
         let parent = match parent_folder_id {
             Some(folder_id) => Some(self.folder_for_child(account_id, folder_id).await?),
             None => None,
         };
-        match config.mail_protocol {
+        match protocol {
             MailProtocol::Gmail => {
+                let config = self.folder_account_config(account_id).await?;
                 if name.contains('/') {
                     return Err(CoreError::Other(
                         "folder names cannot contain the hierarchy separator \"/\"".into(),
@@ -3278,6 +3346,7 @@ impl Core {
                 sync::gmail::create_user_folder(&self.sync_ctx(), &config, &full_name).await?;
             }
             MailProtocol::Jmap => {
+                let config = self.folder_account_config(account_id).await?;
                 let secret =
                     credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
                         .await?;
@@ -3323,6 +3392,7 @@ impl Core {
                     .await?;
             }
             MailProtocol::Imap => {
+                let config = self.folder_account_config(account_id).await?;
                 let delimiter = match parent.as_ref().and_then(|folder| folder.delimiter.clone()) {
                     Some(delimiter) if !delimiter.is_empty() => delimiter,
                     _ => {
@@ -3366,8 +3436,8 @@ impl Core {
                     })
                     .await?;
             }
-            MailProtocol::Pop3 => {
-                let delimiter = repo::pop3::FOLDER_DELIMITER;
+            MailProtocol::Pop3 | MailProtocol::Local => {
+                let delimiter = repo::folders::DEVICE_DELIMITER;
                 if name.contains(delimiter) {
                     return Err(CoreError::Other(format!(
                         "folder names cannot contain the hierarchy separator {delimiter:?}"
@@ -3413,8 +3483,8 @@ impl Core {
             ));
         }
         let account_id = folder.account_id;
-        let config = self.folder_account_config(account_id).await?;
-        let delimiter = folder_path_delimiter(config.mail_protocol, &folder);
+        let protocol = self.account_protocol(account_id).await?;
+        let delimiter = folder_path_delimiter(protocol, &folder);
         if name.contains(&delimiter) {
             return Err(CoreError::Other(format!(
                 "folder names cannot contain the hierarchy separator {delimiter:?}"
@@ -3422,8 +3492,9 @@ impl Core {
         }
         let old_name = folder.path.clone();
         let parent_prefix = old_name.rsplit_once(&delimiter).map(|(parent, _)| parent);
-        match config.mail_protocol {
+        match protocol {
             MailProtocol::Gmail => {
+                let config = self.folder_account_config(account_id).await?;
                 let full_name = parent_prefix
                     .map(|parent| format!("{parent}{delimiter}{name}"))
                     .unwrap_or(name);
@@ -3431,6 +3502,7 @@ impl Core {
                     .await?;
             }
             MailProtocol::Jmap => {
+                let config = self.folder_account_config(account_id).await?;
                 let secret =
                     credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
                         .await?;
@@ -3455,6 +3527,7 @@ impl Core {
                     .await?;
             }
             MailProtocol::Imap => {
+                let config = self.folder_account_config(account_id).await?;
                 let encoded = imap::encode_mailbox_name(&name);
                 let new_name = parent_prefix
                     .map(|parent| format!("{parent}{delimiter}{encoded}"))
@@ -3470,7 +3543,7 @@ impl Core {
                     })
                     .await?;
             }
-            MailProtocol::Pop3 => {
+            MailProtocol::Pop3 | MailProtocol::Local => {
                 let new_name = parent_prefix
                     .map(|parent| format!("{parent}{delimiter}{name}"))
                     .unwrap_or(name);
@@ -3510,8 +3583,8 @@ impl Core {
             ));
         }
         let account_id = folder.account_id;
-        let config = self.folder_account_config(account_id).await?;
-        let delimiter = folder_path_delimiter(config.mail_protocol, &folder);
+        let protocol = self.account_protocol(account_id).await?;
+        let delimiter = folder_path_delimiter(protocol, &folder);
         let prefix = format!("{}{delimiter}", folder.path);
         let mut tree = self
             .db
@@ -3525,14 +3598,16 @@ impl Core {
             })
             .await?;
         tree.sort_by_key(|candidate| std::cmp::Reverse(candidate.path.len()));
-        match config.mail_protocol {
+        match protocol {
             MailProtocol::Gmail => {
+                let config = self.folder_account_config(account_id).await?;
                 for candidate in &tree {
                     sync::gmail::delete_user_folder(&self.sync_ctx(), &config, candidate.id)
                         .await?;
                 }
             }
             MailProtocol::Jmap => {
+                let config = self.folder_account_config(account_id).await?;
                 let secret =
                     credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
                         .await?;
@@ -3550,6 +3625,7 @@ impl Core {
                     .await?;
             }
             MailProtocol::Imap => {
+                let config = self.folder_account_config(account_id).await?;
                 let mut session = self.connect_folder_imap(&config).await?;
                 for candidate in &tree {
                     imap::delete_folder(&mut session, &candidate.path).await?;
@@ -3559,13 +3635,22 @@ impl Core {
                     .await?;
             }
             // The folders and their mail exist only here.
-            MailProtocol::Pop3 => {
+            MailProtocol::Pop3 | MailProtocol::Local => {
                 sync::delete_folder_tree(&self.sync_ctx(), account_id, folder.path, delimiter)
                     .await?;
             }
         }
         self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
         Ok(())
+    }
+
+    /// The protocol of any account, including the one holding mail kept on
+    /// this device, which has no [`AccountConfig`].
+    async fn account_protocol(&self, account_id: i64) -> Result<MailProtocol> {
+        self.db
+            .read(move |conn| repo::accounts::protocol(conn, account_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))
     }
 
     async fn folder_account_config(&self, account_id: i64) -> Result<AccountConfig> {
@@ -4116,7 +4201,7 @@ impl Core {
                 // recipient lists must never cause a plaintext server upload.
                 let uploads_drafts = match mail_protocol {
                     MailProtocol::Gmail | MailProtocol::Jmap => true,
-                    MailProtocol::Imap | MailProtocol::Pop3 => false,
+                    MailProtocol::Imap | MailProtocol::Pop3 | MailProtocol::Local => false,
                 };
                 let sync_remote_account = if !security.enabled() && uploads_drafts {
                     tx.execute(
@@ -4394,7 +4479,7 @@ impl Core {
                         )?;
                         nudge_account = Some(row.0);
                     }
-                    MailProtocol::Imap | MailProtocol::Pop3 => {
+                    MailProtocol::Imap | MailProtocol::Pop3 | MailProtocol::Local => {
                         // Purely local drafts have no remote copy to preserve.
                         staged_paths = repo::messages::take_draft_attachment_paths(conn, draft_id)?;
                         repo::messages::delete(conn, draft_id)?;
@@ -4516,18 +4601,16 @@ impl Core {
             Ok(raw) => return Ok(raw),
             Err(error) => error,
         };
-        let protocol = self
-            .db
-            .read(move |conn| {
-                repo::accounts::get_config(conn, account_id)?
-                    .map(|config| config.mail_protocol)
-                    .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))
-            })
-            .await?;
+        let protocol = self.account_protocol(account_id).await?;
         let missing = !tokio::fs::try_exists(path).await.unwrap_or(true);
         match protocol {
             MailProtocol::Pop3 if missing => {}
-            MailProtocol::Pop3 | MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
+            // Imported mail has no other copy here to restore from.
+            MailProtocol::Pop3
+            | MailProtocol::Gmail
+            | MailProtocol::Imap
+            | MailProtocol::Jmap
+            | MailProtocol::Local => {
                 return Err(error);
             }
         }

@@ -1138,6 +1138,8 @@ async fn send_action(
                     .should_append(current.provider),
                 // The local Sent folder is the only one a POP3 account has.
                 MailProtocol::Pop3 => false,
+                // Mail kept on this device is never sent.
+                MailProtocol::Local => false,
                 // These submit through their own APIs, which file sent mail.
                 MailProtocol::Gmail | MailProtocol::Jmap => false,
             };

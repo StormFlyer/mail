@@ -2257,7 +2257,7 @@ fn summary_to_message(
         .iter()
         .find(|account| account.id == thread.account_id)
         .map(account_label)
-        .unwrap_or_else(|| thread.account_email.clone());
+        .unwrap_or_else(|| thread.account_email.clone().unwrap_or_default());
     let domain = domain_from_address(&address).unwrap_or_default();
 
     let initials = initials(&sender);
@@ -2764,7 +2764,7 @@ mod tests {
             ThreadSummary {
                 id: 22,
                 account_id: 1,
-                account_email: "person@example.com".into(),
+                account_email: Some("person@example.com".into()),
                 account_addresses: vec!["PERSON@EXAMPLE.COM".into()],
                 subject: "Re: Launch review".into(),
                 snippet: "Tuesday works for everyone.".into(),

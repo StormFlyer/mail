@@ -38,6 +38,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/019_clean_snippets.sql")),
     Migration::Plain(include_str!("migrations/020_server_relink.sql")),
     Migration::Plain(include_str!("migrations/021_search_leftovers.sql")),
+    Migration::TableRebuild(include_str!("migrations/022_local_mail.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
