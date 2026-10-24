@@ -11,6 +11,27 @@ and safe for a mail client that handles private user data.
 - Never submit real mailbox contents, credentials, OAuth tokens, signing
   material, or personal fixture data. Use reserved `.example` domains.
 
+## Translations
+
+Translate the application through [Weblate](https://translate.flectar.com/).
+README translations are maintained directly in this repository:
+
+- Use [README.md](README.md) as the source and add a root-level
+  `README.<locale>.md`, following `README.es.md` or `README.zh_Hans.md`.
+- Translate the complete document, including image alternative text, while
+  preserving links, commands, filenames, and technical identifiers.
+- Add the language's native name to the language selector in every README
+  translation and in the English README. Highlight each file's own language.
+- Keep the same sections and shared screenshots. When updating documentation,
+  update translations where possible and note any remaining gaps in the pull
+  request.
+
+## Accessibility and security
+
+Read [ACCESSIBILITY.md](ACCESSIBILITY.md) when changing the interface or
+reporting an accessibility barrier. Report vulnerabilities privately using
+[SECURITY.md](SECURITY.md), rather than opening a public issue.
+
 ## Platform code
 
 Shared code selects platform behaviour with capability aliases such as

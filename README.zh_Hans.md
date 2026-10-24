@@ -4,7 +4,7 @@
     Flectar Mail
   </h1>
   <p>
-    <a href="README.md">English</a> · <strong>简体中文</strong>
+    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <strong>简体中文</strong>
   </p>
   <div align="center">
     <h3>邮件，重归迅捷</h3>
@@ -350,6 +350,16 @@ Flectar Mail 为所有人而构建，我们期待你帮助它支持更多语言�
 3. 直接在 Weblate 中翻译文本，无需编程或 GitHub 使用经验。
 
 译文会与我们的 GitHub 仓库同步，并以拉取请求的形式提交审阅。贡献者还可以为自己的工作在 GitHub 上获得署名。
+
+README 译文在本仓库中维护。新增或更新译文的方法请参阅[翻译贡献指南](CONTRIBUTING.md#translations)。
+
+## ♿ 无障碍
+
+Flectar Mail 提供键盘导航、浅色和深色主题以及灵活的布局。无障碍支持仍在持续改进。有关现有功能、测试局限以及如何报告使用障碍，请参阅 [ACCESSIBILITY.md](ACCESSIBILITY.md)。
+
+## 🔒 安全
+
+如需私下报告安全漏洞，请遵循 [SECURITY.md](SECURITY.md)。请勿在公开的问题报告中披露漏洞细节。
 
 ## 🌐 面向所有人的开源
 

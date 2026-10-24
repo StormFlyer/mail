@@ -4,7 +4,7 @@
     Flectar Mail
   </h1>
   <p>
-    <strong>English</strong> · <a href="README.zh_Hans.md">简体中文</a>
+    <strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.zh_Hans.md">简体中文</a>
   </p>
   <div align="center">
     <h3>Email, made fast again</h3>
@@ -506,6 +506,20 @@ Getting started is easy:
 3. Translate strings directly through Weblate, no programming or GitHub experience required.
 
 Translations are synchronized with our GitHub repository and submitted as pull requests for review. Contributors can also receive GitHub attribution for their work.
+
+README translations are maintained in this repository. See
+[Contributing translations](CONTRIBUTING.md#translations) to add or update one.
+
+## ♿ Accessibility
+
+Flectar Mail includes keyboard navigation, light and dark themes, and flexible
+layouts. Accessibility work is ongoing. See [ACCESSIBILITY.md](ACCESSIBILITY.md)
+for current features, testing limitations, and how to report a barrier.
+
+## 🔒 Security
+
+To report a vulnerability privately, follow [SECURITY.md](SECURITY.md).
+Please keep vulnerability details out of public issues.
 
 ## 🌐 Open source, for everyone
 
