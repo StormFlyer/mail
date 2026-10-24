@@ -35,6 +35,10 @@ features = [
 ]
 rustdoc-args = ["--generate-link-to-definition"]
 
+# Declared upstream but not imported by this release.
+[package.metadata.cargo-machete]
+ignored = ["imgref", "lyon_path", "pin-weak", "rgb", "scopeguard"]
+
 [features]
 accessibility = [
     "dep:accesskit",
@@ -91,7 +95,7 @@ wayland = [
     "glutin?/wayland",
     "glutin-winit?/wayland",
     "dep:arboard",
-    "arboard/wayland-data-control",
+    "dep:smithay-clipboard",
     "i-slint-renderer-skia?/wayland",
     "softbuffer?/wayland",
     "softbuffer?/wayland-dlopen",
@@ -256,6 +260,10 @@ version = "0.5"
 version = "3.6"
 optional = true
 default-features = false
+
+[target.'cfg(not(any(target_family = "windows", target_vendor = "apple", target_arch = "wasm32", target_os = "android")))'.dependencies.smithay-clipboard]
+version = "0.7"
+optional = true
 
 [target.'cfg(not(any(target_family = "windows", target_vendor = "apple", target_arch = "wasm32", target_os = "android")))'.dependencies.futures]
 version = "0.3.31"
