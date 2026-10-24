@@ -162,3 +162,47 @@ fn account_preferences_paint_hundreds_of_sender_identities() {
     assert!(app.get_settings_open());
     app.hide().unwrap();
 }
+
+#[test]
+fn account_cards_paint_long_sync_errors() {
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+    slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
+    let app = AppWindow::new().unwrap();
+    app.window()
+        .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 2.0 });
+    app.set_startup_ready(true);
+    app.set_startup_hydrated(true);
+    // The card shows the server's last error in full until a sync succeeds.
+    app.set_connected_accounts(ModelRc::new(VecModel::from(vec![AccountRow {
+        id: 1,
+        email: "person@example.com".into(),
+        sync_error: "A long server diagnostic\n".repeat(3_000).into(),
+        ..Default::default()
+    }])));
+    app.set_active_view("mail".into());
+    app.set_settings_tab("Accounts".into());
+    app.set_settings_open(true);
+    let (width, height) = (2560, 1800);
+    app.window()
+        .set_size(slint::PhysicalSize::new(width, height));
+    app.show().unwrap();
+    let mut pixels = vec![Rgb8Pixel::default(); (width * height) as usize];
+    let mut paint = || {
+        slint::platform::update_timers_and_animations();
+        app.window().request_redraw();
+        window.draw_if_needed(|r| {
+            r.render(&mut pixels, width as usize);
+        });
+    };
+    paint();
+    for _ in 0..30 {
+        app.window().dispatch_event(WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(640.0, 600.0),
+            delta_x: 0.0,
+            delta_y: -2_000.0,
+        });
+        paint();
+    }
+    assert!(app.get_settings_open());
+    app.hide().unwrap();
+}
