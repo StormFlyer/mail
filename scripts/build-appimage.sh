@@ -123,7 +123,7 @@ for library in "$app_dir"/usr/lib/*.so*; do
   require_runpath "$library" '$ORIGIN'
 done
 
-# Preserve the allocator tuning and stable process name from our launcher.
+# Preserve the renderer default and stable process name from our launcher.
 cp "$project_dir/resources/AppRun" "$app_dir/AppRun"
 chmod +x "$app_dir/AppRun"
 
