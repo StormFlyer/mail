@@ -1,12 +1,18 @@
 use i_slint_core::accessibility::AccessibleStringProperty;
 use i_slint_core::item_tree::ItemRc;
+use i_slint_core::items::AccessibleRole;
 use i_slint_core::window::WindowInner;
 use slint::platform::{
     Platform, PointerEventButton, WindowAdapter, WindowEvent,
     software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
 };
 use slint::{ComponentHandle, ModelRc, VecModel};
-use std::{cell::Cell, ops::ControlFlow, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    ops::ControlFlow,
+    rc::Rc,
+    time::Duration,
+};
 
 slint::slint! {
     import { EmailRow, MailLabelRow, MailListEntry } from "../ui/models.slint";
@@ -18,6 +24,7 @@ slint::slint! {
         preferred-height: 260px;
         in-out property <[EmailRow]> emails: [];
         in-out property <[MailListEntry]> entries: [];
+        callback selected(int);
         init => { MotionSettings.enabled = false; }
 
         MailListPane {
@@ -33,6 +40,7 @@ slint::slint! {
             border: #3a3b3c;
             border-subtle: #303030;
             accent: #5ca3ff;
+            select_email(id) => { root.selected(id); }
         }
     }
 
@@ -195,18 +203,38 @@ fn toggling_a_date_group_keeps_infinite_pagination_active() {
     assert_eq!(pages.get(), 4, "stop when the mailbox is exhausted");
 }
 
-struct Desktop(Rc<MinimalSoftwareWindow>);
+thread_local! {
+    // The platform clock, advanced by `settle`.
+    static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+}
+
+/// A headless desktop that keeps what is copied.
+struct Desktop(Rc<MinimalSoftwareWindow>, Rc<RefCell<String>>);
 
 impl Platform for Desktop {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
         Ok(self.0.clone())
     }
+    fn duration_since_start(&self) -> Duration {
+        CLOCK.get()
+    }
+    fn set_clipboard_text(&self, text: &str, _: slint::platform::Clipboard) {
+        *self.1.borrow_mut() = text.to_owned();
+    }
 }
 
-/// One desktop list showing `email`.
-fn desktop_list(email: EmailRow) -> DesktopListHarness {
+/// A desktop list showing one row, and what the row copies and opens.
+struct DesktopList {
+    ui: DesktopListHarness,
+    window: Rc<MinimalSoftwareWindow>,
+    clipboard: Rc<RefCell<String>>,
+    opened: Rc<Cell<i32>>,
+}
+
+fn desktop_list(email: EmailRow) -> DesktopList {
     let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
-    slint::platform::set_platform(Box::new(Desktop(window.clone()))).unwrap();
+    let clipboard = Rc::new(RefCell::new(String::new()));
+    slint::platform::set_platform(Box::new(Desktop(window.clone(), clipboard.clone()))).unwrap();
     let ui = DesktopListHarness::new().unwrap();
     ui.window().set_size(slint::PhysicalSize::new(397, 260));
     ui.set_emails(ModelRc::new(VecModel::from(vec![email.clone()])));
@@ -216,7 +244,21 @@ fn desktop_list(email: EmailRow) -> DesktopListHarness {
         email,
         ..Default::default()
     }])));
+    let opened = Rc::new(Cell::new(-1));
+    let target = opened.clone();
+    ui.on_selected(move |id| target.set(id));
     ui.show().unwrap();
+    settle(&window, Duration::ZERO);
+    DesktopList {
+        ui,
+        window,
+        clipboard,
+        opened,
+    }
+}
+
+fn settle(window: &MinimalSoftwareWindow, advance: Duration) {
+    CLOCK.set(CLOCK.get() + advance);
     let mut pixels = vec![slint::Rgb8Pixel::default(); 397 * 260];
     for _ in 0..3 {
         slint::platform::update_timers_and_animations();
@@ -224,7 +266,6 @@ fn desktop_list(email: EmailRow) -> DesktopListHarness {
             renderer.render(&mut pixels, 397);
         });
     }
-    ui
 }
 
 fn label(id: i32, name: &str) -> MailLabelRow {
@@ -237,11 +278,12 @@ fn label(id: i32, name: &str) -> MailLabelRow {
     }
 }
 
-/// The shown element with this accessible label.
-fn labelled(window: &slint::Window, label: &str) -> Option<ItemRc> {
+/// The shown element with this accessible label, of `role` if given.
+fn labelled(window: &slint::Window, label: &str, role: Option<AccessibleRole>) -> Option<ItemRc> {
     let inner = WindowInner::from_pub(window);
     ItemRc::new_root(inner.component()).visit_descendants(|item| {
         if item.is_visible()
+            && role.is_none_or(|role| item.accessible_role() == role)
             && item
                 .accessible_string_property(AccessibleStringProperty::Label)
                 .as_deref()
@@ -261,9 +303,74 @@ fn bounds(item: &ItemRc) -> (f32, f32, f32, f32) {
     (origin.x, origin.y, geometry.width(), geometry.height())
 }
 
+fn click(window: &slint::Window, x: f32, y: f32) {
+    let position = slint::LogicalPosition::new(x, y);
+    window.dispatch_event(WindowEvent::PointerMoved { position });
+    window.dispatch_event(WindowEvent::PointerPressed {
+        position,
+        button: PointerEventButton::Left,
+    });
+    window.dispatch_event(WindowEvent::PointerReleased {
+        position,
+        button: PointerEventButton::Left,
+    });
+}
+
+#[test]
+fn verification_code_chip_copies_instead_of_opening_the_message() {
+    let DesktopList {
+        ui,
+        window,
+        clipboard,
+        opened,
+    } = desktop_list(EmailRow {
+        id: 7,
+        sender: "GitHub".into(),
+        subject: "Please verify your device".into(),
+        preview: "Verification code: 482913".into(),
+        labels: ModelRc::new(VecModel::from(vec![label(1, "Security"), label(2, "Work")])),
+        verification_code: "482913".into(),
+        verification_code_spelled: "4 8 2 9 1 3".into(),
+        ..Default::default()
+    });
+    let copy = "Copy verification code 4 8 2 9 1 3";
+    let copied = "Copied verification code 4 8 2 9 1 3";
+    let chip = labelled(ui.window(), copy, Some(AccessibleRole::Button)).expect("the code chip");
+    let (x, y, width, height) = bounds(&chip);
+
+    // The code leads the detail line; one label still fits beside it.
+    let security = labelled(ui.window(), "Security", None).expect("the first label");
+    assert!(bounds(&security).0 > x + width, "labels follow the code");
+    assert!(labelled(ui.window(), "Work", None).is_none());
+    assert!(labelled(ui.window(), "+1", None).is_some());
+
+    click(ui.window(), x + width / 2.0, y + height / 2.0);
+    settle(&window, Duration::ZERO);
+    assert_eq!(*clipboard.borrow(), "482913");
+    assert_eq!(
+        opened.get(),
+        -1,
+        "copying the code must not open the message"
+    );
+    assert!(labelled(ui.window(), copied, Some(AccessibleRole::Button)).is_some());
+    assert!(
+        labelled(ui.window(), copied, Some(AccessibleRole::Text)).is_some(),
+        "screen readers hear about the copy"
+    );
+
+    // The confirmation lasts a moment.
+    settle(&window, Duration::from_secs(2));
+    assert!(labelled(ui.window(), copy, Some(AccessibleRole::Button)).is_some());
+    assert!(labelled(ui.window(), copied, None).is_none());
+
+    // The rest of the row still opens the message.
+    click(ui.window(), x + width / 2.0, y - 24.0);
+    assert_eq!(opened.get(), 7);
+}
+
 #[test]
 fn labels_past_the_limit_take_no_room() {
-    let ui = desktop_list(EmailRow {
+    let DesktopList { ui, .. } = desktop_list(EmailRow {
         id: 1,
         sender: "Cloudflare".into(),
         subject: "Your weekly traffic report".into(),
@@ -276,9 +383,9 @@ fn labels_past_the_limit_take_no_room() {
         ..Default::default()
     });
     let (marketing_x, _, marketing_width, _) =
-        bounds(&labelled(ui.window(), "Marketing").expect("the second label"));
-    let (more_x, ..) = bounds(&labelled(ui.window(), "+1").expect("the label count"));
-    assert!(labelled(ui.window(), "Travel").is_none());
+        bounds(&labelled(ui.window(), "Marketing", None).expect("the second label"));
+    let (more_x, ..) = bounds(&labelled(ui.window(), "+1", None).expect("the label count"));
+    assert!(labelled(ui.window(), "Travel", None).is_none());
     // The count follows the second chip's end padding and one gap; a hidden
     // third chip would push it further right.
     let gap = more_x - (marketing_x + marketing_width);

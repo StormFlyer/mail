@@ -78,6 +78,8 @@ pub struct MailMessage {
     /// Empty, or the strongest receiver-reported authentication kind:
     /// domain, microsoft, bimi, or brand.
     pub sender_verification: String,
+    /// The one-time code the message asks its reader to enter.
+    pub verification_code: Option<String>,
     /// Gmail labels are tags; other accounts file labels like folders.
     pub account_uses_labels: bool,
 }
@@ -113,6 +115,7 @@ impl MailMessage {
             text: None,
             body_pending: false,
             sender_verification: String::new(),
+            verification_code: None,
             account_uses_labels: false,
         }
     }
@@ -2308,6 +2311,7 @@ fn summary_to_message(
         text: None,
         body_pending: true,
         sender_verification: String::new(),
+        verification_code: thread.verification_code,
         account_uses_labels: thread_account
             .is_some_and(|account| account.mail_protocol == MailProtocol::Gmail),
     })
@@ -2414,6 +2418,7 @@ fn detail_to_message(row: &MailMessage, message: &MessageDetail, body_loaded: bo
         },
         body_pending: message.body_state != "cached",
         sender_verification: message.sender_verification.as_str().to_owned(),
+        verification_code: row.verification_code.clone(),
         account_uses_labels: row.account_uses_labels,
     }
 }
@@ -2812,7 +2817,7 @@ mod tests {
             has_replied: true,
             snoozed_until: None,
             labels: Vec::new(),
-            verification_code: None,
+            verification_code: Some("482913".into()),
         };
         let row = summary_to_message(thread.clone(), &[test_account()], "Inbox").unwrap();
 
@@ -2821,6 +2826,7 @@ mod tests {
         assert_eq!(row.subject, "Launch review");
         assert_eq!(row.message_count, 4);
         assert_eq!(row.id, 22);
+        assert_eq!(row.verification_code.as_deref(), Some("482913"));
         assert!(
             !row.account_uses_labels,
             "IMAP labels are filed like folders"

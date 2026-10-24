@@ -120,6 +120,10 @@ export struct EmailRow {
     labels: [MailLabelRow],
     // Gmail labels are tags; other accounts file labels like folders.
     account_uses_labels: bool,
+    // The one-time code the message asks its reader to enter, if any, and
+    // the same code spelled out for screen readers.
+    verification_code: string,
+    verification_code_spelled: string,
     selected: bool,
     checked: bool,
 }

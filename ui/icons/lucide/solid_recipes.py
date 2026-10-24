@@ -143,6 +143,8 @@ def build(sources):
             "Preserved earlier Flectar tray opening."),
         "info": Recipe("info", cut(solid(p("info", 0)), lines("info", 1, 2)),
             "Solid circle; information mark cutout."),
+        "key": Recipe("key-round", cut(solid(p("key-round", 0)), solid(p("key-round", 1), width=2)),
+            "Solid key; hole includes the original circle's stroke footprint."),
         "keyboard": Recipe("keyboard", cut(solid(p("keyboard", 8)), lines("keyboard", *range(8))),
             "Solid keyboard; original keys and space bar become cutouts."),
         "mail": Recipe("mail", cut(solid(p("mail", 1)), line(p("mail", 0))),

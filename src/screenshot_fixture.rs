@@ -209,6 +209,8 @@ fixture_row!(EmailRow {
     label_summary,
     labels,
     account_uses_labels,
+    verification_code,
+    verification_code_spelled,
     selected,
     checked
 });

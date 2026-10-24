@@ -937,6 +937,7 @@ pub(super) fn same_email_row(a: &EmailRow, b: &EmailRow) -> bool {
         && a.message_count == b.message_count
         && a.label_summary == b.label_summary
         && a.account_uses_labels == b.account_uses_labels
+        && a.verification_code == b.verification_code
         && a.selected == b.selected
         && a.checked == b.checked
         && (!a.has_favicon || (a.favicon == b.favicon && a.favicon_small == b.favicon_small))
@@ -992,11 +993,24 @@ pub(super) fn make_rows<M: std::borrow::Borrow<MailMessage>>(
                 label_summary: label_summary(&email.labels, labels).into(),
                 labels: ModelRc::new(VecModel::from(applied_label_rows(labels, &email.labels))),
                 account_uses_labels: email.account_uses_labels,
+                verification_code: email.verification_code.clone().unwrap_or_default().into(),
+                verification_code_spelled: email
+                    .verification_code
+                    .as_deref()
+                    .map(spelled)
+                    .unwrap_or_default()
+                    .into(),
                 selected: Some(email.id) == selected_id,
                 checked: checked_ids.contains(&email.id),
             }
         })
         .collect()
+}
+
+/// One character at a time, so "482913" is read as digits rather than as a
+/// number in the hundreds of thousands.
+fn spelled(code: &str) -> String {
+    code.chars().map(String::from).collect::<Vec<_>>().join(" ")
 }
 
 /// The time or date beside a mail list row. Yesterday's mail shows its time
@@ -1776,6 +1790,7 @@ mod tests {
             attachments: Vec::new(),
             body_pending: true,
             sender_verification: String::new(),
+            verification_code: None,
             account_uses_labels: false,
         }
     }
@@ -2082,6 +2097,23 @@ mod tests {
         assert!(row.account_uses_labels);
         email.account_uses_labels = false;
         assert!(!same_email_row(&row, &project_row(&email)));
+    }
+
+    #[test]
+    fn mail_rows_offer_verification_codes() {
+        let mut email = message(1);
+        email.verification_code = Some("482913".into());
+        let row = project_row(&email);
+        assert_eq!(row.verification_code, "482913");
+        assert_eq!(row.verification_code_spelled, "4 8 2 9 1 3");
+
+        // A newer code refreshes the row in place.
+        email.verification_code = Some("551203".into());
+        assert!(!same_email_row(&row, &project_row(&email)));
+        email.verification_code = None;
+        let cleared = project_row(&email);
+        assert_eq!(cleared.verification_code, "");
+        assert_eq!(cleared.verification_code_spelled, "");
     }
 
     #[test]

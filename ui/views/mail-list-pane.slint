@@ -7,12 +7,100 @@ import { FloatingActionButton, SelectionCheckBox, ToolbarIconButton } from "../c
 import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
 import { LabelChip } from "../components/label-chip.slint";
 import { TypeScale } from "../typography.slint";
-import { LayoutMetrics, MotionSettings } from "../design-system.slint";
+import { AppTheme, LayoutMetrics, MailIconPalette, MotionSettings } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
 import { WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 import { WorkspaceListLoadingRow, WorkspaceListTransition } from "../components/workspace-list.slint";
 import { TabsUi } from "../components/workspace-navigation.slint";
 import { Shortcuts } from "../shortcuts.slint";
+
+// The one-time code a message asks for. Activating the chip copies the code
+// instead of opening the message.
+component MailListCodeChip inherits Rectangle {
+    in property <string> code;
+    // The code a character at a time, for screen readers.
+    in property <string> spelled-code;
+    in property <bool> copied: false;
+    // Touch rows give the small chip a finger-sized target.
+    in property <bool> touch: false;
+    in property <color> text-color;
+    in property <color> chip-border-color;
+    in property <color> hover-background;
+    in property <color> pressed-background;
+    in property <color> focus-color;
+    in property <color> copied-color;
+    callback activated(/* pointer */ bool);
+    // Other buttons act on the row, as anywhere else on it.
+    callback context-menu-requested(length, length);
+    callback open-in-tab-requested(/* background */ bool);
+
+    width: code-text.x + code-text.width + 6px;
+    height: max(20px, code-text.preferred-height + 2px);
+    border-radius: 6px;
+    border-width: keyboard.focus-visible ? 2px : 1px;
+    border-color: keyboard.focus-visible ? root.focus-color : root.chip-border-color;
+    background: hit.pressed ? root.pressed-background : hit.has-hover ? root.hover-background : transparent;
+    forward-focus: keyboard;
+    accessible-role: button;
+    accessible-label: root.copied
+        ? @tr("Copied verification code {}", root.spelled-code)
+        : @tr("Copy verification code {}", root.spelled-code);
+    accessible-action-default => { root.activated(false); }
+    animate background { duration: 120ms; easing: ease-out; enabled: MotionSettings.enabled; }
+
+    Image {
+        x: 5px;
+        y: (parent.height - self.height) / 2;
+        width: 12px;
+        height: 12px;
+        source: root.copied
+            ? @image-url("../icons/lucide/outline/check.svg")
+            : @image-url("../icons/lucide/filled/key.svg");
+        colorize: root.copied ? root.copied-color : MailIconPalette.verification-code;
+        image-fit: contain;
+        accessible-role: none;
+    }
+    code-text := Text {
+        x: 21px;
+        width: self.preferred-width;
+        height: parent.height;
+        text: root.code;
+        color: root.text-color;
+        font-size: TypeScale.caption;
+        font-weight: 650;
+        letter-spacing: 0.5px;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    keyboard := FocusVisibleScope {
+        accessible-role: none;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == Key.Space {
+                root.activated(false);
+                return accept;
+            }
+            reject
+        }
+    }
+    hit := TouchArea {
+        x: root.touch ? -4px : 0px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width + (root.touch ? 8px : 0px);
+        height: root.touch ? max(parent.height, 32px) : parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.activated(true); }
+        pointer-event(event) => {
+            if event.kind != PointerEventKind.down {
+                return;
+            }
+            if event.button == PointerEventButton.right {
+                root.context-menu-requested(self.x + self.mouse-x, self.y + self.mouse-y);
+            } else if event.button == PointerEventButton.middle {
+                root.open-in-tab-requested(event.modifiers.shift);
+            }
+        }
+    }
+}
 
 component MailGroupHeader inherits Rectangle {
     in property <string> title;
@@ -368,6 +456,57 @@ export component MailListPane inherits FocusScope {
     changed search_query => { root.reset-pagination(); }
     changed search_filter => { root.reset-pagination(); }
 
+    // The row whose verification code was just copied shows a check for a
+    // moment; the state lives here so a sync that replaces rows keeps it.
+    private property <int> copied-code-email-id: -1;
+    private property <string> copied-code-spelled;
+
+    function copy-code(id: int, code: string, spelled: string) {
+        code-clipboard.text = code;
+        code-clipboard.select-all();
+        code-clipboard.copy();
+        root.copied-code-email-id = id;
+        root.copied-code-spelled = spelled;
+        // `restart` alone only re-arms a timer that has run before.
+        copied-code-timer.start();
+        copied-code-timer.restart();
+    }
+
+    copied-code-timer := Timer {
+        interval: 1600ms;
+        running: false;
+        triggered => {
+            self.stop();
+            root.copied-code-email-id = -1;
+        }
+    }
+
+    // A primitive text input is the bridge to the platform clipboard.
+    code-clipboard := TextInput {
+        x: -10000px;
+        y: -10000px;
+        width: 1px;
+        height: 1px;
+        visible: false;
+        enabled: false;
+        read-only: true;
+        accessible-role: none;
+    }
+
+    // Screen readers announce the copy, which leaves the screen unchanged
+    // apart from the chip's icon.
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 1px;
+        height: 1px;
+        accessible-role: text;
+        accessible-live-region: polite;
+        accessible-label: root.copied-code-email-id >= 0
+            ? @tr("Copied verification code {}", root.copied-code-spelled)
+            : "";
+    }
+
     pure function group-title(kind: string) -> string {
         if kind == "today" { return @tr("Today"); }
         if kind == "yesterday" { return @tr("Yesterday"); }
@@ -605,8 +744,11 @@ export component MailListPane inherits FocusScope {
 
                             for entry in root.list_entries : mail-row := Rectangle {
                                 private property <EmailRow> mail-data: entry.email;
-                                // Labels past the limit hide; "+N" counts them.
-                                private property <int> label-limit: root.dense ? 1 : 2;
+                                // The code chip leads the detail line when the line has room.
+                                private property <bool> shows-code: mail-data.verification_code != ""
+                                    && detail.width >= code-chip.width + 4px;
+                                // Next to it one label still fits; "+N" counts the rest.
+                                private property <int> label-limit: root.dense || mail-row.shows-code ? 1 : 2;
                                 private property <bool> reveal-ready: !entry.reveal_row;
                                 private property <bool> touch-pending: false;
                                 private property <bool> long-press-triggered: false;
@@ -637,6 +779,8 @@ export component MailListPane inherits FocusScope {
                                         + (mail-data.account_profile == "" ? "" : ", " + @tr("Profile: {}", mail-data.account_profile))
                                         + (mail-data.message_count > 1 ? ", " + @tr("{} messages", mail-data.message_count) : "")
                                         + (mail-data.label_summary == "" ? "" : ", " + mail-data.label_summary)
+                                        + (mail-data.verification_code == "" ? ""
+                                            : ", " + @tr("Verification code {}", mail-data.verification_code_spelled))
                                         + (mail-data.has_attachments ? ", " + @tr("Has attachments") : "")
                                         + (mail-data.has_replied ? ", " + @tr("Replied") : "");
                                     accessible-id: "mail-row-" + mail-data.id;
@@ -880,6 +1024,11 @@ export component MailListPane inherits FocusScope {
                                             spacing: 0px;
                                             cross-axis-alignment: center;
 
+                                            // Room for the code chip, which lies over the row's
+                                            // pointer area below.
+                                            if mail-row.shows-code : Rectangle {
+                                                width: code-chip.width + 4px;
+                                            }
                                             for label[index] in mail-data.labels : HorizontalLayout {
                                                 padding-right: index < mail-row.label-limit ? 4px : 0px;
                                                 cross-axis-alignment: center;
@@ -1016,6 +1165,32 @@ export component MailListPane inherits FocusScope {
                                                 toggled(checked) => { root.set_email_checked(mail-data.id, checked); }
                                             }
 
+                                            // Above the row's pointer area, so a click copies the
+                                            // code instead of opening the message.
+                                            code-chip := MailListCodeChip {
+                                                visible: mail-row.shows-code;
+                                                x: message-content.x + detail.x;
+                                                y: message-content.y + detail.y + (detail.height - self.height) / 2;
+                                                code: mail-data.verification_code;
+                                                spelled-code: mail-data.verification_code_spelled;
+                                                copied: root.copied-code-email-id == mail-data.id;
+                                                touch: root.compact;
+                                                text-color: root.heading;
+                                                // A control, so outlined like one.
+                                                chip-border-color: AppTheme.control-border;
+                                                hover-background: root.muted-control-bg;
+                                                pressed-background: root.accent-soft;
+                                                focus-color: root.accent;
+                                                copied-color: root.accent;
+                                                activated(pointer) => {
+                                                    if pointer { root.pointer-focus(mail-data.id); }
+                                                    root.copy-code(mail-data.id, mail-data.verification_code, mail-data.verification_code_spelled);
+                                                }
+                                                context-menu-requested(x, y) => { row-context.show({ x: self.x + x, y: self.y + y }); }
+                                                open-in-tab-requested(background) => {
+                                                    if TabsUi.enabled { TabsUi.open-conversation(mail-data.id, background); }
+                                                }
+                                            }
                                         }
 
                                         Menu {

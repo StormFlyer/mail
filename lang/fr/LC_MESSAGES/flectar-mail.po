@@ -291,7 +291,7 @@ msgctxt "time of day"
 msgid "AM"
 msgstr "AM"
 
-#: ui/app.slint:149 ui/views/mail-list-pane.slint:373
+#: ui/app.slint:149 ui/views/mail-list-pane.slint:512
 #, fuzzy
 msgid "Yesterday"
 msgstr "Hier"
@@ -2547,7 +2547,7 @@ msgid "Filters only affect this agenda."
 msgstr "Les filtres ne s’appliquent qu’à cet agenda."
 
 #: ui/components/calendar-agenda.slint:212 ui/components/calendar.slint:580
-#: ui/views/mail-list-pane.slint:372
+#: ui/views/mail-list-pane.slint:511
 #, fuzzy
 msgid "Today"
 msgstr "Aujourd’hui"
@@ -3040,7 +3040,7 @@ msgstr "Activé"
 msgid "Off"
 msgstr "Désactivé"
 
-#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:464
+#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:603
 #, fuzzy
 msgid "Clear selection"
 msgstr "Effacer la sélection"
@@ -3520,7 +3520,7 @@ msgstr "Supprimer l’étiquette globale"
 msgid "Delete label from {}"
 msgstr "Supprimer l’étiquette de {}"
 
-#: ui/components/sidebar.slint:91 ui/views/mail-list-pane.slint:1108
+#: ui/components/sidebar.slint:91 ui/views/mail-list-pane.slint:1283
 #, fuzzy
 msgid "New email"
 msgstr "Nouvel e-mail"
@@ -4826,7 +4826,7 @@ msgstr "6 mois · Recommandé"
 msgid "1 year"
 msgstr "1 an"
 
-#: ui/dialogs/settings-dialog.slint:639 ui/views/mail-list-pane.slint:415
+#: ui/dialogs/settings-dialog.slint:639 ui/views/mail-list-pane.slint:554
 #, fuzzy
 msgid "All mail"
 msgstr "Tous les messages"
@@ -5853,24 +5853,24 @@ msgstr "Parcourez vos messages sans quitter le clavier."
 msgid "Compose a new message"
 msgstr "Rédiger un nouveau message"
 
-#: ui/dialogs/settings-dialog.slint:2246 ui/views/mail-list-pane.slint:413
+#: ui/dialogs/settings-dialog.slint:2246 ui/views/mail-list-pane.slint:552
 #, fuzzy
 msgid "Search mail"
 msgstr "Rechercher des messages"
 
-#: ui/dialogs/settings-dialog.slint:2247 ui/views/mail-list-pane.slint:1026
+#: ui/dialogs/settings-dialog.slint:2247 ui/views/mail-list-pane.slint:1201
 #: ui/views/mail-reading-pane.slint:363
 #, fuzzy
 msgid "Archive"
 msgstr "Archiver"
 
-#: ui/dialogs/settings-dialog.slint:2248 ui/views/mail-list-pane.slint:495
+#: ui/dialogs/settings-dialog.slint:2248 ui/views/mail-list-pane.slint:634
 #: ui/views/mail-reading-pane.slint:347 ui/views/mail-reading-pane.slint:761
 #, fuzzy
 msgid "Move to spam"
 msgstr "Déplacer vers les indésirables"
 
-#: ui/dialogs/settings-dialog.slint:2249 ui/views/mail-list-pane.slint:504
+#: ui/dialogs/settings-dialog.slint:2249 ui/views/mail-list-pane.slint:643
 #: ui/views/mail-reading-pane.slint:330 ui/views/mail-reading-pane.slint:365
 #, fuzzy
 msgid "Move to trash"
@@ -7298,179 +7298,191 @@ msgstr "Ignorer"
 msgid "Reviewed as completed"
 msgstr "Examiné et marqué comme terminé"
 
-#: ui/views/mail-list-pane.slint:37
+#: ui/views/mail-list-pane.slint:46 ui/views/mail-list-pane.slint:506
+msgid "Copied verification code {}"
+msgstr ""
+
+#: ui/views/mail-list-pane.slint:47
+msgid "Copy verification code {}"
+msgstr ""
+
+#: ui/views/mail-list-pane.slint:125
 #, fuzzy
 msgid "{n} message"
 msgid_plural "{n} messages"
 msgstr[0] "{n} message"
 msgstr[1] "{n} messages"
 
-#: ui/views/mail-list-pane.slint:374
+#: ui/views/mail-list-pane.slint:513
 #, fuzzy
 msgid "This week"
 msgstr "Cette semaine"
 
-#: ui/views/mail-list-pane.slint:375
+#: ui/views/mail-list-pane.slint:514
 #, fuzzy
 msgid "Last week"
 msgstr "La semaine dernière"
 
-#: ui/views/mail-list-pane.slint:376
+#: ui/views/mail-list-pane.slint:515
 #, fuzzy
 msgid "This month"
 msgstr "Ce mois-ci"
 
-#: ui/views/mail-list-pane.slint:377
+#: ui/views/mail-list-pane.slint:516
 #, fuzzy
 msgid "Last month"
 msgstr "Le mois dernier"
 
-#: ui/views/mail-list-pane.slint:378
+#: ui/views/mail-list-pane.slint:517
 #, fuzzy
 msgid "Earlier"
 msgstr "Plus anciens"
 
-#: ui/views/mail-list-pane.slint:410
+#: ui/views/mail-list-pane.slint:549
 #, fuzzy
 msgid "Show folders"
 msgstr "Afficher les dossiers"
 
-#: ui/views/mail-list-pane.slint:410
+#: ui/views/mail-list-pane.slint:549
 #, fuzzy
 msgid "Hide folders"
 msgstr "Masquer les dossiers"
 
-#: ui/views/mail-list-pane.slint:416
+#: ui/views/mail-list-pane.slint:555
 #, fuzzy
 msgid "Unread"
 msgstr "Non lus"
 
-#: ui/views/mail-list-pane.slint:417
+#: ui/views/mail-list-pane.slint:556
 #, fuzzy
 msgid "Starred"
 msgstr "Suivis"
 
-#: ui/views/mail-list-pane.slint:418 ui/views/mail-list-pane.slint:640
+#: ui/views/mail-list-pane.slint:557 ui/views/mail-list-pane.slint:784
 #, fuzzy
 msgid "Has attachments"
 msgstr "Avec pièces jointes"
 
-#: ui/views/mail-list-pane.slint:421
+#: ui/views/mail-list-pane.slint:560
 #, fuzzy
 msgid "Filter mail"
 msgstr "Filtrer les messages"
 
-#: ui/views/mail-list-pane.slint:424
+#: ui/views/mail-list-pane.slint:563
 #, fuzzy
 msgid "Synchronizing mail"
 msgstr "Synchronisation des messages"
 
-#: ui/views/mail-list-pane.slint:424
+#: ui/views/mail-list-pane.slint:563
 #, fuzzy
 msgid "Reload mail"
 msgstr "Recharger les messages"
 
-#: ui/views/mail-list-pane.slint:464
+#: ui/views/mail-list-pane.slint:603
 #, fuzzy
 msgid "Select all messages on this page"
 msgstr "Sélectionner tous les messages de cette page"
 
-#: ui/views/mail-list-pane.slint:486
+#: ui/views/mail-list-pane.slint:625
 #, fuzzy
 msgid "Archive selected message"
 msgstr "Archiver le message sélectionné"
 
-#: ui/views/mail-list-pane.slint:504
+#: ui/views/mail-list-pane.slint:643
 #, fuzzy
 msgid "Delete selected permanently"
 msgstr "Supprimer définitivement la sélection"
 
-#: ui/views/mail-list-pane.slint:517 ui/views/mail-reading-pane.slint:982
+#: ui/views/mail-list-pane.slint:656 ui/views/mail-reading-pane.slint:982
 #, fuzzy
 msgid "More message actions"
 msgstr "Autres actions sur les messages"
 
-#: ui/views/mail-list-pane.slint:523 ui/views/mail-list-pane.slint:1025
+#: ui/views/mail-list-pane.slint:662 ui/views/mail-list-pane.slint:1200
 #: ui/views/mail-reading-pane.slint:362
 #, fuzzy
 msgid "Mark as read"
 msgstr "Marquer comme lu"
 
-#: ui/views/mail-list-pane.slint:524 ui/views/mail-list-pane.slint:1025
+#: ui/views/mail-list-pane.slint:663 ui/views/mail-list-pane.slint:1200
 #: ui/views/mail-reading-pane.slint:362
 #, fuzzy
 msgid "Mark as unread"
 msgstr "Marquer comme non lu"
 
-#: ui/views/mail-list-pane.slint:525 ui/views/mail-list-pane.slint:1024
+#: ui/views/mail-list-pane.slint:664 ui/views/mail-list-pane.slint:1199
 #: ui/views/mail-reading-pane.slint:354
 #, fuzzy
 msgid "Star message"
 msgstr "Marquer le message d’une étoile"
 
-#: ui/views/mail-list-pane.slint:526 ui/views/mail-list-pane.slint:1024
+#: ui/views/mail-list-pane.slint:665 ui/views/mail-list-pane.slint:1199
 #: ui/views/mail-reading-pane.slint:354
 #, fuzzy
 msgid "Remove star"
 msgstr "Retirer l’étoile"
 
-#: ui/views/mail-list-pane.slint:635 ui/views/mail-list-pane.slint:818
+#: ui/views/mail-list-pane.slint:777 ui/views/mail-list-pane.slint:962
 #, fuzzy
 msgid "(No subject)"
 msgstr "(Sans objet)"
 
-#: ui/views/mail-list-pane.slint:637
+#: ui/views/mail-list-pane.slint:779
 #, fuzzy
 msgid "Profile: {}"
 msgstr "Profil : {}"
 
-#: ui/views/mail-list-pane.slint:638
+#: ui/views/mail-list-pane.slint:780
 #, fuzzy
 msgid "{} messages"
 msgstr "{} messages"
 
-#: ui/views/mail-list-pane.slint:641
+#: ui/views/mail-list-pane.slint:783
+msgid "Verification code {}"
+msgstr ""
+
+#: ui/views/mail-list-pane.slint:785
 #, fuzzy
 msgid "Replied"
 msgstr "Réponse envoyée"
 
-#: ui/views/mail-list-pane.slint:761
+#: ui/views/mail-list-pane.slint:905
 #, fuzzy
 msgid "{} messages in this conversation"
 msgstr "{} messages dans cette conversation"
 
-#: ui/views/mail-list-pane.slint:846
+#: ui/views/mail-list-pane.slint:990
 #, fuzzy
 msgid "Account: {}"
 msgstr "Compte : {}"
 
-#: ui/views/mail-list-pane.slint:1013
+#: ui/views/mail-list-pane.slint:1162
 #, fuzzy
 msgid "Deselect {}"
 msgstr "Désélectionner {}"
 
-#: ui/views/mail-list-pane.slint:1022
+#: ui/views/mail-list-pane.slint:1197
 #, fuzzy
 msgid "Open in new tab"
 msgstr "Ouvrir dans un nouvel onglet"
 
-#: ui/views/mail-list-pane.slint:1028 ui/views/mail-reading-pane.slint:330
+#: ui/views/mail-list-pane.slint:1203 ui/views/mail-reading-pane.slint:330
 #: ui/views/mail-reading-pane.slint:365
 #, fuzzy
 msgid "Delete permanently…"
 msgstr "Supprimer définitivement…"
 
-#: ui/views/mail-list-pane.slint:1085 ui/views/onboarding-view.slint:139
+#: ui/views/mail-list-pane.slint:1260 ui/views/onboarding-view.slint:139
 #, fuzzy
 msgid "Opening your mailbox…"
 msgstr "Ouverture de votre boîte aux lettres…"
 
-#: ui/views/mail-list-pane.slint:1085
+#: ui/views/mail-list-pane.slint:1260
 #, fuzzy
 msgid "Nothing here"
 msgstr "Aucun élément ici"
 
-#: ui/views/mail-list-pane.slint:1086
+#: ui/views/mail-list-pane.slint:1261
 #, fuzzy
 msgid "Try another folder or search term."
 msgstr "Essayez un autre dossier ou terme de recherche."
