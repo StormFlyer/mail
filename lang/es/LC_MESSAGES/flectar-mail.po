@@ -2622,15 +2622,15 @@ msgstr "Limpiar selección"
 msgid "Select"
 msgstr "Seleccionar"
 
-#: ui/components/document-preview.slint:43
+#: ui/components/document-preview.slint:17
 msgid "Previous page"
 msgstr "Página anterior"
 
-#: ui/components/document-preview.slint:44
+#: ui/components/document-preview.slint:18
 msgid "Page {} of {}"
 msgstr "Página {} de {}"
 
-#: ui/components/document-preview.slint:45
+#: ui/components/document-preview.slint:19
 msgid "Next page"
 msgstr "Página siguiente"
 
@@ -3319,7 +3319,7 @@ msgstr "Ajustar al ancho"
 msgid "Download"
 msgstr "Descargar"
 
-#: ui/dialogs/attachment-preview-dialog.slint:53 ui/views/files-view.slint:477
+#: ui/dialogs/attachment-preview-dialog.slint:50 ui/views/files-view.slint:477
 msgid "Loading preview…"
 msgstr "Cargando vista previa…"
 

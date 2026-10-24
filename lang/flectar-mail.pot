@@ -2568,15 +2568,16 @@ msgstr ""
 msgid "Select"
 msgstr ""
 
-#: ui/components/document-preview.slint:43
+#: ui/components/document-preview.slint:17
 msgid "Previous page"
 msgstr ""
 
-#: ui/components/document-preview.slint:44
+#: ui/components/document-preview.slint:18
+#: ui/components/document-preview.slint:18
 msgid "Page {} of {}"
 msgstr ""
 
-#: ui/components/document-preview.slint:45
+#: ui/components/document-preview.slint:19
 msgid "Next page"
 msgstr ""
 
@@ -3305,7 +3306,7 @@ msgstr ""
 msgid "Download"
 msgstr ""
 
-#: ui/dialogs/attachment-preview-dialog.slint:53 ui/views/files-view.slint:477
+#: ui/dialogs/attachment-preview-dialog.slint:50 ui/views/files-view.slint:477
 msgid "Loading preview…"
 msgstr ""
 
