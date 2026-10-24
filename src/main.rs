@@ -18,6 +18,7 @@ mod email_document;
 pub mod favicon;
 mod files_controller;
 mod import_controller;
+mod keyboard_keys;
 mod latest_load;
 mod mail;
 #[cfg(test)]
@@ -1577,6 +1578,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let app = renderer_preferences::initialize_step(use_wgpu, AppWindow::new)?;
     app.global::<MailListNavigation>()
         .on_target(mail_navigation::target);
+    app.global::<KeyboardKeys>().on_chord(keyboard_keys::chord);
     if let Some(width) = startup_presentation.workspace_list_pane_width {
         app.set_workspace_list_pane_width(width as f32);
     }
