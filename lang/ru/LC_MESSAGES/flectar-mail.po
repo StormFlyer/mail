@@ -29,17 +29,17 @@ msgstr "Графитовая"
 msgid "Light"
 msgstr "Светлая"
 
-#: ui/app-icon.slint:22 ui/views/mail-reading-pane.slint:2010
+#: ui/app-icon.slint:22 ui/views/mail-reading-pane.slint:1968
 msgid "Blue"
 msgstr "Синий"
 
 #: ui/app-icon.slint:23 ui/components/theme-editor.slint:623
-#: ui/views/mail-reading-pane.slint:2015
+#: ui/views/mail-reading-pane.slint:1973
 msgid "Green"
 msgstr "Зелёная"
 
 #: ui/app-icon.slint:24 ui/components/theme-editor.slint:624
-#: ui/views/mail-reading-pane.slint:2011
+#: ui/views/mail-reading-pane.slint:1969
 msgid "Purple"
 msgstr "Фиолетовая"
 
@@ -289,7 +289,7 @@ msgctxt "time of day"
 msgid "AM"
 msgstr "AM"
 
-#: ui/app.slint:149 ui/views/mail-list-pane.slint:412
+#: ui/app.slint:149 ui/views/mail-list-pane.slint:373
 msgid "Yesterday"
 msgstr "Вчера"
 
@@ -1679,8 +1679,8 @@ msgstr "Постраничная навигация по почте не уда�
 msgid "Could not mark message as read: {}"
 msgstr "Не удалось отметить сообщение как прочитанное: {}"
 
-#: ui/app.slint:567 ui/views/mail-reading-pane.slint:236
-#: ui/views/mail-reading-pane.slint:1285
+#: ui/app.slint:567 ui/views/mail-reading-pane.slint:194
+#: ui/views/mail-reading-pane.slint:1243
 msgid "Loading message…"
 msgstr "Загрузка сообщения…"
 
@@ -2191,7 +2191,7 @@ msgid "Filters only affect this agenda."
 msgstr "Фильтры действуют только в этом расписании."
 
 #: ui/components/calendar-agenda.slint:212 ui/components/calendar.slint:580
-#: ui/views/mail-list-pane.slint:411
+#: ui/views/mail-list-pane.slint:372
 msgid "Today"
 msgstr "Сегодня"
 
@@ -2519,18 +2519,18 @@ msgstr "Сообщение и его вложения будут удалены 
 msgid "Keep"
 msgstr "Оставить"
 
-#: ui/components/composer-fields.slint:39 ui/views/mail-reading-pane.slint:375
-#: ui/views/mail-reading-pane.slint:743
+#: ui/components/composer-fields.slint:39 ui/views/mail-reading-pane.slint:333
+#: ui/views/mail-reading-pane.slint:701
 msgid "Reply"
 msgstr "Ответить"
 
-#: ui/components/composer-fields.slint:40 ui/views/mail-reading-pane.slint:376
-#: ui/views/mail-reading-pane.slint:752
+#: ui/components/composer-fields.slint:40 ui/views/mail-reading-pane.slint:334
+#: ui/views/mail-reading-pane.slint:710
 msgid "Reply all"
 msgstr "Ответить всем"
 
-#: ui/components/composer-fields.slint:41 ui/views/mail-reading-pane.slint:377
-#: ui/views/mail-reading-pane.slint:761
+#: ui/components/composer-fields.slint:41 ui/views/mail-reading-pane.slint:335
+#: ui/views/mail-reading-pane.slint:719
 msgid "Forward"
 msgstr "Переслать"
 
@@ -2590,7 +2590,7 @@ msgstr "Вкл."
 msgid "Off"
 msgstr "Выкл."
 
-#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:503
+#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:464
 msgid "Clear selection"
 msgstr "Очистить выделение"
 
@@ -3000,7 +3000,7 @@ msgstr "Удалить глобальную метку"
 msgid "Delete label from {}"
 msgstr "Удалить метку из {}"
 
-#: ui/components/sidebar.slint:91 ui/views/mail-list-pane.slint:1119
+#: ui/components/sidebar.slint:91 ui/views/mail-list-pane.slint:1108
 msgid "New email"
 msgstr "Новое письмо"
 
@@ -3215,7 +3215,7 @@ msgid "Revert"
 msgstr "Вернуть"
 
 #: ui/components/theme-editor.slint:785 ui/dialogs/folder-dialog.slint:135
-#: ui/views/mail-reading-pane.slint:2036
+#: ui/views/mail-reading-pane.slint:1994
 msgid "Save"
 msgstr "Сохранить"
 
@@ -3484,7 +3484,7 @@ msgstr "Создать на верхнем уровне"
 msgid "Inside “{}”"
 msgstr "Внутри «{}»"
 
-#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1985
+#: ui/dialogs/folder-dialog.slint:133 ui/views/mail-reading-pane.slint:1943
 msgid "Create label"
 msgstr "Создать метку"
 
@@ -4043,7 +4043,7 @@ msgid "Save settings"
 msgstr "Сохранить настройки"
 
 #: ui/dialogs/rendering-info-dialog.slint:25
-#: ui/views/mail-reading-pane.slint:383 ui/views/mail-reading-pane.slint:1904
+#: ui/views/mail-reading-pane.slint:341 ui/views/mail-reading-pane.slint:1862
 msgid "About email rendering"
 msgstr "Об отрисовке писем"
 
@@ -4117,7 +4117,7 @@ msgstr "Не удалось вычислить использование хра
 msgid "Open Storage to calculate local usage."
 msgstr "Откройте «Хранилище», чтобы рассчитать локальное использование."
 
-#: ui/dialogs/settings-dialog.slint:264 ui/views/mail-reading-pane.slint:1255
+#: ui/dialogs/settings-dialog.slint:264 ui/views/mail-reading-pane.slint:1213
 msgid "Attachments"
 msgstr "Вложения"
 
@@ -4201,7 +4201,7 @@ msgstr "6 месяцев · Рекомендуется"
 msgid "1 year"
 msgstr "1 год"
 
-#: ui/dialogs/settings-dialog.slint:639 ui/views/mail-list-pane.slint:454
+#: ui/dialogs/settings-dialog.slint:639 ui/views/mail-list-pane.slint:415
 msgid "All mail"
 msgstr "Вся почта"
 
@@ -5092,22 +5092,22 @@ msgstr "Управляйте почтой с помощью клавиатуры
 msgid "Compose a new message"
 msgstr "Написать новое письмо"
 
-#: ui/dialogs/settings-dialog.slint:2246 ui/views/mail-list-pane.slint:452
+#: ui/dialogs/settings-dialog.slint:2246 ui/views/mail-list-pane.slint:413
 msgid "Search mail"
 msgstr "Поиск почты"
 
-#: ui/dialogs/settings-dialog.slint:2247 ui/views/mail-list-pane.slint:1037
-#: ui/views/mail-reading-pane.slint:405
+#: ui/dialogs/settings-dialog.slint:2247 ui/views/mail-list-pane.slint:1026
+#: ui/views/mail-reading-pane.slint:363
 msgid "Archive"
 msgstr "Архивировать"
 
-#: ui/dialogs/settings-dialog.slint:2248 ui/views/mail-list-pane.slint:534
-#: ui/views/mail-reading-pane.slint:389 ui/views/mail-reading-pane.slint:803
+#: ui/dialogs/settings-dialog.slint:2248 ui/views/mail-list-pane.slint:495
+#: ui/views/mail-reading-pane.slint:347 ui/views/mail-reading-pane.slint:761
 msgid "Move to spam"
 msgstr "Переместить в спам"
 
-#: ui/dialogs/settings-dialog.slint:2249 ui/views/mail-list-pane.slint:543
-#: ui/views/mail-reading-pane.slint:372 ui/views/mail-reading-pane.slint:407
+#: ui/dialogs/settings-dialog.slint:2249 ui/views/mail-list-pane.slint:504
+#: ui/views/mail-reading-pane.slint:330 ui/views/mail-reading-pane.slint:365
 msgid "Move to trash"
 msgstr "Переместить в корзину"
 
@@ -5135,7 +5135,7 @@ msgstr "Переключение между списком и письмом"
 msgid "Reading"
 msgstr "Чтение"
 
-#: ui/dialogs/settings-dialog.slint:2258 ui/views/mail-reading-pane.slint:1265
+#: ui/dialogs/settings-dialog.slint:2258 ui/views/mail-reading-pane.slint:1223
 msgid "Find in message"
 msgstr "Найти в письме"
 
@@ -5143,7 +5143,7 @@ msgstr "Найти в письме"
 msgid "Reset zoom"
 msgstr "Сбросить масштаб"
 
-#: ui/dialogs/settings-dialog.slint:2262 ui/views/mail-reading-pane.slint:1594
+#: ui/dialogs/settings-dialog.slint:2262 ui/views/mail-reading-pane.slint:1552
 msgid "Caret browsing"
 msgstr "Навигация с текстовым курсором"
 
@@ -5507,7 +5507,7 @@ msgstr "Название профиля"
 msgid "Personal or Work"
 msgstr "Личный или Рабочий"
 
-#: ui/dialogs/settings-dialog.slint:2963 ui/views/mail-reading-pane.slint:2000
+#: ui/dialogs/settings-dialog.slint:2963 ui/views/mail-reading-pane.slint:1958
 msgid "Color"
 msgstr "Цвет"
 
@@ -6302,390 +6302,390 @@ msgstr "Убрать"
 msgid "Reviewed as completed"
 msgstr "Проверено: завершено"
 
-#: ui/views/mail-list-pane.slint:76
+#: ui/views/mail-list-pane.slint:37
 msgid "{n} message"
 msgid_plural "{n} messages"
 msgstr[0] "{n} письмо"
 msgstr[1] "{n} письма"
 msgstr[2] "{n} писем"
 
-#: ui/views/mail-list-pane.slint:413
+#: ui/views/mail-list-pane.slint:374
 msgid "This week"
 msgstr "На этой неделе"
 
-#: ui/views/mail-list-pane.slint:414
+#: ui/views/mail-list-pane.slint:375
 msgid "Last week"
 msgstr "На прошлой неделе"
 
-#: ui/views/mail-list-pane.slint:415
+#: ui/views/mail-list-pane.slint:376
 msgid "This month"
 msgstr "В этом месяце"
 
-#: ui/views/mail-list-pane.slint:416
+#: ui/views/mail-list-pane.slint:377
 msgid "Last month"
 msgstr "В прошлом месяце"
 
-#: ui/views/mail-list-pane.slint:417
+#: ui/views/mail-list-pane.slint:378
 msgid "Earlier"
 msgstr "Ранее"
 
-#: ui/views/mail-list-pane.slint:449
+#: ui/views/mail-list-pane.slint:410
 msgid "Show folders"
 msgstr "Показать папки"
 
-#: ui/views/mail-list-pane.slint:449
+#: ui/views/mail-list-pane.slint:410
 msgid "Hide folders"
 msgstr "Скрыть папки"
 
-#: ui/views/mail-list-pane.slint:455
+#: ui/views/mail-list-pane.slint:416
 msgid "Unread"
 msgstr "Непрочитанные"
 
-#: ui/views/mail-list-pane.slint:456
+#: ui/views/mail-list-pane.slint:417
 msgid "Starred"
 msgstr "Со звёздочкой"
 
-#: ui/views/mail-list-pane.slint:457 ui/views/mail-list-pane.slint:677
+#: ui/views/mail-list-pane.slint:418 ui/views/mail-list-pane.slint:640
 msgid "Has attachments"
 msgstr "С вложениями"
 
-#: ui/views/mail-list-pane.slint:460
+#: ui/views/mail-list-pane.slint:421
 msgid "Filter mail"
 msgstr "Фильтр почты"
 
-#: ui/views/mail-list-pane.slint:463
+#: ui/views/mail-list-pane.slint:424
 msgid "Synchronizing mail"
 msgstr "Синхронизация почты"
 
-#: ui/views/mail-list-pane.slint:463
+#: ui/views/mail-list-pane.slint:424
 msgid "Reload mail"
 msgstr "Обновить почту"
 
-#: ui/views/mail-list-pane.slint:503
+#: ui/views/mail-list-pane.slint:464
 msgid "Select all messages on this page"
 msgstr "Выбрать все письма на этой странице"
 
-#: ui/views/mail-list-pane.slint:525
+#: ui/views/mail-list-pane.slint:486
 msgid "Archive selected message"
 msgstr "Архивировать выбранное письмо"
 
-#: ui/views/mail-list-pane.slint:543
+#: ui/views/mail-list-pane.slint:504
 msgid "Delete selected permanently"
 msgstr "Удалить выбранное безвозвратно"
 
-#: ui/views/mail-list-pane.slint:556 ui/views/mail-reading-pane.slint:1024
+#: ui/views/mail-list-pane.slint:517 ui/views/mail-reading-pane.slint:982
 msgid "More message actions"
 msgstr "Другие действия с письмом"
 
-#: ui/views/mail-list-pane.slint:562 ui/views/mail-list-pane.slint:1036
-#: ui/views/mail-reading-pane.slint:404
+#: ui/views/mail-list-pane.slint:523 ui/views/mail-list-pane.slint:1025
+#: ui/views/mail-reading-pane.slint:362
 msgid "Mark as read"
 msgstr "Отметить как прочитанное"
 
-#: ui/views/mail-list-pane.slint:563 ui/views/mail-list-pane.slint:1036
-#: ui/views/mail-reading-pane.slint:404
+#: ui/views/mail-list-pane.slint:524 ui/views/mail-list-pane.slint:1025
+#: ui/views/mail-reading-pane.slint:362
 msgid "Mark as unread"
 msgstr "Отметить как непрочитанное"
 
-#: ui/views/mail-list-pane.slint:564 ui/views/mail-list-pane.slint:1035
-#: ui/views/mail-reading-pane.slint:396
+#: ui/views/mail-list-pane.slint:525 ui/views/mail-list-pane.slint:1024
+#: ui/views/mail-reading-pane.slint:354
 msgid "Star message"
 msgstr "Отметить письмо звёздочкой"
 
-#: ui/views/mail-list-pane.slint:565 ui/views/mail-list-pane.slint:1035
-#: ui/views/mail-reading-pane.slint:396
+#: ui/views/mail-list-pane.slint:526 ui/views/mail-list-pane.slint:1024
+#: ui/views/mail-reading-pane.slint:354
 msgid "Remove star"
 msgstr "Убрать звёздочку"
 
-#: ui/views/mail-list-pane.slint:672 ui/views/mail-list-pane.slint:855
+#: ui/views/mail-list-pane.slint:635 ui/views/mail-list-pane.slint:818
 msgid "(No subject)"
 msgstr "(Без темы)"
 
-#: ui/views/mail-list-pane.slint:674
+#: ui/views/mail-list-pane.slint:637
 msgid "Profile: {}"
 msgstr "Профиль: {}"
 
-#: ui/views/mail-list-pane.slint:675
+#: ui/views/mail-list-pane.slint:638
 msgid "{} messages"
 msgstr "Писем: {}"
 
-#: ui/views/mail-list-pane.slint:678
+#: ui/views/mail-list-pane.slint:641
 msgid "Replied"
 msgstr "Есть ответ"
 
-#: ui/views/mail-list-pane.slint:798
+#: ui/views/mail-list-pane.slint:761
 msgid "{} messages in this conversation"
 msgstr "Писем в этой переписке: {}"
 
-#: ui/views/mail-list-pane.slint:883
+#: ui/views/mail-list-pane.slint:846
 msgid "Account: {}"
 msgstr "Учётная запись: {}"
 
-#: ui/views/mail-list-pane.slint:1025
+#: ui/views/mail-list-pane.slint:1013
 msgid "Deselect {}"
 msgstr "Снять выделение: {}"
 
-#: ui/views/mail-list-pane.slint:1033
+#: ui/views/mail-list-pane.slint:1022
 msgid "Open in new tab"
 msgstr "Открыть в новой вкладке"
 
-#: ui/views/mail-list-pane.slint:1039 ui/views/mail-reading-pane.slint:372
-#: ui/views/mail-reading-pane.slint:407
+#: ui/views/mail-list-pane.slint:1028 ui/views/mail-reading-pane.slint:330
+#: ui/views/mail-reading-pane.slint:365
 msgid "Delete permanently…"
 msgstr "Удалить безвозвратно…"
 
-#: ui/views/mail-list-pane.slint:1096 ui/views/onboarding-view.slint:139
+#: ui/views/mail-list-pane.slint:1085 ui/views/onboarding-view.slint:139
 msgid "Opening your mailbox…"
 msgstr "Открытие почтового ящика…"
 
-#: ui/views/mail-list-pane.slint:1096
+#: ui/views/mail-list-pane.slint:1085
 msgid "Nothing here"
 msgstr "Здесь ничего нет"
 
-#: ui/views/mail-list-pane.slint:1097
+#: ui/views/mail-list-pane.slint:1086
 msgid "Try another folder or search term."
 msgstr "Попробуйте другую папку или поисковый запрос."
 
-#: ui/views/mail-reading-pane.slint:187
+#: ui/views/mail-reading-pane.slint:145
 msgid "Rendering message…"
 msgstr "Отрисовка письма…"
 
-#: ui/views/mail-reading-pane.slint:235
+#: ui/views/mail-reading-pane.slint:193
 msgid "Message from {}"
 msgstr "Письмо от {}"
 
-#: ui/views/mail-reading-pane.slint:235 ui/views/mail-reading-pane.slint:260
+#: ui/views/mail-reading-pane.slint:193 ui/views/mail-reading-pane.slint:218
 msgid "You"
 msgstr "Вы"
 
-#: ui/views/mail-reading-pane.slint:276
+#: ui/views/mail-reading-pane.slint:234
 msgid "Verified brand with BIMI authority evidence"
 msgstr "Подлинность бренда подтверждена удостоверяющим органом BIMI"
 
-#: ui/views/mail-reading-pane.slint:278
+#: ui/views/mail-reading-pane.slint:236
 msgid "BIMI-authenticated sender"
 msgstr "Отправитель проверен по BIMI"
 
-#: ui/views/mail-reading-pane.slint:280
+#: ui/views/mail-reading-pane.slint:238
 msgid "Sender authenticated by Microsoft"
 msgstr "Подлинность отправителя подтверждена Microsoft"
 
-#: ui/views/mail-reading-pane.slint:281
+#: ui/views/mail-reading-pane.slint:239
 msgid "Sender domain authenticated with DMARC and DKIM"
 msgstr "Подлинность домена отправителя подтверждена DMARC и DKIM"
 
-#: ui/views/mail-reading-pane.slint:301
+#: ui/views/mail-reading-pane.slint:259
 msgid "to {}"
 msgstr "кому: {}"
 
-#: ui/views/mail-reading-pane.slint:367 ui/views/mail-reading-pane.slint:1888
+#: ui/views/mail-reading-pane.slint:325 ui/views/mail-reading-pane.slint:1846
 msgid "Continue editing"
 msgstr "Продолжить редактирование"
 
-#: ui/views/mail-reading-pane.slint:369 ui/views/mail-reading-pane.slint:370
-#: ui/views/mail-reading-pane.slint:385 ui/views/mail-reading-pane.slint:402
+#: ui/views/mail-reading-pane.slint:327 ui/views/mail-reading-pane.slint:328
+#: ui/views/mail-reading-pane.slint:343 ui/views/mail-reading-pane.slint:360
 msgid "Show rendered message"
 msgstr "Показать оформленное письмо"
 
-#: ui/views/mail-reading-pane.slint:369 ui/views/mail-reading-pane.slint:384
+#: ui/views/mail-reading-pane.slint:327 ui/views/mail-reading-pane.slint:342
 msgid "Show source"
 msgstr "Показать исходный код"
 
-#: ui/views/mail-reading-pane.slint:370 ui/views/mail-reading-pane.slint:385
+#: ui/views/mail-reading-pane.slint:328 ui/views/mail-reading-pane.slint:343
 msgid "View plain text"
 msgstr "Показать обычный текст"
 
-#: ui/views/mail-reading-pane.slint:371 ui/views/mail-reading-pane.slint:386
-#: ui/views/mail-reading-pane.slint:1266
+#: ui/views/mail-reading-pane.slint:329 ui/views/mail-reading-pane.slint:344
+#: ui/views/mail-reading-pane.slint:1224
 msgid "Use message appearance"
 msgstr "Применить оформление писем"
 
-#: ui/views/mail-reading-pane.slint:371 ui/views/mail-reading-pane.slint:386
-#: ui/views/mail-reading-pane.slint:1266
+#: ui/views/mail-reading-pane.slint:329 ui/views/mail-reading-pane.slint:344
+#: ui/views/mail-reading-pane.slint:1224
 msgid "Show original colors"
 msgstr "Показать исходные цвета"
 
-#: ui/views/mail-reading-pane.slint:379 ui/views/mail-reading-pane.slint:397
+#: ui/views/mail-reading-pane.slint:337 ui/views/mail-reading-pane.slint:355
 msgid "Manage labels"
 msgstr "Управление метками"
 
-#: ui/views/mail-reading-pane.slint:380 ui/views/mail-reading-pane.slint:398
+#: ui/views/mail-reading-pane.slint:338 ui/views/mail-reading-pane.slint:356
 msgid "Decrypt / verify OpenPGP"
 msgstr "Расшифровать / проверить OpenPGP"
 
-#: ui/views/mail-reading-pane.slint:381
+#: ui/views/mail-reading-pane.slint:339
 msgid "Print message"
 msgstr "Напечатать письмо"
 
-#: ui/views/mail-reading-pane.slint:382 ui/views/mail-reading-pane.slint:399
+#: ui/views/mail-reading-pane.slint:340 ui/views/mail-reading-pane.slint:357
 msgid "Open in browser"
 msgstr "Открыть в браузере"
 
-#: ui/views/mail-reading-pane.slint:712
+#: ui/views/mail-reading-pane.slint:670
 msgid "Close conversation"
 msgstr "Закрыть переписку"
 
-#: ui/views/mail-reading-pane.slint:722
+#: ui/views/mail-reading-pane.slint:680
 msgid "Previous conversation"
 msgstr "Предыдущая переписка"
 
-#: ui/views/mail-reading-pane.slint:732
+#: ui/views/mail-reading-pane.slint:690
 msgid "Next conversation"
 msgstr "Следующая переписка"
 
-#: ui/views/mail-reading-pane.slint:773
+#: ui/views/mail-reading-pane.slint:731
 msgid "Archive message"
 msgstr "Архивировать письмо"
 
-#: ui/views/mail-reading-pane.slint:876
+#: ui/views/mail-reading-pane.slint:834
 msgid "Search labels"
 msgstr "Поиск меток"
 
-#: ui/views/mail-reading-pane.slint:893
+#: ui/views/mail-reading-pane.slint:851
 msgid "Available labels"
 msgstr "Доступные метки"
 
-#: ui/views/mail-reading-pane.slint:932
+#: ui/views/mail-reading-pane.slint:890
 msgid "Smart category"
 msgstr "Умная категория"
 
-#: ui/views/mail-reading-pane.slint:973 ui/views/mail-reading-pane.slint:1985
+#: ui/views/mail-reading-pane.slint:931 ui/views/mail-reading-pane.slint:1943
 msgid "Edit label"
 msgstr "Изменить метку"
 
-#: ui/views/mail-reading-pane.slint:990
+#: ui/views/mail-reading-pane.slint:948
 msgid "No matching labels"
 msgstr "Нет подходящих меток"
 
-#: ui/views/mail-reading-pane.slint:1002
+#: ui/views/mail-reading-pane.slint:960
 msgid "Create label…"
 msgstr "Создать метку…"
 
-#: ui/views/mail-reading-pane.slint:1267
+#: ui/views/mail-reading-pane.slint:1225
 msgid "Show original layout"
 msgstr "Показать исходное оформление"
 
-#: ui/views/mail-reading-pane.slint:1267
+#: ui/views/mail-reading-pane.slint:1225
 msgid "Reader mode"
 msgstr "Режим чтения"
 
-#: ui/views/mail-reading-pane.slint:1274
+#: ui/views/mail-reading-pane.slint:1232
 msgid "Previous match"
 msgstr "Предыдущее совпадение"
 
-#: ui/views/mail-reading-pane.slint:1275
+#: ui/views/mail-reading-pane.slint:1233
 msgid "Next match"
 msgstr "Следующее совпадение"
 
-#: ui/views/mail-reading-pane.slint:1276
+#: ui/views/mail-reading-pane.slint:1234
 msgid "Close find"
 msgstr "Закрыть поиск"
 
-#: ui/views/mail-reading-pane.slint:1280
+#: ui/views/mail-reading-pane.slint:1238
 msgid "Some images could not be loaded."
 msgstr "Некоторые изображения не удалось загрузить."
 
-#: ui/views/mail-reading-pane.slint:1281 ui/views/mail-reading-pane.slint:1592
+#: ui/views/mail-reading-pane.slint:1239 ui/views/mail-reading-pane.slint:1550
 msgid "Retry images"
 msgstr "Повторить загрузку изображений"
 
-#: ui/views/mail-reading-pane.slint:1286
+#: ui/views/mail-reading-pane.slint:1244
 msgid "Reload message"
 msgstr "Обновить письмо"
 
-#: ui/views/mail-reading-pane.slint:1348
+#: ui/views/mail-reading-pane.slint:1306
 msgid "Remote images were blocked to protect your privacy."
 msgstr "Внешние изображения заблокированы для защиты вашей конфиденциальности."
 
-#: ui/views/mail-reading-pane.slint:1357
+#: ui/views/mail-reading-pane.slint:1315
 msgid "Load images"
 msgstr "Загрузить изображения"
 
-#: ui/views/mail-reading-pane.slint:1395
+#: ui/views/mail-reading-pane.slint:1353
 msgid "Loading image…"
 msgstr "Загрузка изображения…"
 
-#: ui/views/mail-reading-pane.slint:1395
+#: ui/views/mail-reading-pane.slint:1353
 msgid "Blocked image"
 msgstr "Изображение заблокировано"
 
-#: ui/views/mail-reading-pane.slint:1395
+#: ui/views/mail-reading-pane.slint:1353
 msgid "Image exceeds limits"
 msgstr "Изображение превышает ограничения"
 
-#: ui/views/mail-reading-pane.slint:1395
+#: ui/views/mail-reading-pane.slint:1353
 msgid "Image unavailable"
 msgstr "Изображение недоступно"
 
-#: ui/views/mail-reading-pane.slint:1541
+#: ui/views/mail-reading-pane.slint:1499
 msgid "Show rendered email"
 msgstr "Показать оформленное письмо"
 
-#: ui/views/mail-reading-pane.slint:1564
+#: ui/views/mail-reading-pane.slint:1522
 msgid "Copy this HTML into your GitHub rendering issue."
 msgstr "Скопируйте этот HTML в сообщение о проблеме с отрисовкой на GitHub."
 
-#: ui/views/mail-reading-pane.slint:1581
+#: ui/views/mail-reading-pane.slint:1539
 msgid "Show email"
 msgstr "Показать письмо"
 
-#: ui/views/mail-reading-pane.slint:1591
+#: ui/views/mail-reading-pane.slint:1549
 msgid "View original plain text"
 msgstr "Показать исходный обычный текст"
 
-#: ui/views/mail-reading-pane.slint:1593
+#: ui/views/mail-reading-pane.slint:1551
 msgid "Copy formatted selection"
 msgstr "Копировать выделенное с форматированием"
 
-#: ui/views/mail-reading-pane.slint:1597
+#: ui/views/mail-reading-pane.slint:1555
 msgid "Copy selected text"
 msgstr "Копировать выделенный текст"
 
-#: ui/views/mail-reading-pane.slint:1607
+#: ui/views/mail-reading-pane.slint:1565
 msgid "Copy all email text"
 msgstr "Копировать весь текст письма"
 
-#: ui/views/mail-reading-pane.slint:1617
+#: ui/views/mail-reading-pane.slint:1575
 msgid "Select all email text"
 msgstr "Выделить весь текст письма"
 
-#: ui/views/mail-reading-pane.slint:1635
+#: ui/views/mail-reading-pane.slint:1593
 msgid "Link: {}"
 msgstr "Ссылка: {}"
 
-#: ui/views/mail-reading-pane.slint:1827
+#: ui/views/mail-reading-pane.slint:1785
 msgid "Heading: {}"
 msgstr "Заголовок: {}"
 
-#: ui/views/mail-reading-pane.slint:1949
+#: ui/views/mail-reading-pane.slint:1907
 msgid "No message selected"
 msgstr "Письмо не выбрано"
 
-#: ui/views/mail-reading-pane.slint:1950
+#: ui/views/mail-reading-pane.slint:1908
 msgid "Choose an email to read it here."
 msgstr "Выберите письмо, чтобы прочитать его здесь."
 
-#: ui/views/mail-reading-pane.slint:1992
+#: ui/views/mail-reading-pane.slint:1950
 msgid "Label name"
 msgstr "Название метки"
 
-#: ui/views/mail-reading-pane.slint:2012
+#: ui/views/mail-reading-pane.slint:1970
 msgid "Pink"
 msgstr "Розовый"
 
-#: ui/views/mail-reading-pane.slint:2013
+#: ui/views/mail-reading-pane.slint:1971
 msgid "Red"
 msgstr "Красный"
 
-#: ui/views/mail-reading-pane.slint:2014
+#: ui/views/mail-reading-pane.slint:1972
 msgid "Amber"
 msgstr "Янтарный"
 
-#: ui/views/mail-reading-pane.slint:2017
+#: ui/views/mail-reading-pane.slint:1975
 msgid "Slate"
 msgstr "Серо-синий"
 
-#: ui/views/mail-reading-pane.slint:2022
+#: ui/views/mail-reading-pane.slint:1980
 msgid "Use across all accounts (local only)"
 msgstr "Использовать во всех учётных записях (только локально)"
 

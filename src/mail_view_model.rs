@@ -936,6 +936,7 @@ pub(super) fn same_email_row(a: &EmailRow, b: &EmailRow) -> bool {
         && a.has_replied == b.has_replied
         && a.message_count == b.message_count
         && a.label_summary == b.label_summary
+        && a.account_uses_labels == b.account_uses_labels
         && a.selected == b.selected
         && a.checked == b.checked
         && (!a.has_favicon || (a.favicon == b.favicon && a.favicon_small == b.favicon_small))
@@ -990,6 +991,7 @@ pub(super) fn make_rows<M: std::borrow::Borrow<MailMessage>>(
                     .max(1),
                 label_summary: label_summary(&email.labels, labels).into(),
                 labels: ModelRc::new(VecModel::from(applied_label_rows(labels, &email.labels))),
+                account_uses_labels: email.account_uses_labels,
                 selected: Some(email.id) == selected_id,
                 checked: checked_ids.contains(&email.id),
             }
@@ -1774,6 +1776,7 @@ mod tests {
             attachments: Vec::new(),
             body_pending: true,
             sender_verification: String::new(),
+            account_uses_labels: false,
         }
     }
 
@@ -2057,6 +2060,28 @@ mod tests {
         assert_eq!(successor_selection(&order, 40, &visible(&[10, 20])), Some(20));
         assert_eq!(successor_selection(&order, 20, &visible(&[])), None);
         assert_eq!(successor_selection(&order, 99, &visible(&[10])), None);
+    }
+
+    fn project_row(email: &MailMessage) -> EmailRow {
+        make_rows(
+            std::slice::from_ref(email),
+            None,
+            &HashSet::new(),
+            &HashMap::new(),
+            &[],
+            &AccountPresentationSettings::default(),
+        )
+        .remove(0)
+    }
+
+    #[test]
+    fn mail_rows_know_how_their_account_files_labels() {
+        let mut email = message(1);
+        email.account_uses_labels = true;
+        let row = project_row(&email);
+        assert!(row.account_uses_labels);
+        email.account_uses_labels = false;
+        assert!(!same_email_row(&row, &project_row(&email)));
     }
 
     #[test]

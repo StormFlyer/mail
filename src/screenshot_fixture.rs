@@ -208,6 +208,7 @@ fixture_row!(EmailRow {
     message_count,
     label_summary,
     labels,
+    account_uses_labels,
     selected,
     checked
 });

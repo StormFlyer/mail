@@ -5,6 +5,7 @@ import { Avatar } from "../components/avatar.slint";
 import { Button } from "../components/button.slint";
 import { FloatingActionButton, SelectionCheckBox, ToolbarIconButton } from "../components/controls.slint";
 import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
+import { LabelChip } from "../components/label-chip.slint";
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics, MotionSettings } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
@@ -12,46 +13,6 @@ import { WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 import { WorkspaceListLoadingRow, WorkspaceListTransition } from "../components/workspace-list.slint";
 import { TabsUi } from "../components/workspace-navigation.slint";
 import { Shortcuts } from "../shortcuts.slint";
-
-component MailListLabelChip inherits Rectangle {
-    in property <string> name;
-    in property <bool> name-has-emoji: false;
-    in property <color> label-color;
-    in property <color> text-color;
-    in property <bool> compact: false;
-
-    min-width: min(root.compact ? 68px : 92px, chip-name.preferred-width + 25px);
-    preferred-width: self.min-width;
-    max-width: self.min-width;
-    height: 20px;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: root.label-color.transparentize(0.55);
-    background: root.label-color.transparentize(0.86);
-
-    Image {
-        x: 5px;
-        y: 4px;
-        width: 12px;
-        height: 12px;
-        source: @image-url("../icons/lucide/outline/file-directory.svg");
-        colorize: root.label-color;
-        image-fit: contain;
-        accessible-role: none;
-    }
-    chip-name := Text {
-        x: 21px;
-        width: parent.width - 25px;
-        height: parent.height;
-        text: root.name;
-        color: root.text-color;
-        font-size: TypeScale.caption;
-        font-weight: 600;
-        font-family: root.name-has-emoji ? "Noto Emoji" : "";
-        overflow: elide;
-        vertical-alignment: center;
-    }
-}
 
 component MailGroupHeader inherits Rectangle {
     in property <string> title;
@@ -644,6 +605,8 @@ export component MailListPane inherits FocusScope {
 
                             for entry in root.list_entries : mail-row := Rectangle {
                                 private property <EmailRow> mail-data: entry.email;
+                                // Labels past the limit hide; "+N" counts them.
+                                private property <int> label-limit: root.dense ? 1 : 2;
                                 private property <bool> reveal-ready: !entry.reveal_row;
                                 private property <bool> touch-pending: false;
                                 private property <bool> long-press-triggered: false;
@@ -902,39 +865,64 @@ export component MailListPane inherits FocusScope {
                                             vertical-alignment: center;
                                         }
                                     }
-                                    HorizontalBox {
+                                    // A line too narrow for its chips cuts them off rather
+                                    // than drawing over the account.
+                                    detail := Rectangle {
                                         x: root.dense ? subject-label.x + subject-label.width + 12px : 0px;
                                         y: root.dense ? 0px : root.sender-line + root.subject-line + 10px;
                                         width: root.dense ? max(0px, message-content.dense-account-x - self.x - 12px) : max(0px, parent.width - 98px);
                                         height: root.dense ? 44px : root.detail-line;
-                                        padding: 0px;
-                                        spacing: 4px;
-                                        cross-axis-alignment: center;
+                                        clip: true;
 
-                                        for label[index] in mail-data.labels : MailListLabelChip {
-                                            visible: index < (root.dense ? 1 : 2);
-                                            name: label.name;
-                                            name-has-emoji: label.name_has_emoji;
-                                            label-color: label.color;
-                                            text-color: root.heading;
-                                            compact: root.dense;
-                                        }
-                                        if mail-data.labels.length > (root.dense ? 1 : 2) : Text {
-                                            min-width: 22px;
-                                            preferred-width: 22px;
-                                            max-width: 22px;
-                                            text: "+" + (mail-data.labels.length - (root.dense ? 1 : 2));
-                                            color: root.secondary-text;
-                                            font-size: TypeScale.caption;
-                                            vertical-alignment: center;
-                                        }
-                                        Text {
-                                            horizontal-stretch: 1;
-                                            text: mail-data.preview;
-                                            color: root.faint-text;
-                                            font-size: TypeScale.secondary;
-                                            overflow: elide;
-                                            vertical-alignment: center;
+                                        // Each item carries its own gap, so labels past the
+                                        // limit take no room.
+                                        HorizontalLayout {
+                                            spacing: 0px;
+                                            cross-axis-alignment: center;
+
+                                            for label[index] in mail-data.labels : HorizontalLayout {
+                                                padding-right: index < mail-row.label-limit ? 4px : 0px;
+                                                cross-axis-alignment: center;
+
+                                                if index < mail-row.label-limit : LabelChip {
+                                                    compact: true;
+                                                    // The preview gives way first, then the names shorten.
+                                                    preferred-width: min(self.natural-width, root.dense ? 68px : 92px);
+                                                    max-width: self.preferred-width;
+                                                    min-width: min(self.preferred-width, 36px);
+                                                    horizontal-stretch: 0;
+                                                    name: label.name;
+                                                    name-has-emoji: label.name_has_emoji;
+                                                    use-label-icon: mail-data.account_uses_labels;
+                                                    label-color: label.color;
+                                                    text-color: root.heading;
+                                                    chip-border-color: root.border-subtle;
+                                                }
+                                            }
+                                            if mail-data.labels.length > mail-row.label-limit : HorizontalLayout {
+                                                padding-right: 4px;
+
+                                                Text {
+                                                    width: 22px;
+                                                    text: "+" + (mail-data.labels.length - mail-row.label-limit);
+                                                    color: root.secondary-text;
+                                                    font-size: TypeScale.caption;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            Text {
+                                                // A preview cut to an ellipsis says nothing,
+                                                // so it gives up all its room first, and a
+                                                // sliver too narrow for one is left empty.
+                                                min-width: 0px;
+                                                visible: self.width >= self.font-size;
+                                                horizontal-stretch: 1;
+                                                text: mail-data.preview;
+                                                color: root.faint-text;
+                                                font-size: TypeScale.secondary;
+                                                overflow: elide;
+                                                vertical-alignment: center;
+                                            }
                                         }
                                     }
                                 }
@@ -1027,6 +1015,7 @@ export component MailListPane inherits FocusScope {
                                                 animate opacity { duration: 120ms; }
                                                 toggled(checked) => { root.set_email_checked(mail-data.id, checked); }
                                             }
+
                                         }
 
                                         Menu {

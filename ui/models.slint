@@ -118,6 +118,8 @@ export struct EmailRow {
     message_count: int,
     label_summary: string,
     labels: [MailLabelRow],
+    // Gmail labels are tags; other accounts file labels like folders.
+    account_uses_labels: bool,
     selected: bool,
     checked: bool,
 }

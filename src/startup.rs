@@ -70,6 +70,8 @@ pub(crate) struct WarmStartMessage {
     #[serde(default)]
     pub(crate) labels: Vec<i64>,
     pub(crate) sender_verification: String,
+    #[serde(default)]
+    pub(crate) account_uses_labels: bool,
 }
 
 impl From<&mail::MailMessage> for WarmStartMessage {
@@ -95,6 +97,7 @@ impl From<&mail::MailMessage> for WarmStartMessage {
             has_replied: message.has_replied,
             labels: message.labels.clone(),
             sender_verification: message.sender_verification.clone(),
+            account_uses_labels: message.account_uses_labels,
         }
     }
 }
@@ -128,6 +131,7 @@ impl From<WarmStartMessage> for mail::MailMessage {
             attachments: Vec::new(),
             body_pending: true,
             sender_verification: message.sender_verification,
+            account_uses_labels: message.account_uses_labels,
         }
     }
 }
@@ -1133,6 +1137,7 @@ mod warm_start_tests {
             attachments: Vec::new(),
             body_pending: false,
             sender_verification: "domain".into(),
+            account_uses_labels: true,
         }
     }
 
@@ -1194,6 +1199,7 @@ mod warm_start_tests {
         assert!(restored_message.has_replied);
         assert!(restored_message.html.is_none());
         assert!(restored_message.body_pending);
+        assert!(restored_message.account_uses_labels);
     }
 
     #[tokio::test]
