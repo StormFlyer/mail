@@ -6145,6 +6145,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             &source,
             action.as_str(),
             app.get_selected_plain_text().as_str(),
+            |message| translated(&app, &message).into(),
         ) {
             Ok(prepared) => prepared,
             Err(error) => {

@@ -359,7 +359,7 @@ msgstr "有往来邮件记录"
 msgid "New address-book entry"
 msgstr "新建通讯录条目"
 
-#: ui/app.slint:173 ui/app.slint:984 ui/components/composer-fields.slint:66
+#: ui/app.slint:173 ui/app.slint:992 ui/components/composer-fields.slint:66
 #: ui/dialogs/compose-dialog.slint:37
 msgid "No connected account"
 msgstr "未连接账户"
@@ -1345,145 +1345,178 @@ msgstr "无法打开邮件编辑器：{}"
 msgid "Could not open composer: invalid account identifier"
 msgstr "无法打开邮件编辑器：账户标识无效"
 
-#: ui/app.slint:494
+#. Reply and forward quotation headers, written into the draft.
+#: ui/app.slint:495
+msgid "On {}, {} wrote:"
+msgstr "{}，{} 写道："
+
+#: ui/app.slint:496
+msgid "{} wrote:"
+msgstr "{} 写道："
+
+#: ui/app.slint:497
+msgid "Forwarded message"
+msgstr "转发的邮件"
+
+#: ui/app.slint:498
+msgctxt "forwarded message header"
+msgid "From: {}"
+msgstr "发件人：{}"
+
+#: ui/app.slint:499
+msgctxt "forwarded message header"
+msgid "Date: {}"
+msgstr "日期：{}"
+
+#: ui/app.slint:500
+msgctxt "forwarded message header"
+msgid "Subject: {}"
+msgstr "主题：{}"
+
+#: ui/app.slint:501
+msgctxt "forwarded message header"
+msgid "To: {}"
+msgstr "收件人：{}"
+
+#: ui/app.slint:502
 msgid "Attach files to this email"
 msgstr "为此邮件添加附件"
 
-#: ui/app.slint:495
+#: ui/app.slint:503
 msgid "Could not add attachments: {}"
 msgstr "无法添加附件：{}"
 
-#: ui/app.slint:496
+#: ui/app.slint:504
 msgid "Added 1 attachment."
 msgstr "已添加 1 个附件。"
 
-#: ui/app.slint:497
+#: ui/app.slint:505
 msgid "Added {} attachments."
 msgstr "已添加 {} 个附件。"
 
-#: ui/app.slint:498
+#: ui/app.slint:506
 msgid ""
 "Attachments added: {}. Skipped: {} (duplicate, unreadable, or over the 25 MB "
 "total limit)."
 msgstr "已添加 {} 个附件，跳过 {} 个（重复、无法读取或超过 25 MB 总量上限）。"
 
-#: ui/app.slint:499
+#: ui/app.slint:507
 msgid "Attachment removed."
 msgstr "附件已移除。"
 
-#: ui/app.slint:500
+#: ui/app.slint:508
 msgid "Choose the account this message should be sent from."
 msgstr "选择发送此邮件的账户。"
 
-#: ui/app.slint:501
+#: ui/app.slint:509
 msgid "Choose a verified sender identity for this message."
 msgstr "为此邮件选择已验证的发件人身份。"
 
-#: ui/app.slint:502
+#: ui/app.slint:510
 msgid "Connect an account before saving or sending mail."
 msgstr "请先连接账户再保存或发送邮件。"
 
-#: ui/app.slint:503
+#: ui/app.slint:511
 msgid "Message queued for delivery (action {})."
 msgstr "邮件已加入发送队列（操作 {}）。"
 
-#: ui/app.slint:504
+#: ui/app.slint:512
 msgid "Sending message…"
 msgstr "正在发送邮件…"
 
-#: ui/app.slint:505
+#: ui/app.slint:513
 msgid "Message sent."
 msgstr "邮件已发送。"
 
-#: ui/app.slint:506
+#: ui/app.slint:514
 msgid "Message was not sent: {} Your draft is preserved."
 msgstr "邮件未发送：{} 草稿已保留。"
 
-#: ui/app.slint:507
+#: ui/app.slint:515
 msgid "Draft saved locally (#{})."
 msgstr "草稿已保存到本地（#{}）。"
 
-#: ui/app.slint:508
+#: ui/app.slint:516
 msgid "Compose failed: {}"
 msgstr "撰写邮件失败：{}"
 
-#: ui/app.slint:509
+#: ui/app.slint:517
 msgid "Connect an account before managing email templates."
 msgstr "请先连接账户再管理邮件模板。"
 
-#: ui/app.slint:510
+#: ui/app.slint:518
 msgid "Could not load email templates: {}"
 msgstr "无法加载邮件模板：{}"
 
-#: ui/app.slint:511
+#: ui/app.slint:519
 msgid "Enter a template name."
 msgstr "请输入模板名称。"
 
-#: ui/app.slint:512
+#: ui/app.slint:520
 msgid "Add a subject or message to the template."
 msgstr "请为模板添加主题或正文。"
 
-#: ui/app.slint:513
+#: ui/app.slint:521
 msgid "Email template saved."
 msgstr "邮件模板已保存。"
 
-#: ui/app.slint:514
+#: ui/app.slint:522
 msgid "Could not save email template: {}"
 msgstr "无法保存邮件模板：{}"
 
-#: ui/app.slint:515
+#: ui/app.slint:523
 msgid "Email template deleted."
 msgstr "邮件模板已删除。"
 
-#: ui/app.slint:516
+#: ui/app.slint:524
 msgid "Could not delete email template: {}"
 msgstr "无法删除邮件模板：{}"
 
-#: ui/app.slint:517
+#: ui/app.slint:525
 msgid "Email template is no longer available."
 msgstr "邮件模板已不存在。"
 
-#: ui/app.slint:518
+#: ui/app.slint:526
 msgid "Email template inserted."
 msgstr "邮件模板已插入。"
 
-#: ui/app.slint:519
+#: ui/app.slint:527
 msgid "Email template inserted, but its usage could not be saved: {}"
 msgstr "邮件模板已插入，但无法记录其使用情况：{}"
 
-#: ui/app.slint:520
+#: ui/app.slint:528
 msgid "Choose a supported account type and connection security."
 msgstr ""
 
-#: ui/app.slint:521
+#: ui/app.slint:529
 msgid "IMAP port must be between 1 and 65535."
 msgstr "IMAP 端口必须在 1 到 65535 之间。"
 
-#: ui/app.slint:522
+#: ui/app.slint:530
 msgid "POP3 port must be between 1 and 65535."
 msgstr ""
 
-#: ui/app.slint:523
+#: ui/app.slint:531
 msgid "SMTP port must be between 1 and 65535."
 msgstr "SMTP 端口必须在 1 到 65535 之间。"
 
-#: ui/app.slint:524
+#: ui/app.slint:532
 msgid "Local mail data is unavailable. Retry startup."
 msgstr "本地邮件数据不可用，请重新启动。"
 
-#: ui/app.slint:525
+#: ui/app.slint:533
 msgid "Discovering JMAP and checking capabilities…"
 msgstr "正在发现 JMAP 并检查服务能力…"
 
-#: ui/app.slint:526
+#: ui/app.slint:534
 msgid "Certificate imported. Connect to verify the server."
 msgstr "证书已导入。请连接以验证服务器。"
 
-#: ui/app.slint:527
+#: ui/app.slint:535
 msgid "Could not load account preferences: {}"
 msgstr "无法加载账户偏好设置：{}"
 
-#: ui/app.slint:528
+#: ui/app.slint:536
 msgid ""
 "Your edited signature was preserved. Choose No signature to keep it as "
 "message text before inserting another."
@@ -1491,165 +1524,165 @@ msgstr ""
 "您编辑过的签名已保留。插入其他签名前，请选择“不使用签名”，以便将其保留为邮件"
 "正文。"
 
-#: ui/app.slint:529
+#: ui/app.slint:537
 msgid "Certificate import failed: {}"
 msgstr "证书导入失败：{}"
 
-#: ui/app.slint:530
+#: ui/app.slint:538
 msgid "Paste the PEM certificate into the certificate field."
 msgstr "请将 PEM 证书粘贴到证书字段中。"
 
-#: ui/app.slint:531
+#: ui/app.slint:539
 msgid "Testing IMAP and SMTP connections…"
 msgstr "正在测试 IMAP 和 SMTP 连接…"
 
-#: ui/app.slint:532
+#: ui/app.slint:540
 msgid "Testing POP3 and SMTP connections…"
 msgstr ""
 
-#: ui/app.slint:537
+#: ui/app.slint:545
 msgid ""
 "Another browser authorization is already in progress; finish it or choose "
 "Cancel."
 msgstr "已有另一项浏览器授权正在进行，请完成它或选择“取消”。"
 
-#: ui/app.slint:538 ui/dialogs/settings-dialog.slint:1726
+#: ui/app.slint:546 ui/dialogs/settings-dialog.slint:1726
 #: ui/dialogs/settings-dialog.slint:1769 ui/views/onboarding-view.slint:160
 msgid "Add app keys in Sign-in settings to enable this provider."
 msgstr "请在“登录设置”中添加应用密钥以启用此服务商。"
 
-#: ui/app.slint:539
+#: ui/app.slint:547
 msgid "Choose Gmail or Outlook OAuth."
 msgstr "请选择 Gmail 或 Outlook OAuth。"
 
-#: ui/app.slint:540
+#: ui/app.slint:548
 msgid "Complete sign-in in your browser, or choose Cancel here."
 msgstr "请在浏览器中完成登录，或在此处选择“取消”。"
 
-#: ui/app.slint:541
+#: ui/app.slint:549
 msgid "Cancelling browser sign-in…"
 msgstr "正在取消浏览器登录…"
 
-#: ui/app.slint:542
+#: ui/app.slint:550
 msgid "Finishing browser sign-in…"
 msgstr "正在完成浏览器登录…"
 
-#: ui/app.slint:543
+#: ui/app.slint:551
 msgid "Could not use that browser address: {}"
 msgstr "无法使用该浏览器地址：{}"
 
-#: ui/app.slint:544
+#: ui/app.slint:552
 msgid "Calendar core is unavailable."
 msgstr "日历核心不可用。"
 
-#: ui/app.slint:545
+#: ui/app.slint:553
 msgid "Account no longer exists."
 msgstr "账户已不存在。"
 
-#: ui/app.slint:546
+#: ui/app.slint:554
 msgid "Authorize calendar access in your browser."
 msgstr "请在浏览器中授权日历访问。"
 
-#: ui/app.slint:547
+#: ui/app.slint:555
 msgid "OAuth app keys saved."
 msgstr "OAuth 应用密钥已保存。"
 
-#: ui/app.slint:548
+#: ui/app.slint:556
 msgid "{} OAuth settings saved."
 msgstr "{} OAuth 设置已保存。"
 
-#: ui/app.slint:549
+#: ui/app.slint:557
 msgid "OAuth settings failed: {}"
 msgstr "OAuth 设置失败：{}"
 
-#: ui/app.slint:550
+#: ui/app.slint:558
 msgid "Mail refresh failed: {}"
 msgstr "邮件刷新失败：{}"
 
-#: ui/app.slint:551
+#: ui/app.slint:559
 msgid "Mail filter failed: {}"
 msgstr "邮件筛选失败：{}"
 
-#: ui/app.slint:552
+#: ui/app.slint:560
 msgid "Mail pagination failed: {}"
 msgstr "邮件分页失败：{}"
 
-#: ui/app.slint:553
+#: ui/app.slint:561
 msgid "Could not mark message as read: {}"
 msgstr "无法将邮件标记为已读：{}"
 
-#: ui/app.slint:554 ui/views/mail-reading-pane.slint:236
+#: ui/app.slint:562 ui/views/mail-reading-pane.slint:236
 #: ui/views/mail-reading-pane.slint:1285
 msgid "Loading message…"
 msgstr "正在加载邮件…"
 
-#: ui/app.slint:560 ui/components/workspace-navigation.slint:854
+#: ui/app.slint:568 ui/components/workspace-navigation.slint:854
 #: ui/tray.slint:12 ui/tray.slint:13
 msgid "Flectar Mail"
 msgstr "Flectar Mail"
 
-#: ui/app.slint:1204 ui/app.slint:1217
+#: ui/app.slint:1212 ui/app.slint:1225
 msgid "Global Labels (local only)"
 msgstr "全局标签（仅本地）"
 
-#: ui/app.slint:2126
+#: ui/app.slint:2134
 msgid "Empty Trash?"
 msgstr "清空回收站？"
 
-#: ui/app.slint:2126 ui/views/files-view.slint:541
+#: ui/app.slint:2134 ui/views/files-view.slint:541
 msgid "Delete permanently?"
 msgstr "永久删除？"
 
-#: ui/app.slint:2130
+#: ui/app.slint:2138
 msgid ""
 "Permanently delete all messages in Trash across every connected account?"
 msgstr "永久删除每个已连接帐户的回收站中的所有邮件？"
 
-#: ui/app.slint:2131
+#: ui/app.slint:2139
 msgid "Permanently delete all messages in this account’s Trash?"
 msgstr "是否永久删除此帐户的回收站中的所有邮件？"
 
-#: ui/app.slint:2133
+#: ui/app.slint:2141
 msgid "Permanently delete the selected conversations from Trash?"
 msgstr "是否从回收站中永久删除选定的对话？"
 
-#: ui/app.slint:2134
+#: ui/app.slint:2142
 msgid "Permanently delete this conversation from Trash?"
 msgstr "是否从回收站中永久删除此对话？"
 
-#: ui/app.slint:2135 ui/components/calendar.slint:940
+#: ui/app.slint:2143 ui/components/calendar.slint:940
 msgid "This action cannot be undone."
 msgstr "此操作无法撤销。"
 
-#: ui/app.slint:2136
+#: ui/app.slint:2144
 msgid "Empty Trash"
 msgstr "清空回收站"
 
-#: ui/app.slint:2136 ui/views/files-view.slint:623
+#: ui/app.slint:2144 ui/views/files-view.slint:623
 msgid "Delete permanently"
 msgstr "永久删除"
 
-#: ui/app.slint:2306
+#: ui/app.slint:2314
 msgid "Mailbox startup failed"
 msgstr "邮箱启动失败"
 
-#: ui/app.slint:2312
+#: ui/app.slint:2320
 msgid "Flectar Mail could not open local storage"
 msgstr "Flectar Mail 无法打开本地存储"
 
-#: ui/app.slint:2325
+#: ui/app.slint:2333
 msgid "Diagnostic ID: {}"
 msgstr "诊断 ID：{}"
 
-#: ui/app.slint:2328
+#: ui/app.slint:2336
 msgid "Diagnostic ID {}"
 msgstr "诊断 ID {}"
 
-#: ui/app.slint:2333
+#: ui/app.slint:2341
 msgid "Retry"
 msgstr "重试"
 
-#: ui/app.slint:2341 ui/components/copyable-diagnostic.slint:43
+#: ui/app.slint:2349 ui/components/copyable-diagnostic.slint:43
 msgid "Copy diagnostics"
 msgstr "复制诊断信息"
 
