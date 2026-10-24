@@ -1700,7 +1700,7 @@ msgstr ""
 msgid "Permanently delete this conversation from Trash?"
 msgstr ""
 
-#: ui/app.slint:2146 ui/components/calendar.slint:940
+#: ui/app.slint:2146 ui/components/calendar.slint:942
 msgid "This action cannot be undone."
 msgstr "Bu işlem geri alınamaz."
 
@@ -2206,55 +2206,55 @@ msgid "Reset filters"
 msgstr "Filtreleri sıfırla"
 
 #: ui/components/calendar-agenda.slint:290 ui/components/calendar.slint:112
-#: ui/components/calendar.slint:751
+#: ui/components/calendar.slint:753
 msgid "New event"
 msgstr "Yeni etkinlik"
 
-#: ui/components/calendar.slint:141 ui/components/calendar.slint:749
+#: ui/components/calendar.slint:141 ui/components/calendar.slint:751
 msgid "Previous month"
 msgstr "Önceki ay"
 
-#: ui/components/calendar.slint:155 ui/components/calendar.slint:750
+#: ui/components/calendar.slint:155 ui/components/calendar.slint:752
 msgid "Next month"
 msgstr "Sonraki ay"
 
-#: ui/components/calendar.slint:160 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:160 ui/components/calendar.slint:795
 msgctxt "Monday initial"
 msgid "M"
 msgstr "P"
 
-#: ui/components/calendar.slint:161 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:161 ui/components/calendar.slint:795
 msgctxt "Tuesday initial"
 msgid "T"
 msgstr "S"
 
-#: ui/components/calendar.slint:162 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:162 ui/components/calendar.slint:795
 msgctxt "Wednesday initial"
 msgid "W"
 msgstr "Ç"
 
-#: ui/components/calendar.slint:163 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:163 ui/components/calendar.slint:795
 msgctxt "Thursday initial"
 msgid "T"
 msgstr "P"
 
-#: ui/components/calendar.slint:164 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:164 ui/components/calendar.slint:795
 msgctxt "Friday initial"
 msgid "F"
 msgstr "C"
 
-#: ui/components/calendar.slint:165 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:165 ui/components/calendar.slint:795
 msgctxt "Saturday initial"
 msgid "S"
 msgstr "C"
 
-#: ui/components/calendar.slint:166 ui/components/calendar.slint:793
+#: ui/components/calendar.slint:166 ui/components/calendar.slint:795
 msgctxt "Sunday initial"
 msgid "S"
 msgstr "P"
 
 #: ui/components/calendar.slint:212 ui/components/calendar.slint:622
-#: ui/components/calendar.slint:823
+#: ui/components/calendar.slint:825
 msgid "Select {}"
 msgstr "Seç: {}"
 
@@ -2336,39 +2336,39 @@ msgstr "Sonraki dönem"
 msgid "Week"
 msgstr "Hafta"
 
-#: ui/components/calendar.slint:578 ui/components/calendar.slint:762
+#: ui/components/calendar.slint:578 ui/components/calendar.slint:764
 msgid "Month"
 msgstr "Ay"
 
-#: ui/components/calendar.slint:579 ui/components/calendar.slint:763
+#: ui/components/calendar.slint:579 ui/components/calendar.slint:765
 msgid "Agenda"
 msgstr "Ajanda"
 
-#: ui/components/calendar.slint:593 ui/components/calendar.slint:775
+#: ui/components/calendar.slint:593 ui/components/calendar.slint:777
 msgid "Local time · {}"
 msgstr "Yerel saat · {}"
 
-#: ui/components/calendar.slint:834
+#: ui/components/calendar.slint:836
 msgid "Agenda · {}"
 msgstr "Ajanda · {}"
 
-#: ui/components/calendar.slint:869
+#: ui/components/calendar.slint:871
 msgid "No events for this date"
 msgstr "Bu tarihte etkinlik yok"
 
-#: ui/components/calendar.slint:938
+#: ui/components/calendar.slint:940
 msgid "Delete this event?"
 msgstr "Bu etkinlik silinsin mi?"
 
-#: ui/components/calendar.slint:939
+#: ui/components/calendar.slint:941
 msgid "This event will be removed from your calendar."
 msgstr "Bu etkinlik takviminizden kaldırılacak."
 
-#: ui/components/calendar.slint:941
+#: ui/components/calendar.slint:943
 msgid "Delete event"
 msgstr "Etkinliği sil"
 
-#: ui/components/calendar.slint:942
+#: ui/components/calendar.slint:944
 msgid "Keep event"
 msgstr "Etkinliği koru"
 
