@@ -4,7 +4,9 @@
     Flectar Mail
   </h1>
   <p>
-    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <strong>简体中文</strong>
+    <a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.de.md">Deutsch</a> ·
+    <a href="README.fr.md">Français</a> · <a href="README.pt_BR.md">Português (Brasil)</a> · <a href="README.ru.md">Русский</a> ·
+    <a href="README.hi.md">हिन्दी</a> · <a href="README.ar.md">العربية</a> · <strong>简体中文</strong>
   </p>
   <div align="center">
     <h3>邮件，重归迅捷</h3>
