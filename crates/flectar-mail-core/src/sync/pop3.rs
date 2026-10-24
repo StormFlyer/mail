@@ -221,7 +221,7 @@ async fn respect_login_delay(
 
 /// Finish queued actions. For mail on this device nothing waits on a server.
 async fn complete_actions(ctx: &SyncCtx, config: &AccountConfig) -> Result<()> {
-    while crate::queue::execute_due_on_device(ctx, config)
+    while crate::queue::execute_due_on_device(ctx, config.id)
         .await?
         .due_remaining
     {}
