@@ -139,6 +139,8 @@ struct Mock {
     connected: ConnectedClient,
     task: tokio::task::JoinHandle<()>,
     calls: Arc<std::sync::Mutex<Vec<(String, Value)>>>,
+    /// TCP connections the server accepted.
+    connections: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Mock {
@@ -191,12 +193,15 @@ impl MockJmap {
             "state": "session-0"
         });
         let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let connections = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let server = Arc::new((self, session));
         let task = tokio::spawn({
             let calls = calls.clone();
+            let connections = connections.clone();
             async move {
                 loop {
                     let (stream, _) = listener.accept().await.unwrap();
+                    connections.fetch_add(1, Ordering::SeqCst);
                     let server = server.clone();
                     let calls = calls.clone();
                     tokio::spawn(async move {
@@ -219,6 +224,7 @@ impl MockJmap {
             connected,
             task,
             calls,
+            connections,
         }
     }
 
@@ -229,76 +235,93 @@ impl MockJmap {
         calls: &std::sync::Mutex<Vec<(String, Value)>>,
     ) {
         let mut stream = BufReader::new(stream);
-        let mut line = String::new();
-        if stream.read_line(&mut line).await.unwrap_or(0) == 0 {
-            return;
-        }
-        let get = line.starts_with("GET ");
-        let mut length = 0;
+        // Like a real server, keep the connection open for further requests.
         loop {
-            line.clear();
-            assert_ne!(stream.read_line(&mut line).await.unwrap(), 0);
-            if line == "\r\n" {
-                break;
+            let mut line = String::new();
+            if stream.read_line(&mut line).await.unwrap_or(0) == 0 {
+                return;
             }
-            if let Some((name, value)) = line.split_once(':')
-                && name.eq_ignore_ascii_case("content-length")
-            {
-                length = value.trim().parse::<usize>().unwrap();
+            let get = line.starts_with("GET ");
+            let download = line.starts_with("GET /download/");
+            let mut length = 0;
+            loop {
+                line.clear();
+                if stream.read_line(&mut line).await.unwrap_or(0) == 0 {
+                    return;
+                }
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse::<usize>().unwrap();
+                }
+            }
+            let mut body = vec![0; length];
+            if stream.read_exact(&mut body).await.is_err() {
+                return;
+            }
+            let mut status = "200 OK";
+            let mut hold = Duration::ZERO;
+            let response = if download {
+                "From: sender@mail.example\r\nSubject: Conversation\r\n\r\nBody\r\n".to_owned()
+            } else if get {
+                session.to_string()
+            } else {
+                let request: Value = serde_json::from_slice(&body).unwrap();
+                // Like Fastmail, reject any capability the session does not
+                // advertise (RFC 8620 §3.6.1).
+                let unknown = request["using"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .find(|capability| session["capabilities"].get(*capability).is_none());
+                if let Some(capability) = unknown {
+                    status = "400 Bad Request";
+                    json!({
+                        "type": "urn:ietf:params:jmap:error:unknownCapability",
+                        "status": 400,
+                        "detail": format!("unknown capability {capability}")
+                    })
+                    .to_string()
+                } else {
+                    let mut responses = Vec::new();
+                    for call in request["methodCalls"].as_array().unwrap() {
+                        let method = call[0].as_str().unwrap();
+                        let call_id = &call[2];
+                        calls
+                            .lock()
+                            .unwrap()
+                            .push((method.to_owned(), call[1].clone()));
+                        if let Some(delay) = self.delay.and_then(|delay| delay(method, &call[1])) {
+                            hold = hold.max(delay);
+                        }
+                        match self.answer(method, &call[1]) {
+                            Ok(payload) => responses.push(json!([method, payload, call_id])),
+                            Err(error) => responses.push(json!(["error", error, call_id])),
+                        }
+                    }
+                    json!({"methodResponses": responses, "sessionState": "session-0"}).to_string()
+                }
+            };
+            let content_type = if download {
+                "message/rfc822"
+            } else {
+                "application/json"
+            };
+            let http = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n{}",
+                response.len(),
+                response
+            );
+            tokio::time::sleep(hold).await;
+            // The client may have given up on a slow answer.
+            if stream.get_mut().write_all(http.as_bytes()).await.is_err() {
+                return;
             }
         }
-        let mut body = vec![0; length];
-        stream.read_exact(&mut body).await.unwrap();
-        let mut status = "200 OK";
-        let mut hold = Duration::ZERO;
-        let response = if get {
-            session.to_string()
-        } else {
-            let request: Value = serde_json::from_slice(&body).unwrap();
-            // Like Fastmail, reject any capability the session does not
-            // advertise (RFC 8620 §3.6.1).
-            let unknown = request["using"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter_map(Value::as_str)
-                .find(|capability| session["capabilities"].get(*capability).is_none());
-            if let Some(capability) = unknown {
-                status = "400 Bad Request";
-                json!({
-                    "type": "urn:ietf:params:jmap:error:unknownCapability",
-                    "status": 400,
-                    "detail": format!("unknown capability {capability}")
-                })
-                .to_string()
-            } else {
-                let mut responses = Vec::new();
-                for call in request["methodCalls"].as_array().unwrap() {
-                    let method = call[0].as_str().unwrap();
-                    let call_id = &call[2];
-                    calls
-                        .lock()
-                        .unwrap()
-                        .push((method.to_owned(), call[1].clone()));
-                    if let Some(delay) = self.delay.and_then(|delay| delay(method, &call[1])) {
-                        hold = hold.max(delay);
-                    }
-                    match self.answer(method, &call[1]) {
-                        Ok(payload) => responses.push(json!([method, payload, call_id])),
-                        Err(error) => responses.push(json!(["error", error, call_id])),
-                    }
-                }
-                json!({"methodResponses": responses, "sessionState": "session-0"}).to_string()
-            }
-        };
-        let http = format!(
-            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            response.len(),
-            response
-        );
-        tokio::time::sleep(hold).await;
-        // The client may have given up on a slow answer.
-        let _ = stream.get_mut().write_all(http.as_bytes()).await;
     }
 
     fn answer(&self, method: &str, args: &Value) -> std::result::Result<Value, Value> {
@@ -970,9 +993,7 @@ async fn header_pages_that_time_out_are_fetched_in_halves() {
     }
     .start()
     .await;
-    mock.connected
-        .client
-        .set_timeout(Duration::from_millis(300));
+    mock.connected.timeout = Duration::from_millis(300);
     run_sync(&ctx, &config, &mock.connected).await.unwrap();
     let pages = mock
         .calls("Email/get")
@@ -1032,9 +1053,7 @@ async fn attachment_listings_that_time_out_shrink_without_known_sizes() {
     .start()
     .await;
     run_sync(&ctx, &config, &mock.connected).await.unwrap();
-    mock.connected
-        .client
-        .set_timeout(Duration::from_millis(300));
+    mock.connected.timeout = Duration::from_millis(300);
     let headers = mock.calls("Email/get").len();
     let mut budget = ATTACHMENT_LISTING_BYTES;
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -1070,9 +1089,7 @@ async fn attachment_listings_that_time_out_shrink_and_skip_what_never_answers() 
     .start()
     .await;
     run_sync(&ctx, &config, &mock.connected).await.unwrap();
-    mock.connected
-        .client
-        .set_timeout(Duration::from_millis(300));
+    mock.connected.timeout = Duration::from_millis(300);
     let headers = mock.calls("Email/get").len();
     let mut budget = ATTACHMENT_LISTING_BYTES;
     while list_attachments(&ctx, &config, &mock.connected, &mut budget)
@@ -1360,5 +1377,78 @@ async fn mailboxes_within_the_get_limit_take_one_request() {
     );
     assert_eq!(mock.calls("Mailbox/get").len(), 1);
     assert!(mock.calls("Mailbox/query").is_empty());
+    mock.task.abort();
+}
+
+#[tokio::test]
+async fn one_connection_carries_every_request_of_a_session() {
+    let (_dir, ctx, config) = fixture().await;
+    let mock = MockJmap {
+        emails: (0..6)
+            .map(|n| email(&format!("email-{n}"), &format!("thread-{n}")))
+            .collect(),
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    // Discovery and the Session each used their own connection.
+    let connected = mock.connections.load(Ordering::SeqCst);
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    // The state request, the query and six header pages.
+    assert_eq!(mock.calls("Email/get").len(), 7);
+    assert_eq!(mock.connections.load(Ordering::SeqCst), connected + 1);
+    mock.task.abort();
+}
+
+#[tokio::test]
+async fn body_fetches_reuse_one_session() {
+    let (_dir, ctx, mut config) = fixture().await;
+    let mock = MockJmap {
+        emails: vec![email("email-a", "thread-a"), email("email-b", "thread-b")],
+        ..MockJmap::default()
+    }
+    .start()
+    .await;
+    run_sync(&ctx, &config, &mock.connected).await.unwrap();
+    config.jmap_url = mock.connected.base_url.clone();
+    credentials::store_async(
+        ctx.credentials.clone(),
+        config.id,
+        Slot::Password,
+        "example-password".into(),
+    )
+    .await
+    .unwrap();
+    let messages = ctx
+        .db
+        .read(|conn| {
+            Ok([
+                repo::messages::by_jmap_id(conn, 1, "email-a")?.unwrap().id,
+                repo::messages::by_jmap_id(conn, 1, "email-b")?.unwrap().id,
+            ])
+        })
+        .await
+        .unwrap();
+    let before = mock.connections.load(Ordering::SeqCst);
+    let mut session = None;
+    for message in messages {
+        fetch_body(&ctx, &config, &mut session, message)
+            .await
+            .unwrap();
+    }
+    // Discovery, the Session and one connection for both downloads.
+    assert_eq!(mock.connections.load(Ordering::SeqCst), before + 3);
+    ctx.db
+        .read(move |conn| {
+            for message in messages {
+                assert_eq!(
+                    repo::messages::get_row(conn, message)?.unwrap().body_state,
+                    "cached"
+                );
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
     mock.task.abort();
 }
