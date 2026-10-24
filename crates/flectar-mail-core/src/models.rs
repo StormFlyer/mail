@@ -944,6 +944,8 @@ pub struct ThreadSummary {
     pub snoozed_until: Option<i64>,
     /// Ids of labels present on any message in the thread.
     pub labels: Vec<i64>,
+    /// The one-time code the newest message asks its reader to enter.
+    pub verification_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

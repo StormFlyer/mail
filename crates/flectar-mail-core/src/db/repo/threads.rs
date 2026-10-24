@@ -24,6 +24,7 @@ fn summary_from_row(row: &Row) -> rusqlite::Result<ThreadSummary> {
             &row.get::<_, Option<String>>("label_ids")?
                 .unwrap_or_default(),
         ),
+        verification_code: row.get("verification_code")?,
     })
 }
 
@@ -55,7 +56,10 @@ const SUMMARY_SELECT: &str = "
            s.wake_at AS snoozed_until,
            (SELECT group_concat(DISTINCT ml.label_id) FROM message_labels ml
               JOIN messages ml_m ON ml_m.id = ml.message_id
-              WHERE ml_m.thread_id = t.id) AS label_ids
+              WHERE ml_m.thread_id = t.id) AS label_ids,
+           (SELECT m.verification_code
+              FROM messages m WHERE m.thread_id = t.id ORDER BY m.date DESC LIMIT 1)
+             AS verification_code
     FROM threads t
     JOIN accounts a ON a.id = t.account_id
     LEFT JOIN snoozes s ON s.thread_id = t.id";
@@ -537,6 +541,46 @@ mod tests {
         recompute(&conn, thread_id).unwrap();
 
         assert!(get_summary(&conn, thread_id).unwrap().unwrap().has_replied);
+    }
+
+    #[test]
+    fn summary_offers_the_newest_message_code() {
+        let conn = crate::db::testutil::conn();
+        crate::db::testutil::seed_account(&conn);
+        let (thread_id, first) =
+            crate::db::testutil::seed_message(&conn, "noreply@acme.test", "Your code", true);
+        conn.execute(
+            "UPDATE messages SET verification_code = '111111' WHERE id = ?1",
+            [first],
+        )
+        .unwrap();
+        let code = || {
+            get_summary(&conn, thread_id)
+                .unwrap()
+                .unwrap()
+                .verification_code
+        };
+        assert_eq!(code().as_deref(), Some("111111"));
+
+        // A newer code replaces the one before it.
+        conn.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date, verification_code)
+             VALUES (?1, 1, 1, 2, 'second-code', 'Your code', 'noreply@acme.test', 1100, '222222')",
+            [thread_id],
+        )
+        .unwrap();
+        assert_eq!(code().as_deref(), Some("222222"));
+
+        // A reply after it leaves the row without one.
+        conn.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date, is_outgoing)
+             VALUES (?1, 1, 1, 3, 'reply', 'Re: Your code', 'me@test.dev', 1200, 1)",
+            [thread_id],
+        )
+        .unwrap();
+        assert_eq!(code(), None);
     }
 
     #[test]

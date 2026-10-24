@@ -2812,6 +2812,7 @@ mod tests {
             has_replied: true,
             snoozed_until: None,
             labels: Vec::new(),
+            verification_code: None,
         };
         let row = summary_to_message(thread.clone(), &[test_account()], "Inbox").unwrap();
 
