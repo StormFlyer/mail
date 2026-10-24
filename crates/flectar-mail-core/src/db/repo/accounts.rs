@@ -1,3 +1,4 @@
+use crate::accounts::same_mailbox;
 use crate::error::Result;
 use crate::models::*;
 use crate::pop3::Expire;
@@ -420,6 +421,66 @@ pub fn update_oauth_identity(
     Ok(())
 }
 
+/// Stores the spelling of an OAuth account's address that its provider
+/// signed in with, such as Gmail's dotted form of an imported login. The
+/// account signs in as that address, and its own sender identity, default
+/// sender and drafts move to it. Fails when another account already has the
+/// mailbox.
+pub fn set_signed_in_address(conn: &Connection, id: i64, email: &str) -> Result<()> {
+    let mut config = get_config(conn, id)?
+        .ok_or_else(|| crate::error::CoreError::NotFound(format!("account {id}")))?;
+    let previous = std::mem::replace(&mut config.email, email.to_owned());
+    if previous == email {
+        return Ok(());
+    }
+    if !same_mailbox(&previous, email) {
+        return Err(crate::error::CoreError::Auth(format!(
+            "{email} is a different mailbox than {previous}"
+        )));
+    }
+    let mut statement = conn.prepare("SELECT email FROM accounts WHERE id <> ?1")?;
+    let others = statement
+        .query_map(params![id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if let Some(other) = others.iter().find(|other| same_mailbox(other, email)) {
+        return Err(crate::error::CoreError::Other(format!(
+            "{other} is already added as another account"
+        )));
+    }
+
+    conn.execute(
+        "UPDATE accounts SET email = ?2, username = ?2 WHERE id = ?1",
+        params![id, email],
+    )?;
+    // The identity keeps its settings under the new spelling, unless the
+    // provider already listed that spelling.
+    conn.execute(
+        "UPDATE OR IGNORE sender_identities SET email = ?3 WHERE account_id = ?1 AND email = ?2",
+        params![id, previous, email],
+    )?;
+    conn.execute(
+        "DELETE FROM sender_identities WHERE account_id = ?1 AND email = ?2 AND email <> ?3",
+        params![id, previous, email],
+    )?;
+    super::sender_identities::ensure_primary(conn, &config)?;
+    if config
+        .settings
+        .default_sender_email
+        .as_deref()
+        .is_some_and(|sender| sender.eq_ignore_ascii_case(&previous))
+    {
+        config.settings.default_sender_email = Some(email.to_owned());
+        set_settings(conn, id, &config.settings)?;
+    }
+    // Sending checks the From address of a draft against the identities.
+    conn.execute(
+        "UPDATE messages SET from_addr = ?3
+         WHERE account_id = ?1 AND is_draft = 1 AND from_addr = ?2 COLLATE NOCASE",
+        params![id, previous, email],
+    )?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
     conn.execute("DELETE FROM accounts WHERE id = ?1", params![id])?;
     Ok(())
@@ -744,6 +805,110 @@ mod tests {
         set_sync_state(&conn, id, "idle").unwrap();
         assert_eq!(list(&conn).unwrap().len(), 1);
         assert_eq!(list_configs(&conn).unwrap().len(), 1);
+    }
+
+    fn google(email: &str) -> NewAccount<'_> {
+        NewAccount {
+            email,
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Gmail,
+            auth_kind: AuthKind::Oauth2,
+            mail_protocol: MailProtocol::Gmail,
+            username: email,
+            jmap_url: "",
+            jmap_account_id: None,
+            incoming_host: "imap.gmail.com",
+            incoming_port: 993,
+            smtp_host: "smtp.gmail.com",
+            smtp_port: 465,
+        }
+    }
+
+    #[test]
+    fn signed_in_address_moves_the_identity_default_sender_and_drafts() {
+        let conn = crate::db::testutil::conn();
+        let mut account_settings = settings();
+        account_settings.default_sender_email = Some("JohnDoe@gmail.com".into());
+        let id = insert_with_sync_state(
+            &conn,
+            &google("johndoe@gmail.com"),
+            &account_settings,
+            "needs_reauth",
+        )
+        .unwrap();
+        let message = |is_draft: bool| {
+            conn.execute(
+                "INSERT INTO messages (account_id, from_addr, date, is_draft)
+                 VALUES (?1, 'johndoe@gmail.com', 0, ?2)",
+                params![id, is_draft],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let (draft, received) = (message(true), message(false));
+
+        set_signed_in_address(&conn, id, "john.doe@gmail.com").unwrap();
+
+        let config = get_config(&conn, id).unwrap().unwrap();
+        assert_eq!(config.email, "john.doe@gmail.com");
+        assert_eq!(config.username, "john.doe@gmail.com");
+        assert_eq!(
+            config.settings.default_sender_email.as_deref(),
+            Some("john.doe@gmail.com")
+        );
+        let identities = super::super::sender_identities::list(&conn, id).unwrap();
+        assert_eq!(identities.len(), 1);
+        assert_eq!(identities[0].email, "john.doe@gmail.com");
+        assert!(identities[0].is_primary);
+        let from = |message: i64| {
+            conn.query_row(
+                "SELECT from_addr FROM messages WHERE id = ?1",
+                [message],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(from(draft), "john.doe@gmail.com");
+        assert_eq!(from(received), "johndoe@gmail.com");
+    }
+
+    #[test]
+    fn signed_in_address_keeps_one_identity_and_only_respells_its_own_mailbox() {
+        let conn = crate::db::testutil::conn();
+        let id = insert(&conn, &google("JohnDoe@gmail.com"), &settings()).unwrap();
+        let emails = || {
+            super::super::sender_identities::list(&conn, id)
+                .unwrap()
+                .into_iter()
+                .map(|identity| (identity.email, identity.is_primary))
+                .collect::<Vec<_>>()
+        };
+
+        set_signed_in_address(&conn, id, "johndoe@gmail.com").unwrap();
+        assert_eq!(emails(), [("johndoe@gmail.com".to_owned(), true)]);
+
+        // Gmail already listed the dotted spelling as a send-as address.
+        conn.execute(
+            "INSERT INTO sender_identities (account_id, email, is_primary, is_provider_default)
+             VALUES (?1, 'john.doe@gmail.com', 0, 0)",
+            params![id],
+        )
+        .unwrap();
+        set_signed_in_address(&conn, id, "john.doe@gmail.com").unwrap();
+        assert_eq!(emails(), [("john.doe@gmail.com".to_owned(), true)]);
+
+        assert!(set_signed_in_address(&conn, id, "jane@gmail.com").is_err());
+        insert(&conn, &google("j.ohndoe@googlemail.com"), &settings()).unwrap();
+        let error = set_signed_in_address(&conn, id, "johndoe@gmail.com").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "j.ohndoe@googlemail.com is already added as another account"
+        );
+        assert_eq!(
+            get_config(&conn, id).unwrap().unwrap().email,
+            "john.doe@gmail.com"
+        );
     }
 
     #[test]
