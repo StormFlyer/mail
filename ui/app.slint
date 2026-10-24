@@ -1278,7 +1278,7 @@ export component AppWindow inherits Window {
         accessible-label: I18n.loading-local-data();
 
         VerticalLayout {
-            width: 240px.min(parent.width - 32px);
+            width: max(240px, self.preferred-width).min(parent.width - 32px);
             height: 92px;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
