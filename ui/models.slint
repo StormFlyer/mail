@@ -94,6 +94,17 @@ export struct SidebarRow {
     reveal_row: bool,
 }
 
+// A file shown on a message-list row.
+export struct ListAttachment {
+    id: string,
+    // The name before its extension, which stays whole when the name is cut.
+    stem: string,
+    extension: string,
+    // The file's type, as for MailAttachment.
+    kind: string,
+    previewable: bool,
+}
+
 export struct EmailRow {
     id: int,
     account_id: int,
@@ -124,6 +135,9 @@ export struct EmailRow {
     // the same code spelled out for screen readers.
     verification_code: string,
     verification_code_spelled: string,
+    // The conversation's first file, and how many files it holds.
+    attachment: ListAttachment,
+    attachment_total: int,
     selected: bool,
     checked: bool,
 }

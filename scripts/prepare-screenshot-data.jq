@@ -124,6 +124,8 @@ def favicon_path(address):
     | .account_uses_labels = (.account_uses_labels // false)
     | .verification_code = (.verification_code // "")
     | .verification_code_spelled = (.verification_code_spelled // "")
+    | .attachment = ({id: "", stem: "", extension: "", kind: "", previewable: false} + (.attachment // {}))
+    | .attachment_total = (.attachment_total // 0)
     | .message_count = (if $show_threads and .selected then ([1, $thread_count] | max) else (.message_count // 1) end)
     | .checked = (.checked // false)
     | .account_id = (if .account == "Flectar Support" then 2 else 1 end)

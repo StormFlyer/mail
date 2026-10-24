@@ -2,7 +2,8 @@
 //! share bounded decoders/PDF workers; opening Mail never changes Files state.
 use crate::document_preview::{Preview, image_thumbnail, preview};
 use crate::{
-    AppWindow, EmailReader, InboxState, MailAttachment, MailAttachments, mail::MailMessage,
+    AppWindow, EmailReader, InboxState, ListAttachment, MailAttachment, MailAttachments,
+    mail::MailMessage,
 };
 use slint::{ComponentHandle, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, VecModel};
 use std::{
@@ -142,6 +143,22 @@ fn attachment_rows(
             }
         })
         .collect::<Vec<_>>()
+}
+
+/// A message-list row's file chip.
+pub(crate) fn list_attachment(
+    attachment: &flectar_mail_core::models::AttachmentMeta,
+) -> ListAttachment {
+    let name = file_name(attachment);
+    let media = media_type(attachment);
+    let (stem, extension) = split_extension(name);
+    ListAttachment {
+        id: attachment.id.to_string().into(),
+        stem: stem.into(),
+        extension: extension.into(),
+        kind: file_kind(name, &media).into(),
+        previewable: previewable(name, &media),
+    }
 }
 
 fn file_name(attachment: &flectar_mail_core::models::AttachmentMeta) -> &str {
@@ -565,22 +582,39 @@ pub(crate) fn register(
                 close(&ui, &generation, &session);
                 return;
             }
+            // A message-list chip offers the first file of a conversation
+            // that may not be open, so its file comes from the list rows.
+            let listed = matches!(action.as_str(), "preview-listed" | "download-listed");
             let selected = if action == "page" || action == "download-current" {
                 session.borrow().selected.clone()
             } else {
                 value.parse::<i64>().ok().and_then(|id| {
                     let state = state.borrow();
-                    state
-                        .conversation_messages
-                        .iter()
-                        .chain(state.messages.iter())
-                        .find(|m| m.id == message)
-                        .and_then(|m| m.attachments.iter().find(|a| a.id == id))
-                        .cloned()
+                    if listed {
+                        state
+                            .messages
+                            .iter()
+                            .filter_map(|m| m.first_attachment.as_ref())
+                            .find(|a| a.id == id)
+                            .cloned()
+                    } else {
+                        state
+                            .conversation_messages
+                            .iter()
+                            .chain(state.messages.iter())
+                            .find(|m| m.id == message)
+                            .and_then(|m| m.attachments.iter().find(|a| a.id == id))
+                            .cloned()
+                    }
                 })
             };
             let Some(selected) = selected else {
                 return;
+            };
+            let action = match action.as_str() {
+                "preview-listed" => "preview".into(),
+                "download-listed" => "download".into(),
+                _ => action,
             };
             if action == "thumbnail" {
                 let core_id = Arc::as_ptr(&core) as usize;
@@ -766,6 +800,34 @@ mod tests {
         ] {
             assert_eq!(file_kind(name, media), kind, "{name} ({media})");
         }
+    }
+
+    #[test]
+    fn list_chips_keep_the_extension_of_a_cut_name() {
+        assert_eq!(
+            split_extension("Joel-Solano-CV.pdf"),
+            ("Joel-Solano-CV", ".pdf")
+        );
+        assert_eq!(split_extension("archive.tar.gz"), ("archive.tar", ".gz"));
+        assert_eq!(split_extension("photo.jpeg"), ("photo", ".jpeg"));
+        assert_eq!(split_extension(".bashrc"), (".bashrc", ""));
+        assert_eq!(split_extension("README"), ("README", ""));
+        assert_eq!(
+            split_extension("version 1.2 final"),
+            ("version 1.2 final", "")
+        );
+        let chip = list_attachment(&flectar_mail_core::models::AttachmentMeta {
+            id: 7,
+            filename: Some("portfolio.zip".into()),
+            mime_type: Some("application/zip".into()),
+            size: Some(9000),
+            is_inline: false,
+        });
+        assert_eq!(chip.id, "7");
+        assert_eq!(chip.stem, "portfolio");
+        assert_eq!(chip.extension, ".zip");
+        assert_eq!(chip.kind, "archive");
+        assert!(!chip.previewable);
     }
 
     #[test]

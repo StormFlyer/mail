@@ -15,7 +15,8 @@ use std::{
 };
 
 slint::slint! {
-    import { EmailRow, MailLabelRow, MailListEntry } from "../ui/models.slint";
+    import { EmailRow, ListAttachment, MailLabelRow, MailListEntry } from "../ui/models.slint";
+    export { MailAttachments } from "../ui/models.slint";
     import { MailListPane } from "../ui/views/mail-list-pane.slint";
     import { MotionSettings } from "../ui/design-system.slint";
 
@@ -223,12 +224,14 @@ impl Platform for Desktop {
     }
 }
 
-/// A desktop list showing one row, and what the row copies and opens.
+/// A desktop list showing one row, and what the row copies, opens and asks
+/// of its files.
 struct DesktopList {
     ui: DesktopListHarness,
     window: Rc<MinimalSoftwareWindow>,
     clipboard: Rc<RefCell<String>>,
     opened: Rc<Cell<i32>>,
+    file_commands: Rc<RefCell<Vec<(String, String)>>>,
 }
 
 fn desktop_list(email: EmailRow) -> DesktopList {
@@ -247,6 +250,12 @@ fn desktop_list(email: EmailRow) -> DesktopList {
     let opened = Rc::new(Cell::new(-1));
     let target = opened.clone();
     ui.on_selected(move |id| target.set(id));
+    let file_commands = Rc::new(RefCell::new(Vec::new()));
+    let log = file_commands.clone();
+    ui.global::<MailAttachments>()
+        .on_command(move |command, id| {
+            log.borrow_mut().push((command.to_string(), id.to_string()));
+        });
     ui.show().unwrap();
     settle(&window, Duration::ZERO);
     DesktopList {
@@ -254,6 +263,7 @@ fn desktop_list(email: EmailRow) -> DesktopList {
         window,
         clipboard,
         opened,
+        file_commands,
     }
 }
 
@@ -323,6 +333,7 @@ fn verification_code_chip_copies_instead_of_opening_the_message() {
         window,
         clipboard,
         opened,
+        ..
     } = desktop_list(EmailRow {
         id: 7,
         sender: "GitHub".into(),
@@ -421,4 +432,135 @@ fn labels_without_room_for_their_names_are_counted() {
     settle(&window, Duration::ZERO);
     assert!(labelled(ui.window(), "Reports", None).is_none());
     assert!(labelled(ui.window(), "+3", None).is_some());
+}
+
+/// A desktop list showing a receipt that carries `attachment`.
+fn receipt_list(
+    attachment: ListAttachment,
+    attachment_total: i32,
+    labels: Vec<MailLabelRow>,
+) -> DesktopList {
+    desktop_list(EmailRow {
+        id: 9,
+        sender: "Stripe".into(),
+        subject: "Your August receipt is ready".into(),
+        preview: "Payment received for your monthly plan".into(),
+        labels: ModelRc::new(VecModel::from(labels)),
+        attachment,
+        attachment_total,
+        ..Default::default()
+    })
+}
+
+fn receipt(previewable: bool) -> ListAttachment {
+    ListAttachment {
+        id: "101".into(),
+        stem: "Receipt-0818".into(),
+        extension: ".pdf".into(),
+        kind: "pdf".into(),
+        previewable,
+    }
+}
+
+#[test]
+fn file_chip_previews_instead_of_opening_the_message() {
+    let DesktopList {
+        ui,
+        window,
+        opened,
+        file_commands,
+        ..
+    } = receipt_list(receipt(true), 2, Vec::new());
+    let chip = labelled(
+        ui.window(),
+        "Preview Receipt-0818.pdf, 1 more file",
+        Some(AccessibleRole::Button),
+    )
+    .expect("the file chip");
+    let (x, y, width, height) = bounds(&chip);
+
+    click(ui.window(), x + width / 2.0, y + height / 2.0);
+    settle(&window, Duration::ZERO);
+    assert_eq!(
+        *file_commands.borrow(),
+        [("preview-listed".to_owned(), "101".to_owned())]
+    );
+    assert_eq!(
+        opened.get(),
+        -1,
+        "previewing the file must not open the message"
+    );
+
+    // The rest of the row still opens the message.
+    click(ui.window(), x + width / 2.0, y - 24.0);
+    assert_eq!(opened.get(), 9);
+}
+
+#[test]
+fn file_chip_downloads_files_without_a_preview() {
+    let DesktopList {
+        ui,
+        window,
+        opened,
+        file_commands,
+        ..
+    } = receipt_list(receipt(false), 1, Vec::new());
+    let chip = labelled(
+        ui.window(),
+        "Download Receipt-0818.pdf",
+        Some(AccessibleRole::Button),
+    )
+    .expect("the file chip");
+    let (x, y, width, height) = bounds(&chip);
+
+    click(ui.window(), x + width / 2.0, y + height / 2.0);
+    settle(&window, Duration::ZERO);
+    assert_eq!(
+        *file_commands.borrow(),
+        [("download-listed".to_owned(), "101".to_owned())]
+    );
+    assert_eq!(opened.get(), -1);
+}
+
+fn two_labels() -> Vec<MailLabelRow> {
+    vec![label(1, "Work"), label(2, "Marketing")]
+}
+
+#[test]
+fn a_label_shows_beside_a_short_file_name() {
+    let short = ListAttachment {
+        stem: "a".into(),
+        ..receipt(true)
+    };
+    let DesktopList { ui, .. } = receipt_list(short, 1, two_labels());
+    let file = labelled(ui.window(), "Preview a.pdf", None).expect("the file chip");
+    let work = labelled(ui.window(), "Work", None).expect("the first label");
+    let (file_x, _, file_width, _) = bounds(&file);
+    assert!(
+        bounds(&work).0 > file_x + file_width,
+        "labels follow the file"
+    );
+    assert!(labelled(ui.window(), "Marketing", None).is_none());
+    assert!(labelled(ui.window(), "+1", None).is_some());
+}
+
+#[test]
+fn labels_beside_a_long_file_name_are_only_counted() {
+    let long = ListAttachment {
+        stem: "Traffic report for every flectar.com zone, week 43".into(),
+        ..receipt(true)
+    };
+    let DesktopList { ui, .. } = receipt_list(long, 1, two_labels());
+    // The file keeps its room rather than sharing it with a label cut down
+    // to its icon.
+    let file = labelled(
+        ui.window(),
+        "Preview Traffic report for every flectar.com zone, week 43.pdf",
+        None,
+    )
+    .expect("the file chip");
+    assert!(labelled(ui.window(), "Work", None).is_none());
+    assert!(labelled(ui.window(), "+2", None).is_some());
+    let width = bounds(&file).2;
+    assert!(width >= 149.0, "the file chip gave up its room: {width}px");
 }

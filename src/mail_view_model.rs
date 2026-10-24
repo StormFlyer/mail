@@ -938,6 +938,8 @@ pub(super) fn same_email_row(a: &EmailRow, b: &EmailRow) -> bool {
         && a.label_summary == b.label_summary
         && a.account_uses_labels == b.account_uses_labels
         && a.verification_code == b.verification_code
+        && a.attachment == b.attachment
+        && a.attachment_total == b.attachment_total
         && a.selected == b.selected
         && a.checked == b.checked
         && (!a.has_favicon || (a.favicon == b.favicon && a.favicon_small == b.favicon_small))
@@ -1000,6 +1002,12 @@ pub(super) fn make_rows<M: std::borrow::Borrow<MailMessage>>(
                     .map(spelled)
                     .unwrap_or_default()
                     .into(),
+                attachment: email
+                    .first_attachment
+                    .as_ref()
+                    .map(crate::attachment_controller::list_attachment)
+                    .unwrap_or_default(),
+                attachment_total: i32::try_from(email.attachment_total).unwrap_or(i32::MAX),
                 selected: Some(email.id) == selected_id,
                 checked: checked_ids.contains(&email.id),
             }
@@ -1792,6 +1800,8 @@ mod tests {
             sender_verification: String::new(),
             verification_code: None,
             account_uses_labels: false,
+            first_attachment: None,
+            attachment_total: 0,
         }
     }
 
@@ -2114,6 +2124,30 @@ mod tests {
         let cleared = project_row(&email);
         assert_eq!(cleared.verification_code, "");
         assert_eq!(cleared.verification_code_spelled, "");
+    }
+
+    #[test]
+    fn mail_rows_offer_the_first_file() {
+        let mut email = message(1);
+        email.first_attachment = Some(flectar_mail_core::models::AttachmentMeta {
+            id: 9,
+            filename: Some("Joel-Solano-CV.pdf".into()),
+            mime_type: Some("application/pdf".into()),
+            size: Some(2048),
+            is_inline: false,
+        });
+        email.attachment_total = 3;
+        let row = project_row(&email);
+        assert_eq!(row.attachment.id, "9");
+        assert_eq!(row.attachment.stem, "Joel-Solano-CV");
+        assert_eq!(row.attachment.extension, ".pdf");
+        assert_eq!(row.attachment.kind, "pdf");
+        assert!(row.attachment.previewable);
+        assert_eq!(row.attachment_total, 3);
+
+        // Another file refreshes the row in place.
+        email.attachment_total = 4;
+        assert!(!same_email_row(&row, &project_row(&email)));
     }
 
     #[test]

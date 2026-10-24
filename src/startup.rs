@@ -73,7 +73,8 @@ pub(crate) struct WarmStartMessage {
     #[serde(default)]
     pub(crate) account_uses_labels: bool,
     // Verification codes come from message bodies, which stay out of this
-    // file; the list shows them once the mail store answers.
+    // file, and file chips act on attachment ids that a stored body can
+    // replace; the list shows both once the mail store answers.
 }
 
 impl From<&mail::MailMessage> for WarmStartMessage {
@@ -135,6 +136,8 @@ impl From<WarmStartMessage> for mail::MailMessage {
             sender_verification: message.sender_verification,
             verification_code: None,
             account_uses_labels: message.account_uses_labels,
+            first_attachment: None,
+            attachment_total: 0,
         }
     }
 }
@@ -1142,6 +1145,14 @@ mod warm_start_tests {
             sender_verification: "domain".into(),
             verification_code: Some("48291375".into()),
             account_uses_labels: true,
+            first_attachment: Some(flectar_mail_core::models::AttachmentMeta {
+                id: 3,
+                filename: Some("cached-file-name.pdf".into()),
+                mime_type: Some("application/pdf".into()),
+                size: Some(42),
+                is_inline: false,
+            }),
+            attachment_total: 1,
         }
     }
 
@@ -1194,6 +1205,7 @@ mod warm_start_tests {
         assert!(!json.contains("body must not enter"));
         assert!(!json.contains("secret-recipient"));
         assert!(!json.contains("48291375"));
+        assert!(!json.contains("cached-file-name"));
 
         let restored = load_warm_start_snapshot(&path).await.unwrap();
         assert_eq!(restored.scope, PERSON_INBOX);

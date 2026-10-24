@@ -784,6 +784,14 @@
       "unread": true,
       "starred": true,
       "has_attachments": true,
+      "attachment": {
+        "id": "101",
+        "stem": "Traffic report, week 43",
+        "extension": ".pdf",
+        "kind": "pdf",
+        "previewable": true
+      },
+      "attachment_total": 1,
       "has_replied": true,
       "label_summary": "Reports · Marketing",
       "labels": [
@@ -807,6 +815,14 @@
       "unread": true,
       "starred": false,
       "has_attachments": true,
+      "attachment": {
+        "id": "102",
+        "stem": "dependabot-alerts",
+        "extension": ".csv",
+        "kind": "spreadsheet",
+        "previewable": true
+      },
+      "attachment_total": 1,
       "label_summary": "",
       "labels": [],
       "selected": false
@@ -961,6 +977,14 @@
       "unread": false,
       "starred": true,
       "has_attachments": true,
+      "attachment": {
+        "id": "110",
+        "stem": "Receipt-2026-0818",
+        "extension": ".pdf",
+        "kind": "pdf",
+        "previewable": true
+      },
+      "attachment_total": 1,
       "label_summary": "",
       "labels": [],
       "selected": false
@@ -1056,6 +1080,14 @@
       "unread": true,
       "starred": false,
       "has_attachments": true,
+      "attachment": {
+        "id": "115",
+        "stem": "Invoice FL-2026-08",
+        "extension": ".pdf",
+        "kind": "pdf",
+        "previewable": true
+      },
+      "attachment_total": 2,
       "label_summary": "",
       "labels": [],
       "selected": false
@@ -1075,6 +1107,14 @@
       "unread": true,
       "starred": false,
       "has_attachments": true,
+      "attachment": {
+        "id": "116",
+        "stem": "firewall-events",
+        "extension": ".zip",
+        "kind": "archive",
+        "previewable": false
+      },
+      "attachment_total": 1,
       "label_summary": "",
       "labels": [],
       "selected": false
@@ -1208,6 +1248,14 @@
       "unread": false,
       "starred": false,
       "has_attachments": true,
+      "attachment": {
+        "id": "123",
+        "stem": "Receipt-2026-0805",
+        "extension": ".pdf",
+        "kind": "pdf",
+        "previewable": true
+      },
+      "attachment_total": 1,
       "label_summary": "",
       "labels": [],
       "selected": false

@@ -25,6 +25,20 @@ fn summary_from_row(row: &Row) -> rusqlite::Result<ThreadSummary> {
                 .unwrap_or_default(),
         ),
         verification_code: row.get("verification_code")?,
+        first_attachment: row
+            .get::<_, Option<String>>("first_attachment")?
+            .map(|json| {
+                parse_json_column::<(i64, Option<String>, Option<String>, Option<i64>)>(&json, 16)
+            })
+            .transpose()?
+            .map(|(id, filename, mime_type, size)| AttachmentMeta {
+                id,
+                filename,
+                mime_type,
+                size,
+                is_inline: false,
+            }),
+        attachment_total: row.get("attachment_total")?,
     })
 }
 
@@ -59,7 +73,14 @@ const SUMMARY_SELECT: &str = "
               WHERE ml_m.thread_id = t.id) AS label_ids,
            (SELECT m.verification_code
               FROM messages m WHERE m.thread_id = t.id ORDER BY m.date DESC LIMIT 1)
-             AS verification_code
+             AS verification_code,
+           (SELECT json_array(f.id, f.filename, f.mime_type, f.size)
+              FROM messages fm JOIN attachments f ON f.message_id = fm.id
+              WHERE fm.thread_id = t.id AND f.is_inline = 0
+              ORDER BY fm.date DESC, f.id LIMIT 1) AS first_attachment,
+           (SELECT COUNT(*)
+              FROM messages fm JOIN attachments f ON f.message_id = fm.id
+              WHERE fm.thread_id = t.id AND f.is_inline = 0) AS attachment_total
     FROM threads t
     JOIN accounts a ON a.id = t.account_id
     LEFT JOIN snoozes s ON s.thread_id = t.id";
@@ -581,6 +602,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!(code(), None);
+    }
+
+    #[test]
+    fn summary_offers_the_newest_file() {
+        let conn = crate::db::testutil::conn();
+        crate::db::testutil::seed_account(&conn);
+        let (thread_id, first) =
+            crate::db::testutil::seed_message(&conn, "billing@acme.test", "Invoice", false);
+        let summary = || get_summary(&conn, thread_id).unwrap().unwrap();
+        let add_file = |message_id: i64, name: &str, size: Option<i64>, inline: bool| {
+            conn.execute(
+                "INSERT INTO attachments (message_id, filename, mime_type, size, is_inline)
+                 VALUES (?1, ?2, 'application/pdf', ?3, ?4)",
+                params![message_id, name, size, inline],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+
+        // Inline images belong to the body.
+        add_file(first, "logo.png", Some(900), true);
+        assert!(summary().first_attachment.is_none());
+        assert_eq!(summary().attachment_total, 0);
+
+        let invoice = add_file(first, "invoice.pdf", Some(52_000), false);
+        add_file(first, "terms.pdf", Some(8_000), false);
+        let file = summary().first_attachment.unwrap();
+        assert_eq!(file.id, invoice);
+        assert_eq!(file.filename.as_deref(), Some("invoice.pdf"));
+        assert_eq!(file.mime_type.as_deref(), Some("application/pdf"));
+        assert_eq!(file.size, Some(52_000));
+        assert!(!file.is_inline);
+        assert_eq!(summary().attachment_total, 2);
+
+        // A newer message's file leads, and the count spans the thread.
+        conn.execute(
+            "INSERT INTO messages (thread_id, account_id, folder_id, uid, message_id, subject,
+             from_addr, date)
+             VALUES (?1, 1, 1, 2, 'receipt', 'Re: Invoice', 'billing@acme.test', 1100)",
+            [thread_id],
+        )
+        .unwrap();
+        let receipt = add_file(conn.last_insert_rowid(), "receipt.pdf", None, false);
+        let file = summary().first_attachment.unwrap();
+        assert_eq!(file.id, receipt);
+        assert_eq!(file.size, None);
+        assert_eq!(summary().attachment_total, 3);
     }
 
     #[test]

@@ -82,6 +82,10 @@ pub struct MailMessage {
     pub verification_code: Option<String>,
     /// Gmail labels are tags; other accounts file labels like folders.
     pub account_uses_labels: bool,
+    /// The conversation's first file and how many files it holds, for the
+    /// list; `attachments` holds the open message's files.
+    pub first_attachment: Option<flectar_mail_core::models::AttachmentMeta>,
+    pub attachment_total: i64,
 }
 
 impl MailMessage {
@@ -117,6 +121,8 @@ impl MailMessage {
             sender_verification: String::new(),
             verification_code: None,
             account_uses_labels: false,
+            first_attachment: None,
+            attachment_total: 0,
         }
     }
 }
@@ -2314,6 +2320,8 @@ fn summary_to_message(
         verification_code: thread.verification_code,
         account_uses_labels: thread_account
             .is_some_and(|account| account.mail_protocol == MailProtocol::Gmail),
+        first_attachment: thread.first_attachment,
+        attachment_total: thread.attachment_total,
     })
 }
 
@@ -2420,6 +2428,8 @@ fn detail_to_message(row: &MailMessage, message: &MessageDetail, body_loaded: bo
         sender_verification: message.sender_verification.as_str().to_owned(),
         verification_code: row.verification_code.clone(),
         account_uses_labels: row.account_uses_labels,
+        first_attachment: row.first_attachment.clone(),
+        attachment_total: row.attachment_total,
     }
 }
 
@@ -2818,6 +2828,14 @@ mod tests {
             snoozed_until: None,
             labels: Vec::new(),
             verification_code: Some("482913".into()),
+            first_attachment: Some(flectar_mail_core::models::AttachmentMeta {
+                id: 7,
+                filename: Some("Launch plan.pdf".into()),
+                mime_type: Some("application/pdf".into()),
+                size: Some(2048),
+                is_inline: false,
+            }),
+            attachment_total: 2,
         };
         let row = summary_to_message(thread.clone(), &[test_account()], "Inbox").unwrap();
 
@@ -2827,6 +2845,8 @@ mod tests {
         assert_eq!(row.message_count, 4);
         assert_eq!(row.id, 22);
         assert_eq!(row.verification_code.as_deref(), Some("482913"));
+        assert_eq!(row.first_attachment.as_ref().map(|file| file.id), Some(7));
+        assert_eq!(row.attachment_total, 2);
         assert!(
             !row.account_uses_labels,
             "IMAP labels are filed like folders"
