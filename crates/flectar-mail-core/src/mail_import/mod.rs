@@ -11,7 +11,7 @@
 //! stopped part way can be run again.
 
 pub(crate) mod scan;
-mod state;
+pub(crate) mod state;
 mod write;
 
 pub use scan::{scan_files, scan_folder};

@@ -2416,10 +2416,13 @@ impl Core {
             .db
             .read(move |conn| repo::folders::list(conn, Some(account_id)))
             .await?;
-        let mut names = HashSet::new();
+        let layout = mbox::layout(
+            folders
+                .iter()
+                .map(|folder| (folder.id, folder.path.as_str())),
+        );
         let mut export = MailExport::default();
-        for folder in folders {
-            let folder_id = folder.id;
+        for (folder_id, file) in layout {
             let messages = self
                 .db
                 .read(move |conn| repo::messages::in_folder_for_export(conn, folder_id))
@@ -2427,7 +2430,20 @@ impl Core {
             if messages.is_empty() {
                 continue;
             }
-            let path = directory.join(mbox::file_name(&folder.path, &mut names));
+            // A subfolder's file goes into a folder named like its folder's.
+            let mut parent = directory.to_owned();
+            for level in file
+                .parent()
+                .into_iter()
+                .flat_map(std::path::Path::components)
+            {
+                parent.push(level);
+                if !tokio::fs::try_exists(&parent).await? {
+                    tokio::fs::create_dir(&parent).await?;
+                    crate::file_io::restrict_permissions(&parent, &[])?;
+                }
+            }
+            let path = directory.join(&file);
             let mut file = tokio::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -2457,12 +2473,13 @@ impl Core {
                 };
                 file.write_all(mbox::separator(&message.from, message.date).as_bytes())
                     .await?;
-                file.write_all(&mbox::entry(&original)).await?;
+                file.write_all(&mbox::entry(&original, message.is_read, message.is_starred))
+                    .await?;
                 export.messages += 1;
             }
             // The account may be removed right after its export.
             file.sync_all().await?;
-            crate::file_io::restrict_permissions(directory, &[&path])?;
+            crate::file_io::restrict_permissions(&parent, &[&path])?;
             export.folders += 1;
         }
         Ok(export)

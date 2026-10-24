@@ -660,3 +660,32 @@ async fn local_mail_folders_trash_export_and_removal_work_without_a_server() {
     assert!(core.local_mail().await.unwrap().is_none());
     assert!(!core.paths.mail_dir(account_id).exists());
 }
+
+#[tokio::test]
+async fn an_export_imports_back_with_its_folders_and_states() {
+    let (_directory, core) = core().await;
+    let folder = tempfile::tempdir().unwrap();
+    let root = folder.path().join("Local Folders");
+    write(&root.join("Archives"), "");
+    write(
+        &root.join("Archives.sbd/2019"),
+        mbox(&[
+            message("a", "Starred", "X-Mozilla-Status: 0005\r\n"),
+            message("b", "Unread", "X-Mozilla-Status: 0000\r\n"),
+        ]),
+    );
+    let source = scan_folder(&root).unwrap();
+    let account_id = import(&core, &source, Destination::Local).await.account_id;
+    let before = messages(&core, account_id).await;
+
+    let export = folder.path().join("export");
+    core.export_account_mail(account_id, export.clone())
+        .await
+        .unwrap();
+    assert!(export.join("Archives/2019.mbox").is_file());
+    core.remove_account(account_id).await.unwrap();
+
+    let again = import(&core, &scan_folder(&export).unwrap(), Destination::Local).await;
+    assert_eq!(again.imported, 2);
+    assert_eq!(messages(&core, again.account_id).await, before);
+}

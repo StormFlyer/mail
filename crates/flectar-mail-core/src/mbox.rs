@@ -2,12 +2,15 @@
 //!
 //! Exports are written as mboxrd, which quotes every line that could be
 //! mistaken for a `From ` line with `>` and ends each message with an empty
-//! line. [`Reader`] also reads what other mail apps write: Thunderbird's
-//! `From - ` lines, messages without the empty line, CRLF line endings, and
-//! the dates Google Takeout adds a zone to.
+//! line. Each message's header says whether it was read or starred, and a
+//! folder's subfolders go into a folder named like its file, so an export
+//! imports back as it was. [`Reader`] also reads what other mail apps write:
+//! Thunderbird's `From - ` lines, messages without the empty line, CRLF line
+//! endings, and the dates Google Takeout adds a zone to.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead};
+use std::path::PathBuf;
 
 /// The `From ` line that starts a message.
 pub(crate) fn separator(sender: &str, date_ms: i64) -> String {
@@ -23,12 +26,42 @@ pub(crate) fn separator(sender: &str, date_ms: i64) -> String {
 }
 
 /// A message as it follows its `From ` line: LF line endings, `>`-quoted
-/// `From ` lines, and the empty line that ends it.
-pub(crate) fn entry(message: &[u8]) -> Vec<u8> {
+/// `From ` lines, and the empty line that ends it. Its header records
+/// whether it was read or starred the way mutt, Dovecot and Thunderbird read
+/// it, with `Status` and `X-Status`; fields that recorded it before are
+/// left out.
+pub(crate) fn entry(message: &[u8], read: bool, starred: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(message.len() + 64);
+    let state = |out: &mut Vec<u8>| {
+        out.extend_from_slice(if read {
+            b"Status: RO\n"
+        } else {
+            b"Status: O\n"
+        });
+        if starred {
+            out.extend_from_slice(b"X-Status: F\n");
+        }
+    };
+    let mut in_header = true;
+    let mut replaced_field = false;
     for line in message.split_inclusive(|&byte| byte == b'\n') {
         let content = line.strip_suffix(b"\n").unwrap_or(line);
         let content = content.strip_suffix(b"\r").unwrap_or(content);
+        if in_header {
+            if content.is_empty() {
+                state(&mut out);
+                in_header = false;
+            } else if matches!(content[0], b' ' | b'\t') {
+                if replaced_field {
+                    continue;
+                }
+            } else {
+                replaced_field = is_state_field(content);
+                if replaced_field {
+                    continue;
+                }
+            }
+        }
         let unquoted = content.iter().position(|&byte| byte != b'>');
         if unquoted.is_some_and(|start| content[start..].starts_with(b"From ")) {
             out.push(b'>');
@@ -36,32 +69,87 @@ pub(crate) fn entry(message: &[u8]) -> Vec<u8> {
         out.extend_from_slice(content);
         out.push(b'\n');
     }
+    if in_header {
+        state(&mut out);
+    }
     out.push(b'\n');
     out
 }
 
-/// A file name for a folder's mbox file that every platform accepts and no
-/// other folder of the export already uses, whatever the letter case.
-pub(crate) fn file_name(folder: &str, taken: &mut HashSet<String>) -> String {
-    let cleaned: String = folder
-        .chars()
-        .map(|character| match character {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            character if character.is_control() => '_',
-            character => character,
-        })
-        .collect();
-    let base = match cleaned.trim().trim_matches('.') {
-        "" => "Folder",
-        base => base,
+/// Whether a header line starts a field that records a message's state.
+fn is_state_field(line: &[u8]) -> bool {
+    let Some(colon) = line.iter().position(|&byte| byte == b':') else {
+        return false;
     };
-    let mut name = format!("{base}.mbox");
-    let mut number = 2;
-    while !taken.insert(name.to_lowercase()) {
-        name = format!("{base} ({number}).mbox");
-        number += 1;
+    let name = &line[..colon];
+    [
+        "status",
+        "x-status",
+        "x-mozilla-status",
+        "x-mozilla-status2",
+    ]
+    .iter()
+    .any(|field| name.eq_ignore_ascii_case(field.as_bytes()))
+}
+
+/// Where each folder of an export is written, by folder id: the folder's
+/// messages go into `<name>.mbox`, inside a folder `<name>` of its parent's.
+/// Folder paths separate their levels with `/`. Names are ones every
+/// platform accepts, and unique within their folder whatever the letter
+/// case.
+pub(crate) fn layout<'a>(folders: impl IntoIterator<Item = (i64, &'a str)>) -> Vec<(i64, PathBuf)> {
+    let mut folders = folders.into_iter().collect::<Vec<_>>();
+    folders.sort_by(|left, right| left.1.cmp(right.1));
+    let mut names = Names::default();
+    folders
+        .into_iter()
+        .map(|(id, path)| {
+            let mut file = PathBuf::new();
+            for (end, _) in path.match_indices('/') {
+                file.push(names.of(&path[..end]));
+            }
+            file.push(format!("{}.mbox", names.of(path)));
+            (id, file)
+        })
+        .collect()
+}
+
+/// The names given to the folder paths of an export.
+#[derive(Default)]
+struct Names {
+    by_path: HashMap<String, String>,
+    /// Lowercase names already given, by the path of the folder they are in.
+    taken: HashMap<String, HashSet<String>>,
+}
+
+impl Names {
+    fn of(&mut self, path: &str) -> String {
+        if let Some(name) = self.by_path.get(path) {
+            return name.clone();
+        }
+        let (parent, leaf) = path.rsplit_once('/').unwrap_or(("", path));
+        let cleaned: String = leaf
+            .chars()
+            .map(|character| match character {
+                '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+                character if character.is_control() => '_',
+                character => character,
+            })
+            .collect();
+        let base = match cleaned.trim().trim_matches('.') {
+            "" => "Folder",
+            base => base,
+        };
+        let taken = self.taken.entry(parent.to_owned()).or_default();
+        let mut name = base.to_owned();
+        let mut number = 2;
+        while !taken.insert(name.to_lowercase()) {
+            name = format!("{base} ({number})");
+            number += 1;
+        }
+        self.by_path.insert(path.to_owned(), name.clone());
+        name
     }
-    name
 }
 
 /// One entry of an mbox file.
@@ -307,10 +395,45 @@ mod tests {
         assert!(separator("", 0).starts_with("From MAILER-DAEMON "));
         assert!(separator("two words", 0).starts_with("From MAILER-DAEMON "));
         assert_eq!(
-            entry(b"Subject: x\r\n\r\nFrom here\r\n>From there\r\n>>From far\r\n>\r\nlast"),
-            b"Subject: x\n\n>From here\n>>From there\n>>>From far\n>\nlast\n\n"
+            entry(
+                b"Subject: x\r\n\r\nFrom here\r\n>From there\r\n>>From far\r\n>\r\nlast",
+                true,
+                false
+            ),
+            b"Subject: x\nStatus: RO\n\n>From here\n>>From there\n>>>From far\n>\nlast\n\n"
         );
-        assert_eq!(entry(b"From:me\n"), b"From:me\n\n");
+        assert_eq!(
+            entry(b"From:me\n", false, true),
+            b"From:me\nStatus: O\nX-Status: F\n\n"
+        );
+    }
+
+    #[test]
+    fn earlier_state_fields_are_replaced() {
+        assert_eq!(
+            entry(
+                b"X-Mozilla-Status: 0001\r\nX-Mozilla-Status2: 00000000\r\nSubject: x\r\n\
+                  Status: RO\r\nX-Status: F\r\n  continued\r\n\r\nStatus: in the body\r\n",
+                false,
+                false
+            ),
+            b"Subject: x\nStatus: O\n\nStatus: in the body\n\n"
+        );
+        // The state survives a round trip through the reader.
+        let mut file = separator("a@example.com", 0).into_bytes();
+        file.extend(entry(b"Subject: x\n\nbody\n", true, true));
+        let mut reader = Reader::new(file.as_slice(), 1024);
+        let Some(Entry::Message { raw, .. }) = reader.next_entry().unwrap() else {
+            panic!("expected a message");
+        };
+        assert_eq!(
+            crate::mail_import::state::recorded(&raw, None),
+            crate::mail_import::state::Recorded {
+                read: Some(true),
+                starred: true,
+                deleted: false,
+            }
+        );
     }
 
     fn read_all(file: &[u8]) -> io::Result<Vec<Entry>> {
@@ -331,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn exports_read_back_unchanged() {
+    fn exports_read_back_with_their_bodies_unchanged() {
         let originals: [&[u8]; 3] = [
             b"Subject: one\n\nFrom here\n>From there\n",
             b"Subject: two\n\nno line break at the end",
@@ -340,17 +463,20 @@ mod tests {
         let mut file = Vec::new();
         for original in originals {
             file.extend_from_slice(separator("alice@example.com", 86_400_000).as_bytes());
-            file.extend(entry(original));
+            file.extend(entry(original, true, false));
         }
         assert_eq!(
             read_all(&file).unwrap(),
             [
-                message(originals[0], Some(86_400_000)),
                 message(
-                    b"Subject: two\n\nno line break at the end\n",
+                    b"Subject: one\nStatus: RO\n\nFrom here\n>From there\n",
                     Some(86_400_000)
                 ),
-                message(originals[2], Some(86_400_000)),
+                message(
+                    b"Subject: two\nStatus: RO\n\nno line break at the end\n",
+                    Some(86_400_000)
+                ),
+                message(b"Subject: three\nStatus: RO\n\n\n", Some(86_400_000)),
             ]
         );
     }
@@ -436,12 +562,30 @@ mod tests {
     }
 
     #[test]
-    fn folder_file_names_are_safe_and_unique() {
-        let mut taken = HashSet::new();
-        assert_eq!(file_name("Inbox", &mut taken), "Inbox.mbox");
-        assert_eq!(file_name("inbox", &mut taken), "inbox (2).mbox");
-        assert_eq!(file_name("Work/Q: 1?", &mut taken), "Work_Q_ 1_.mbox");
-        assert_eq!(file_name("..", &mut taken), "Folder.mbox");
-        assert_eq!(file_name(" \u{7} ", &mut taken), "_.mbox");
+    fn folders_are_laid_out_with_safe_unique_names() {
+        let layout = layout([
+            (1, "Inbox"),
+            (2, "inbox"),
+            (3, "Work"),
+            (4, "Work/Q: 1?"),
+            (5, ".."),
+            (6, " \u{7} "),
+            (7, "Archive/2019/Spring"),
+            (8, "inbox/Sub"),
+        ]);
+        let files = layout
+            .iter()
+            .map(|(id, file)| (*id, file.to_string_lossy().replace('\\', "/")))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(files[&1], "Inbox.mbox");
+        assert_eq!(files[&2], "inbox (2).mbox");
+        assert_eq!(files[&3], "Work.mbox");
+        assert_eq!(files[&4], "Work/Q_ 1_.mbox");
+        assert_eq!(files[&5], "Folder.mbox");
+        assert_eq!(files[&6], "_.mbox");
+        // A folder above that isn't exported still gives its name.
+        assert_eq!(files[&7], "Archive/2019/Spring.mbox");
+        // Subfolders follow their folder's name, renamed or not.
+        assert_eq!(files[&8], "inbox (2)/Sub.mbox");
     }
 }
