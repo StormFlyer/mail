@@ -1292,11 +1292,11 @@ export component MailListPane inherits FocusScope {
                                                             }
                                                         }
                                                         Text {
-                                                            // A preview cut to an ellipsis says nothing,
-                                                            // so it gives up all its room first, and a
-                                                            // sliver too narrow for one is left empty.
+                                                            // A preview cut to a few letters says nothing,
+                                                            // so it gives up all its room first and stays
+                                                            // out of a gap too narrow for a word.
                                                             min-width: 0px;
-                                                            visible: self.width >= self.font-size;
+                                                            visible: self.width >= 4 * self.font-size;
                                                             horizontal-stretch: 1;
                                                             text: mail-data.preview;
                                                             color: root.faint-text;

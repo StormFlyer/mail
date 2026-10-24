@@ -434,6 +434,34 @@ fn labels_without_room_for_their_names_are_counted() {
     assert!(labelled(ui.window(), "+3", None).is_some());
 }
 
+#[test]
+fn a_preview_too_narrow_for_a_word_is_left_out() {
+    let preview = "Requests were up 18% across flectar.com";
+    let row = |labels: Vec<MailLabelRow>| EmailRow {
+        id: 1,
+        sender: "Cloudflare".into(),
+        subject: "Your weekly traffic report".into(),
+        preview: preview.into(),
+        labels: ModelRc::new(VecModel::from(labels)),
+        ..Default::default()
+    };
+    let DesktopList { ui, window, .. } = desktop_list(row(vec![label(1, "VIP")]));
+    assert!(labelled(ui.window(), preview, None).is_some());
+
+    // A second label leaves the preview a sliver, which would show only "…".
+    let email = row(vec![label(1, "Quarterly reports"), label(2, "VIP")]);
+    ui.set_emails(ModelRc::new(VecModel::from(vec![email.clone()])));
+    ui.set_entries(ModelRc::new(VecModel::from(vec![MailListEntry {
+        show_row: true,
+        email_index: 0,
+        email,
+        ..Default::default()
+    }])));
+    settle(&window, Duration::ZERO);
+    assert!(labelled(ui.window(), "VIP", None).is_some());
+    assert!(labelled(ui.window(), preview, None).is_none());
+}
+
 /// A desktop list showing a receipt that carries `attachment`.
 fn receipt_list(
     attachment: ListAttachment,
