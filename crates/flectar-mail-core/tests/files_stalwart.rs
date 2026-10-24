@@ -335,7 +335,7 @@ async fn stalwart_durable_sync_and_offline_queue() {
     .unwrap();
     let email = user.clone();
     let endpoint = base.clone();
-    core.db.write(move|c|{c.execute("INSERT INTO accounts(id,email,provider,auth_kind,username,imap_host,imap_port,smtp_host,smtp_port,created_at,mail_protocol,jmap_url) VALUES(1,?1,'imap','password',?1,'localhost',993,'localhost',587,0,'jmap',?2)",rusqlite::params![email,endpoint])?;Ok(())}).await.unwrap();
+    core.db.write(move|c|{c.execute("INSERT INTO accounts(id,email,provider,auth_kind,username,incoming_host,incoming_port,smtp_host,smtp_port,created_at,mail_protocol,jmap_url,settings_json) VALUES(1,?1,'generic','password',?1,'localhost',993,'localhost',587,0,'jmap',?2,'{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",rusqlite::params![email,endpoint])?;Ok(())}).await.unwrap();
     core.save_file_connection_settings(
         1,
         ConnectionSettings {

@@ -1093,7 +1093,7 @@ async fn sync_labels(ctx: &SyncCtx, config: &AccountConfig, api: &GmailApi) -> R
                     Some(match existing {
                         Some(folder_id) => {
                             tx.execute(
-                                "UPDATE folders SET imap_name = ?2, delimiter = '/', role = ?3
+                                "UPDATE folders SET path = ?2, delimiter = '/', role = ?3
                                  WHERE id = ?1",
                                 params![folder_id, folder_name, role],
                             )?;
@@ -2994,7 +2994,10 @@ async fn send_remote_draft(
         Err(error) => {
             let ambiguous = matches!(
                 &error,
-                CoreError::Offline | CoreError::Network(_) | CoreError::NotFound(_)
+                CoreError::Offline
+                    | CoreError::Network(_)
+                    | CoreError::ResponseTooLarge { .. }
+                    | CoreError::NotFound(_)
             );
             if ambiguous {
                 if let Some(sent) = api.find_sent_by_message_id(&prepared.message_id).await? {
@@ -3290,7 +3293,7 @@ async fn apply_action(
                             params![account_id, provider_id, latest_name, background, text],
                         )?;
                         conn.execute(
-                            "UPDATE folders SET imap_name=?3
+                            "UPDATE folders SET path=?3
                              WHERE account_id=?1 AND id=(
                                SELECT folder_id FROM gmail_labels
                                WHERE account_id=?1 AND provider_id=?2
@@ -3323,7 +3326,7 @@ async fn apply_action(
                         params![account_id, provider_id, name],
                     )?;
                     conn.execute(
-                        "UPDATE folders SET imap_name = ?3
+                        "UPDATE folders SET path = ?3
                          WHERE account_id = ?1 AND id = (
                            SELECT folder_id FROM gmail_labels
                            WHERE account_id = ?1 AND provider_id = ?2
@@ -3624,7 +3627,12 @@ async fn execute_actions(ctx: &SyncCtx, config: &AccountConfig, api: &GmailApi) 
                             repo::actions::bump_attempt(conn, action_id, retry_at, &saved)
                         })
                         .await?;
-                    if matches!(error, CoreError::Offline | CoreError::Network(_)) {
+                    if matches!(
+                        error,
+                        CoreError::Offline
+                            | CoreError::Network(_)
+                            | CoreError::ResponseTooLarge { .. }
+                    ) {
                         return Err(error);
                     }
                 }

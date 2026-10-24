@@ -1,6 +1,6 @@
 [workspace]
 members = ["crates/flectar-mail-core", "crates/renderer-probe"]
-exclude = ["crates/blitz-dom", "crates/blitz-paint", "crates/parley", "crates/parley_emoji"]
+exclude = ["crates/candle-core", "crates/blitz-dom", "crates/blitz-paint", "crates/i-slint-backend-winit", "crates/parley", "crates/parley_emoji"]
 resolver = "3"
 
 [workspace.dependencies]
@@ -13,10 +13,14 @@ tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 
 [patch.crates-io]
+# Remove when Candle releases ZIP 9 support; see patches/candle/README.md.
+candle-core = { path = "crates/candle-core" }
 blitz-dom = { path = "crates/blitz-dom" }
 blitz-paint = { path = "crates/blitz-paint" }
 # Slint still uses Parley 0.11.1; Blitz's Parley 0.12 is already fixed upstream.
 parley = { path = "crates/parley" }
+# Remove when Slint releases its Wayland clipboard fix; see patches/slint-winit/README.md.
+i-slint-backend-winit = { path = "crates/i-slint-backend-winit" }
 
 [package]
 name = "flectar-mail"
@@ -74,6 +78,8 @@ base64 = "0.22"
 percent-encoding = "2"
 data-url = "0.3"
 html5ever = "0.40"
+# Snapshot archives one verified database snapshot for the document provider.
+zip = { version = "9.0.4", default-features = false }
 cssparser = "0.38"
 # Match Blitz's Stylo version when adapting resolved CSS colors and gradients.
 style = { package = "stylo", version = "=0.22.0" }
@@ -123,6 +129,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_System_JobObjects",
+    "Win32_System_Memory",
+    "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
@@ -144,6 +152,12 @@ slint = { version = "1.18.1", default-features = false, features = ["backend-win
 # already part of the Linux build through ashpd and winit.
 futures-util = { version = "0.3", default-features = false }
 x11rb = { version = "0.13", default-features = false }
+# A forwarded launch hands its activation token to the running window through
+# winit's own Wayland connection. Winit already builds these crates with the
+# same features.
+wayland-backend = { version = "0.3", default-features = false, features = ["client_system"] }
+wayland-client = { version = "0.31", default-features = false }
+wayland-protocols = { version = "0.32", default-features = false, features = ["client", "staging"] }
 
 # Integrated window frames use winit window attributes and native window events.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
@@ -154,7 +168,9 @@ slint = { version = "1.18.1", default-features = false, features = ["backend-win
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSButton", "NSControl", "NSResponder", "NSView", "NSWindow"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSGeometry", "NSString", "NSUserDefaults"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSAppleEventManager", "NSError", "NSGeometry", "NSString", "NSUserDefaults"] }
+# Registers the bundled sign-in agent with Login Items (macOS 13+).
+objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService"] }
 
 # This is `desktop`; keep it in step with the `mobile` alias in build.rs.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
@@ -177,12 +193,19 @@ auto_link_exclude_list = [
 ]
 
 # The Fontique alias deliberately aligns a feature across Slint's and Blitz's
-# transitive font stacks.
+# transitive font stacks. `wayland-backend` is reached through
+# `wayland_client::backend`; the direct dependency guarantees its
+# `client_system` feature, which attaching to winit's display requires.
 # `slint-build`, iOS-only `cc`, and Windows-only `winresource` are consumed by build.rs.
 # These do not appear as normal Rust paths on every host, so dependency
 # scanners need the explicit exceptions.
 [package.metadata.cargo-machete]
-ignored = ["fontique_0_11", "fontique_0_12", "slint-build", "winresource", "cc", "cfg_aliases"]
+ignored = ["fontique_0_11", "fontique_0_12", "wayland-backend", "slint-build", "winresource", "cc", "cfg_aliases"]
+
+# tests/text_fit.rs measures laid-out text through Slint's item tree, which
+# only the internal crate exposes. It must stay on the version `slint` uses.
+[dev-dependencies]
+i-slint-core = { version = "=1.18.1", default-features = false }
 
 [build-dependencies]
 cc = "1"

@@ -24,8 +24,8 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 const GMAIL_SEND_AS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs";
-const MAX_IDENTITIES: usize = 256;
-const MAX_DISPLAY_NAME_CHARS: usize = 256;
+pub(crate) const MAX_IDENTITIES: usize = 256;
+pub(crate) const MAX_DISPLAY_NAME_CHARS: usize = 256;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Deserialize)]
@@ -79,9 +79,9 @@ impl Core {
             .read(move |conn| repo::accounts::get_config(conn, account_id))
             .await?
             .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
-        let identities = match (account.provider, account.mail_protocol) {
-            (Provider::Gmail, _) => self.gmail_sender_identities(&account).await?,
-            (_, MailProtocol::Jmap) => {
+        let identities = match account.mail_protocol {
+            MailProtocol::Gmail => self.gmail_sender_identities(&account).await?,
+            MailProtocol::Jmap => {
                 let secret = crate::accounts::credentials::load_async(
                     self.credentials.clone(),
                     account.id,
@@ -91,9 +91,8 @@ impl Core {
                 let connected = crate::jmap::client::connect(&account, &secret).await?;
                 jmap_sender_identities(&account, &connected).await?
             }
-            (Provider::Microsoft | Provider::Imap, MailProtocol::Imap) => {
-                vec![primary_identity(&account)]
-            }
+            // SMTP servers publish no identity list.
+            MailProtocol::Imap | MailProtocol::Pop3 => vec![primary_identity(&account)],
         };
         self.db
             .write(move |conn| {
@@ -164,27 +163,8 @@ impl Core {
         display_name: Option<String>,
         reply_to_email: Option<String>,
     ) -> Result<SenderIdentity> {
-        let email = email.trim().to_owned();
-        if !valid_email(&email) || email.starts_with("*@") {
-            return Err(CoreError::Other(format!(
-                "{email} is not a valid email address"
-            )));
-        }
-        let display_name = clean_optional(display_name);
-        if display_name
-            .as_deref()
-            .is_some_and(|name| name.chars().count() > MAX_DISPLAY_NAME_CHARS)
-        {
-            return Err(CoreError::Other("the sender name is too long".into()));
-        }
-        let reply_to_email = clean_optional(reply_to_email);
-        if let Some(reply_to) = reply_to_email.as_deref()
-            && (!valid_email(reply_to) || reply_to.starts_with("*@"))
-        {
-            return Err(CoreError::Other(format!(
-                "{reply_to} is not a valid reply-to address"
-            )));
-        }
+        let (email, display_name, reply_to_email) =
+            manual_identity_fields(email, display_name, reply_to_email)?;
         self.db
             .write(move |conn| {
                 let account = repo::accounts::get_config(conn, account_id)?
@@ -370,11 +350,46 @@ pub enum ManualIdentityPolicy {
     Never,
 }
 
+/// Checks and cleans the fields of a user-declared sender identity. Wildcard
+/// addresses are provider grants only; a manual one would claim a domain.
+pub(crate) fn manual_identity_fields(
+    email: String,
+    display_name: Option<String>,
+    reply_to_email: Option<String>,
+) -> Result<(String, Option<String>, Option<String>)> {
+    let email = email.trim().to_owned();
+    if !valid_email(&email) || email.starts_with("*@") {
+        return Err(CoreError::Other(format!(
+            "{email} is not a valid email address"
+        )));
+    }
+    let display_name = clean_optional(display_name);
+    if display_name
+        .as_deref()
+        .is_some_and(|name| name.chars().count() > MAX_DISPLAY_NAME_CHARS)
+    {
+        return Err(CoreError::Other("the sender name is too long".into()));
+    }
+    let reply_to_email = clean_optional(reply_to_email);
+    if let Some(reply_to) = reply_to_email.as_deref()
+        && (!valid_email(reply_to) || reply_to.starts_with("*@"))
+    {
+        return Err(CoreError::Other(format!(
+            "{reply_to} is not a valid reply-to address"
+        )));
+    }
+    Ok((email, display_name, reply_to_email))
+}
+
 pub fn manual_identity_policy(account: &AccountConfig) -> ManualIdentityPolicy {
-    match (account.provider, account.mail_protocol) {
-        (Provider::Gmail, _) => ManualIdentityPolicy::Never,
-        (_, MailProtocol::Jmap) => ManualIdentityPolicy::WithinWildcard,
-        (Provider::Imap | Provider::Microsoft, MailProtocol::Imap) => ManualIdentityPolicy::Any,
+    manual_identity_policy_for(account.mail_protocol)
+}
+
+pub(crate) fn manual_identity_policy_for(protocol: MailProtocol) -> ManualIdentityPolicy {
+    match protocol {
+        MailProtocol::Gmail => ManualIdentityPolicy::Never,
+        MailProtocol::Jmap => ManualIdentityPolicy::WithinWildcard,
+        MailProtocol::Imap | MailProtocol::Pop3 => ManualIdentityPolicy::Any,
     }
 }
 
@@ -672,7 +687,7 @@ fn valid_email(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AccountSettings, AuthKind, MailProtocol};
+    use crate::models::{AuthKind, MailProtocol};
     #[test]
     fn retained_optional_fields_reuse_storage_without_whitespace_capacity() {
         let value = "  Display name  ".to_owned();
@@ -694,15 +709,15 @@ mod tests {
             avatar_url: None,
             provider: Provider::Gmail,
             auth_kind: AuthKind::Oauth2,
-            mail_protocol: MailProtocol::Imap,
+            mail_protocol: MailProtocol::Gmail,
             username: "primary@example.com".into(),
             jmap_url: String::new(),
             jmap_account_id: None,
-            imap_host: String::new(),
-            imap_port: 993,
+            incoming_host: String::new(),
+            incoming_port: 993,
             smtp_host: String::new(),
             smtp_port: 465,
-            settings: AccountSettings::default(),
+            settings: crate::db::testutil::account_settings(),
         }
     }
 

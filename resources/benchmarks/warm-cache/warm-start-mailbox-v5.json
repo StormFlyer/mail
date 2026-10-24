@@ -1,5 +1,5 @@
 {
-  "format_version": 3,
+  "format_version": 5,
   "saved_at_ms": 1787961600000,
   "scope": "Unified Inbox",
   "inbox_count": 2,
@@ -10,7 +10,7 @@
       "email": "alex@example.com",
       "displayName": "Example account",
       "avatarUrl": null,
-      "provider": "imap",
+      "provider": "generic",
       "authKind": "password",
       "mailProtocol": "imap",
       "syncState": "idle",
@@ -81,7 +81,7 @@
     {
       "account_id": 1,
       "label": "Example account",
-      "scope": "Example account",
+      "scope": null,
       "context": "Example account",
       "detail": "alex@example.com",
       "avatar": "EA",
@@ -92,7 +92,7 @@
     {
       "account_id": 1,
       "label": "Inbox",
-      "scope": "Example account / Inbox",
+      "scope": "Account:1:Inbox",
       "context": "Example account",
       "detail": "",
       "avatar": "",
@@ -102,7 +102,7 @@
     {
       "account_id": 1,
       "label": "Starred",
-      "scope": "Example account / Starred",
+      "scope": "Account:1:Starred",
       "context": "Example account",
       "detail": "",
       "avatar": "",

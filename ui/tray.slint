@@ -5,7 +5,10 @@
 export component FlectarTray inherits SystemTrayIcon {
     in-out property <bool> enabled: false;
     visible: root.enabled;
-    icon: @image-url("../resources/app-icon/flectar-mail-masked.png");
+    // Trays draw at 16-44 px. The tray backends keep several decoded copies
+    // and Linux sends the pixels over D-Bus, so the full app icon would cost
+    // megabytes for the whole time the app sits in the tray.
+    icon: @image-url("../resources/app-icon/flectar-mail-tray.png");
     title: @tr("Flectar Mail");
     tooltip: @tr("Flectar Mail");
 

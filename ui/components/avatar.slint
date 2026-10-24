@@ -44,6 +44,9 @@ export component Avatar inherits Rectangle {
             : root.color-tone == 3 ? #405a66
             : root.color-tone == 4 ? #635b40
             : #4a6145);
+    // Initials keep at least the caption size, but shrink to fit the circle
+    // where the platform font makes them wider than a small avatar.
+    private property <length> initials-size: max(TypeScale.caption, root.size * 0.29);
 
     width: root.size;
     height: root.size;
@@ -67,16 +70,24 @@ export component Avatar inherits Rectangle {
         accessible-role: none;
     }
 
-    if !root.has-source : Text {
-        width: parent.width;
-        height: parent.height;
-        text: root.fallback;
-        color: root.color-tone >= 0 ? root.tone-foreground : root.foreground-color;
-        font-size: max(TypeScale.caption, root.size * 0.29);
-        font-weight: 700;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        overflow: elide;
+    if !root.has-source : Rectangle {
+        initials-measure := Text {
+            visible: false;
+            text: root.fallback;
+            font-size: root.initials-size;
+            font-weight: 700;
+        }
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.fallback;
+            color: root.color-tone >= 0 ? root.tone-foreground : root.foreground-color;
+            font-size: root.initials-size * min(1, (root.size - 1px) / max(1px, initials-measure.preferred-width));
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
     }
 
     // Draw the outline after the image so full-bleed photos cannot cover it.

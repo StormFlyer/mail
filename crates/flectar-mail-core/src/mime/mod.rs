@@ -7,9 +7,13 @@ use mail_parser::MimeHeaders;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
+/// Retains our submission identity when a provider replaces Message-ID.
+pub const SUBMISSION_ID_HEADER: &str = "X-Flectar-Submission-ID";
+
 #[derive(Debug, Clone, Default)]
 pub struct ParsedHeaders {
     pub message_id: Option<String>,
+    pub submission_id: Option<String>,
     pub subject: String,
     pub from: Option<Address>,
     pub to: Vec<Address>,
@@ -1901,6 +1905,9 @@ fn parse_headers(msg: &mail_parser::Message) -> ParsedHeaders {
 
     ParsedHeaders {
         message_id: msg.message_id().map(|s| s.to_string()),
+        submission_id: raw_header(msg, SUBMISSION_ID_HEADER)
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty() && !value.chars().any(char::is_whitespace)),
         subject: msg.subject().unwrap_or_default().to_string(),
         from,
         to: collect_addrs(msg.to()),
@@ -2179,6 +2186,10 @@ fn build_message_with_attachments<'a>(
 
     let mut builder = mail_builder::MessageBuilder::new()
         .message_id(msg_id.trim_matches(['<', '>']))
+        .header(
+            SUBMISSION_ID_HEADER,
+            mail_builder::headers::raw::Raw::new(msg_id.trim_matches(['<', '>'])),
+        )
         .from((
             out.from.name.as_deref().unwrap_or_default(),
             out.from.email.as_str(),
@@ -2319,6 +2330,24 @@ pub fn normalize_subject(subject: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn submission_marker_survives_message_id_rewrite() {
+        let mut message = outgoing("content", None);
+        message.message_id = Some("stable-submission@test.dev");
+        let (id, raw) = build_message(&message).unwrap();
+        let raw = String::from_utf8(raw).unwrap();
+        let rewritten = raw.replace(
+            &format!("Message-ID: {id}"),
+            "Message-ID: <rewritten@server>",
+        );
+        let parsed = parse_header_block(rewritten.as_bytes()).unwrap();
+        assert_eq!(parsed.message_id.as_deref(), Some("rewritten@server"));
+        assert_eq!(
+            parsed.submission_id.as_deref(),
+            Some("stable-submission@test.dev")
+        );
+    }
 
     #[test]
     fn image_extraction_preserves_invalid_neighbors_and_unterminated_tail() {

@@ -224,6 +224,10 @@
       "path": "sources/book-open-text.svg",
       "sha256": "745b3391ab4b93f641fafaf1f4f96c760f9c1dbff94316243b41287b218d6f43"
     },
+    "building-2": {
+      "path": "sources/building-2.svg",
+      "sha256": "bbebeb117b14cba96442d28fa4d1182e8d8153f51b9888108cebd3f6bc5a1be1"
+    },
     "calendar-days": {
       "path": "sources/calendar-days.svg",
       "sha256": "7e24733305d13b1fa9de1f5e6d316421f110ee2f74308eb58172f83fc7bc5fc1"
@@ -259,6 +263,14 @@
     "circle-user-round": {
       "path": "sources/circle-user-round.svg",
       "sha256": "820f25212c6bdad7af60a9a05f4d0c1f926bc70ee5819b1495897b2ba3db65bd"
+    },
+    "cloud": {
+      "path": "sources/cloud.svg",
+      "sha256": "5c524665cb2b0b662f7b78a883a620826ddb42071689d0f468940b1a909081d9"
+    },
+    "cloud-sync": {
+      "path": "sources/cloud-sync.svg",
+      "sha256": "6c5e9c2407131f3943f1917d37d592bfbaacad58fa55ea687e308662baa4bcce"
     },
     "code-xml": {
       "path": "sources/code-xml.svg",

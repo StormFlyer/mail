@@ -4,6 +4,7 @@ import { AppTheme } from "../design-system.slint";
 import { TypeScale } from "../typography.slint";
 import { Button } from "button.slint";
 import { LineEdit } from "controls.slint";
+import { OnScreenSurface } from "on-screen-surface.slint";
 import { SettingsSelectRow, SettingsSwitchRow } from "settings-components.slint";
 
 export struct SignatureChoice { id: string, name: string, text: string }
@@ -86,7 +87,7 @@ export global AccountMailPreferences {
     in-out property <string> reader-text;
 }
 
-export component AccountMailPreferencesPanel inherits Rectangle {
+export component AccountMailPreferencesPanel inherits OnScreenSurface {
     in property <[AccountRow]> accounts;
     in property <bool> compact: false;
     in-out property <bool> security-tab: false;
@@ -118,7 +119,7 @@ export component AccountMailPreferencesPanel inherits Rectangle {
     }
     content := VerticalBox {
         padding: 20px; spacing: 12px; alignment: start;
-        Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Sender identities, signatures & OpenPGP"); color: AppTheme.heading; font-size: TypeScale.subtitle; font-weight: 700; }
+        Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Sender identities, signatures & OpenPGP"); color: AppTheme.heading; font-size: TypeScale.subtitle; font-weight: 700; wrap: word-wrap; }
         Text { min-height: self.preferred-height; vertical-stretch: 0; text: @tr("Choose an account to manage its sender identity, signature, and message protection."); color: AppTheme.secondary; wrap: word-wrap; }
         for account in root.accounts : Button {
             text: account.email;

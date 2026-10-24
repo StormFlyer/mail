@@ -1,5 +1,6 @@
 //! Account-removal transitions against the real Slint models.
 use super::*;
+use crate::mail_scope::LabelKind;
 use slint::platform::{
     Platform, WindowAdapter,
     software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
@@ -18,12 +19,13 @@ fn account(id: i64) -> Account {
         email: format!("account-{id}@example.test"),
         display_name: Some(format!("Account {id}")),
         avatar_url: None,
-        provider: Provider::Imap,
+        provider: Provider::Generic,
         auth_kind: flectar_mail_core::models::AuthKind::Password,
         mail_protocol: MailProtocol::Imap,
         sync_state: "idle".into(),
         sync_error: None,
         can_create_top_level_mailbox: true,
+        server_keeps_mail_days: None,
     }
 }
 fn config(account: &Account) -> AccountConfig {
@@ -38,11 +40,14 @@ fn config(account: &Account) -> AccountConfig {
         username: account.email.clone(),
         jmap_url: String::new(),
         jmap_account_id: None,
-        imap_host: "imap.example.test".into(),
-        imap_port: 993,
+        incoming_host: "imap.example.test".into(),
+        incoming_port: 993,
         smtp_host: "smtp.example.test".into(),
         smtp_port: 465,
-        settings: Default::default(),
+        settings: flectar_mail_core::models::AccountSettings::new(MailConnectionSettings::new(
+            ConnectionSecurity::Tls,
+            ConnectionSecurity::Tls,
+        )),
     }
 }
 
@@ -59,7 +64,24 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
             .unwrap(),
     );
     let dir = tempfile::tempdir().unwrap();
-    for removed in [2, 1] {
+    let account_inbox = Scope::Account {
+        account_id: 1,
+        mailbox: StandardMailbox::Inbox,
+    };
+    let mut initial_scopes = vec![
+        account_inbox,
+        Scope::Important,
+        Scope::Label {
+            kind: LabelKind::Global,
+            id: 42,
+        },
+    ];
+    initial_scopes.extend(StandardMailbox::ALL.map(Scope::Unified));
+    for (removed, initial_scope) in [2, 1].into_iter().flat_map(|removed| {
+        initial_scopes
+            .iter()
+            .map(move |scope| (removed, *scope))
+    }) {
         let (fav, _) = bounded_ui_channel();
         let (avatars, _) = bounded_ui_channel();
         let mut state = InboxState::empty(
@@ -81,10 +103,7 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
             message.folder = "Inbox".into();
         }
         state.mailboxes = fixture_mailboxes(&state.messages);
-        for mailbox in &mut state.mailboxes {
-            mailbox.account_id = if mailbox.context == "Account 1" { 1 } else { 2 };
-        }
-        state.scope = "Account 1 / Inbox".into();
+        state.scope = initial_scope;
         state.selected_id = Some(state.messages[0].id);
         state.rendered_id = state.selected_id;
         state.preview_closed = false;
@@ -125,11 +144,23 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
             assert!(state.next_cursor.is_none());
             assert_eq!(state.page, 1);
             assert!(!mail_work::accepts_background(&state, old_generation));
+            // The survivor's own mailbox replaces both a unified selection
+            // and one owned by the removed account.
+            let expected_scope = match initial_scope {
+                Scope::Unified(mailbox) => Scope::Account {
+                    account_id: 3 - removed,
+                    mailbox,
+                },
+                scope if scope == account_inbox && removed == 1 => Scope::Account {
+                    account_id: 2,
+                    mailbox: StandardMailbox::Inbox,
+                },
+                scope => scope,
+            };
+            assert_eq!(state.scope, expected_scope);
             if removed == 2 {
-                assert_eq!(state.scope, "Account 1 / Inbox");
                 assert_eq!(state.selected_id, Some(first_id));
             } else {
-                assert_eq!(state.scope, "Unified Inbox");
                 assert_eq!(state.selected_id, None);
                 assert!(state.preview_closed);
             }
@@ -137,6 +168,13 @@ fn account_removal_clears_deleted_models_and_preserves_surviving_selection() {
         refresh_connected_accounts(&app, &state);
         assert_eq!(app.get_connected_accounts().row_count(), 1);
         assert_eq!(app.get_compose_account_id(), (3 - removed) as i32);
+        refresh_sidebar(&state);
+        assert!(!state.borrow().sidebar_rows.iter().any(|row| matches!(
+            row.kind,
+            SidebarRowKind::UnifiedHeading
+                | SidebarRowKind::UnifiedInbox
+                | SidebarRowKind::UnifiedMailbox
+        )));
         // Removing the final account must empty both the Rust state and the
         // models that drive onboarding, compose and the mail workspace.
         reconcile_removed_account(&mut state.borrow_mut(), 3 - removed);

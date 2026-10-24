@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage desktop downloads and the prerelease Android APK with checksums."""
+"""Stage desktop and Android downloads with checksums."""
 
 import hashlib
 import os
@@ -23,9 +23,8 @@ def prepare(source: Path, destination: Path, version: str) -> None:
         "flectar-mail-macos-arm64.dmg": f"flectar-mail-{version}-macos-arm64.dmg",
         "flectar-mail-macos-x64.zip": f"flectar-mail-{version}-macos-x64.zip",
         "flectar-mail-macos-x64.dmg": f"flectar-mail-{version}-macos-x64.dmg",
+        "flectar-mail.apk": f"flectar-mail-{version}-android-arm64.apk",
     }
-    if "-" in version:
-        packages["flectar-mail.apk"] = f"flectar-mail-{version}-android-arm64-test.apk"
     # Validate every input before copying anything; unrelated benchmark files
     # are intentionally excluded from the public downloads.
     selected = []
@@ -47,17 +46,22 @@ def prepare(source: Path, destination: Path, version: str) -> None:
 
 def release_notes(version: str) -> str:
     android = (
-        "An experimental Android arm64 test APK (Android 8.0+) is included. "
-        "It is test-signed and is not a production or Play Store build. "
-        "Updates require the same signing key; builds without a persistent test "
-        "key may require uninstalling the previous app, which deletes local app data. "
+        "An Android arm64 APK (Android 8.0+) is included. "
+        "Starting with alpha 8, previews and stable releases share one signing "
+        "identity, so newer versions can update the app without uninstalling it. "
+        "Alpha 6 and alpha 7 used different keys and cannot update to this identity. "
         "Android OAuth requires separate registrations tied to the APK signing "
         "identity; desktop keys alone do not enable it.\n"
-        if "-" in version else "The Android test APK is available in prereleases only.\n"
     )
     return (
         "Desktop builds for Linux x64, Windows x64, and macOS Apple silicon and Intel. "
         "Linux testers can choose AppImage, Debian, Fedora RPM, or Flatpak.\n\n"
+        "The x86_64 RPM supports Fedora 43 and 44. The same package is built "
+        "on Fedora 43 and tested in clean containers on both releases, including "
+        "PDF rendering and X11/Wayland startup. Other RPM distributions are not "
+        "yet tested. Install it with `sudo dnf install ./flectar-mail-"
+        f"{version}-linux-x64.rpm`; if a graphical installer reports a conflict, "
+        "this command shows the dependency details.\n\n"
         "Gmail and Outlook sign-in require a bundled OAuth registration or your own "
         "keys in **Sign-in settings** on the welcome screen. IMAP/SMTP and JMAP "
         "do not require Google or Microsoft app keys. Provider policies still apply.\n\n"

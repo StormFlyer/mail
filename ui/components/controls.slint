@@ -1,3 +1,4 @@
+import { ScrollView } from "std-widgets.slint";
 import { AppTheme, LayoutMetrics, ThemeUtilities } from "../design-system.slint";
 import { FocusVisibleScope } from "focus-visible-scope.slint";
 import { TypeScale } from "../typography.slint";
@@ -111,23 +112,40 @@ export component TextEdit inherits Rectangle {
         wrap: word-wrap;
     }
 
-    editor := TextInput {
+    // Longer text scrolls inside the field, and the caret stays in view.
+    editor-scroll := ScrollView {
         x: 12px;
         y: 10px;
         width: parent.width - 24px;
         height: parent.height - 20px;
-        text: root.text;
-        color: root.text-color;
-        selection-background-color: AppTheme.accent;
-        selection-foreground-color: white;
-        font-size: root.font-size;
-        single-line: false;
-        wrap: word-wrap;
-        enabled: root.enabled;
-        read-only: root.read-only;
-        edited => {
-            root.text = self.text;
-            root.edited(self.text);
+        content-width: self.visible-width;
+        content-height: editor.height;
+
+        editor := TextInput {
+            width: editor-scroll.visible-width;
+            height: max(editor-scroll.visible-height, self.preferred-height);
+            text: root.text;
+            color: root.text-color;
+            selection-background-color: AppTheme.accent;
+            selection-foreground-color: white;
+            font-size: root.font-size;
+            single-line: false;
+            wrap: word-wrap;
+            enabled: root.enabled;
+            read-only: root.read-only;
+            page-height: editor-scroll.visible-height;
+            edited => {
+                root.text = self.text;
+                root.edited(self.text);
+            }
+            cursor-position-changed(cursor) => {
+                let line = self.font-metrics.ascent - self.font-metrics.descent;
+                if cursor.y + editor-scroll.content-y < 0px {
+                    editor-scroll.content-y = -cursor.y;
+                } else if cursor.y + line + editor-scroll.content-y > editor-scroll.visible-height {
+                    editor-scroll.content-y = min(0px, editor-scroll.visible-height - cursor.y - line);
+                }
+            }
         }
     }
 

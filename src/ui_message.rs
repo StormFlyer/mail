@@ -76,6 +76,7 @@ pub(crate) trait AppWindowMessages {
     fn set_render_status(&self, message: UiMessage);
     fn set_sync_status(&self, message: UiMessage);
     fn set_compose_notice(&self, message: UiMessage);
+    fn set_mail_export_status(&self, message: UiMessage);
 }
 
 impl AppWindowMessages for AppWindow {
@@ -97,5 +98,9 @@ impl AppWindowMessages for AppWindow {
 
     fn set_compose_notice(&self, message: UiMessage) {
         self.set_compose_message(message.as_slint());
+    }
+
+    fn set_mail_export_status(&self, message: UiMessage) {
+        self.set_mail_export_message(message.as_slint());
     }
 }

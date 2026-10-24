@@ -3,7 +3,10 @@ mod account_mail_preferences;
 #[cfg(test)]
 mod account_removal_tests;
 mod attachment_controller;
+#[cfg(desktop)]
+mod autostart;
 mod browser;
+pub use browser::ExternalUrlOpener;
 mod calendar;
 mod compose_controller;
 mod compose_editor;
@@ -14,16 +17,23 @@ pub mod documents;
 mod email_document;
 pub mod favicon;
 mod files_controller;
+mod import_controller;
+mod keyboard_keys;
 mod latest_load;
 mod mail;
+#[cfg(test)]
+mod mail_drop_tests;
 mod mail_groups;
 mod mail_navigation;
 mod mail_render_projection;
+mod mail_scope;
 mod mail_setup;
 mod mail_view_model;
 mod mail_work;
 mod message_appearance;
 mod oauth_browser;
+#[cfg(test)]
+mod on_screen_surface_tests;
 pub mod pdf_preview;
 pub mod platform;
 mod preview_controls;
@@ -46,6 +56,8 @@ mod retained_model;
 mod rich_compose;
 mod settings_controller;
 mod sidebar_model;
+#[cfg(desktop)]
+mod single_instance;
 mod startup;
 mod startup_metrics;
 mod tabs;
@@ -81,8 +93,9 @@ use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::ThreadCursor;
 use flectar_mail_core::models::{
     Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, CardDavConnection,
-    ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn,
-    Label, MailProfile, MailProtocol, Provider, Settings, Snippet, UpdateEventArgs,
+    ConnectionSecurity, ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs,
+    DraftAttachmentIn, Label, MailConnectionSettings, MailProfile, MailProtocol, Provider,
+    Settings, Snippet, UpdateEventArgs,
 };
 #[cfg(test)]
 use mail::fixture_messages;
@@ -94,6 +107,7 @@ use mail_groups::{
     MailGroupState, mail_group_key, mail_list_entry_key, project_mail_list, same_mail_list_entry,
 };
 use mail_render_projection::*;
+use mail_scope::{Scope, StandardMailbox};
 use mail_view_model::*;
 use renderer::{GpuEmailRenderer, RenderedEmail};
 use renderer_input_controller::register_renderer_input_callbacks;
@@ -132,6 +146,7 @@ const SENDER_AVATAR_REGULAR_SIDE: f32 = 38.0;
 const ACCOUNT_AVATAR_SMALL_SIDE: f32 = 22.0;
 const ACCOUNT_AVATAR_REGULAR_SIDE: f32 = 38.0;
 const MAX_COMPOSE_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;
+const MAX_COMPOSE_ATTACHMENT_FILES: usize = 20;
 
 fn favicon_retry_delay(attempts: u8) -> Duration {
     let exponent = attempts.saturating_sub(1).min(6);
@@ -326,21 +341,15 @@ fn reconcile_model_rows_by<T: Clone + 'static, K: Eq + std::hash::Hash>(
     }
 }
 
-#[cfg(desktop)]
-fn pick_compose_attachment_paths(title: String) -> Option<Vec<PathBuf>> {
-    rfd::FileDialog::new().set_title(title).pick_files()
-}
-
-#[cfg(mobile)]
-fn pick_compose_attachment_paths(_title: String) -> Option<Vec<PathBuf>> {
-    None
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ComposeFile {
     path: PathBuf,
     filename: String,
     size: u64,
+    /// Host-owned import copy behind `path`. Removing the attachment or
+    /// clearing the composer releases it; drafts and sends stage the file in
+    /// Core first.
+    _import: Option<Rc<documents::ImportedDocument>>,
 }
 
 struct FaviconUpdate {
@@ -375,7 +384,7 @@ struct ComposeSendUpdate {
 
 struct MailListUpdate {
     view_generation: u64,
-    scope: String,
+    scope: Scope,
     query: String,
     kind: MailListUpdateKind,
     result: Result<mail::MailPage, String>,
@@ -394,6 +403,12 @@ struct FolderMutationUpdate {
     message: UiMessage,
     metadata: Option<mail::MailMetadata>,
     reveal_parent_id: Option<i64>,
+    /// Mailbox shown when the change was made. The result moves the list to
+    /// `metadata.scope` only if that mailbox is still shown.
+    issued_scope: Scope,
+    /// Folders a deletion removed. A list that moved into one of them since
+    /// goes to the inbox.
+    removed_folders: Vec<i64>,
 }
 
 struct MessageLoadUpdate {
@@ -408,6 +423,7 @@ struct ContactLoadUpdate {
     cursor: Option<ContactRecordCursor>,
     generation: u64,
     result: Result<ContactRecordPage, String>,
+    photos: HashMap<String, ProfileAvatarImages>,
 }
 
 fn spawn_contact_page(
@@ -428,6 +444,21 @@ fn spawn_contact_page(
                 PAGE_SIZE as i64,
             )
             .await;
+        let mut photos = HashMap::new();
+        if let Ok(page) = &result {
+            for record in &page.records {
+                if let Some(hash) = &record.details.photo_hash {
+                    if photos.contains_key(hash) {
+                        continue;
+                    }
+                    if let Ok(Some(bytes)) = core.contact_photo(hash.clone()).await
+                        && let Ok(images) = favicon::decode_profile_avatars(bytes, 88, 104).await
+                    {
+                        photos.insert(hash.clone(), images);
+                    }
+                }
+            }
+        }
         let _ = updates
             .send(ContactLoadUpdate {
                 scope,
@@ -435,6 +466,7 @@ fn spawn_contact_page(
                 cursor,
                 generation,
                 result,
+                photos,
             })
             .await;
     });
@@ -456,6 +488,8 @@ struct UiTaskUpdate {
 #[derive(Clone, Default)]
 struct AccountPresentationSettings {
     profiles: Vec<MailProfile>,
+    /// The profile whose accounts the mail view shows.
+    active_profile: Option<String>,
     show_markers: bool,
     account_colors: HashMap<String, String>,
     account_short_names: HashMap<String, String>,
@@ -465,10 +499,29 @@ impl AccountPresentationSettings {
     fn from_settings(settings: &Settings) -> Self {
         Self {
             profiles: settings.mail_profiles.clone(),
+            active_profile: settings.active_mail_profile.clone(),
             show_markers: settings.show_account_badges,
             account_colors: settings.account_colors.clone(),
             account_short_names: settings.account_short_names.clone(),
         }
+    }
+
+    /// The profile the mail view shows, if it has accounts.
+    fn active_profile(&self) -> Option<&MailProfile> {
+        let active = self.active_profile.as_deref()?;
+        self.profiles
+            .iter()
+            .find(|profile| profile.id == active && !profile.account_ids.is_empty())
+    }
+
+    /// The accounts the mail view shows, sorted, while a profile is active.
+    fn active_profile_accounts(&self) -> Option<Vec<i64>> {
+        self.active_profile().map(|profile| {
+            let mut accounts = profile.account_ids.clone();
+            accounts.sort_unstable();
+            accounts.dedup();
+            accounts
+        })
     }
 
     fn profile(&self, account_id: i64) -> Option<&MailProfile> {
@@ -506,6 +559,10 @@ impl AccountPresentationSettings {
     fn remove_account(&mut self, account_id: i64) {
         for profile in &mut self.profiles {
             profile.account_ids.retain(|id| *id != account_id);
+        }
+        // Like the core, stop showing a profile left without accounts.
+        if self.active_profile().is_none() {
+            self.active_profile = None;
         }
         let key = account_id.to_string();
         self.account_colors.remove(&key);
@@ -566,7 +623,9 @@ struct InboxState {
     sidebar_rows: Rc<SidebarModel>,
     sidebar_animation: Rc<SidebarAnimation>,
     folder_filter: String,
-    scope: String,
+    /// Always visible for `connected_accounts`; write through
+    /// [`InboxState::set_scope`] and [`InboxState::set_connected_accounts`].
+    scope: Scope,
     query: String,
     search_filter: String,
     inbox_count: usize,
@@ -576,6 +635,13 @@ struct InboxState {
     /// Conversation to select once the next replacing page arrives, for a
     /// tab restored without cached rows.
     pending_selection: Option<i32>,
+    /// Selecting the pending conversation opens it, which marks it read: a
+    /// background tab shown for the first time.
+    pending_selection_opens: bool,
+    /// Message a restored tab had open in a conversation, as (conversation
+    /// row id, message id). Loading that conversation opens this message
+    /// rather than the newest one.
+    restore_thread_message: Option<(i32, i32)>,
     checked_ids: HashSet<i32>,
     rendered_id: Option<i32>,
     preview_closed: bool,
@@ -590,6 +656,9 @@ struct InboxState {
     connected_accounts: Vec<Account>,
     account_configs: Vec<AccountConfig>,
     account_presentation: AccountPresentationSettings,
+    /// The active profile's accounts, sorted. The mail view shows only these;
+    /// `None` shows every connected account.
+    profile_accounts: Option<Vec<i64>>,
     calendar_connections: Vec<CalendarConnection>,
     carddav_connections: Vec<CardDavConnection>,
     calendar_errors: HashMap<i64, String>,
@@ -624,13 +693,6 @@ enum MailDropDestination {
     Route(String),
 }
 
-fn navigation_label_id(scope: &str) -> Option<i64> {
-    ["AccountLabel:", "GlobalLabel:", "Category:", "Label:"]
-        .into_iter()
-        .find_map(|prefix| scope.strip_prefix(prefix))
-        .and_then(|id| id.parse().ok())
-}
-
 fn mail_drag_payload(data: &DataTransfer) -> Option<Rc<MailDragPayload>> {
     data.user_data()?.downcast::<MailDragPayload>().ok()
 }
@@ -651,25 +713,27 @@ fn mail_operation_ids(
     }
 }
 
-fn standard_mailbox_folder(state: &InboxState, account_id: i64, label: &str) -> Option<i64> {
+/// The provider folder backing one account's standard mailbox, if any.
+fn standard_mailbox_folder(
+    state: &InboxState,
+    account_id: i64,
+    mailbox: StandardMailbox,
+) -> Option<i64> {
+    let scope = Scope::Account {
+        account_id,
+        mailbox,
+    };
     state
         .mailboxes
         .iter()
-        .find(|mailbox| {
-            !mailbox.is_account
-                && mailbox.account_id == account_id
-                && mailbox.is_standard
-                && mailbox.is_selectable
-                && mailbox.label == label
-                && mailbox.folder_id >= 0
-        })
-        .map(|mailbox| mailbox.folder_id)
+        .find(|entry| entry.scope == Some(scope) && entry.is_selectable && entry.folder_id >= 0)
+        .map(|entry| entry.folder_id)
 }
 
 fn resolve_single_mail_drop(
     state: &InboxState,
     item: &MailDragItem,
-    target_scope: &str,
+    target_scope: Scope,
     target_account_id: i32,
     target_folder_id: i32,
 ) -> Result<(i64, MailDropDestination), String> {
@@ -692,11 +756,9 @@ fn resolve_single_mail_drop(
     }
 
     let destination = match target_scope {
-        "Important" => MailDropDestination::Route("important".to_owned()),
-        "Other" => MailDropDestination::Route("other".to_owned()),
-        scope if navigation_label_id(scope).is_some() => {
-            let label_id = navigation_label_id(scope)
-                .ok_or_else(|| "label destination is invalid".to_owned())?;
+        Scope::Important => MailDropDestination::Route("important".to_owned()),
+        Scope::Other => MailDropDestination::Route("other".to_owned()),
+        Scope::Label { id: label_id, .. } => {
             let label = state
                 .labels
                 .iter()
@@ -719,31 +781,41 @@ fn resolve_single_mail_drop(
                 MailDropDestination::Label(label_id)
             }
         }
-        "Unified Starred" if !message.starred => MailDropDestination::Action("star"),
-        "Unified Inbox" if message.folder == "Spam" => MailDropDestination::Action("not_spam"),
-        "Unified Inbox" if message.folder == "Archive" => MailDropDestination::Action("unarchive"),
-        "Unified Inbox" if message.folder != "Inbox" => MailDropDestination::Folder(
-            standard_mailbox_folder(state, message.account_id, "Inbox")
-                .ok_or_else(|| "this account has no inbox destination".to_owned())?,
-        ),
-        "Unified Archive" if message.folder != "Archive" => MailDropDestination::Folder(
-            standard_mailbox_folder(state, message.account_id, "Archive")
-                .ok_or_else(|| "this account has no archive destination".to_owned())?,
-        ),
-        "Unified Spam" if message.folder != "Spam" => {
-            standard_mailbox_folder(state, message.account_id, "Spam")
+        Scope::Unified(StandardMailbox::Starred) if !message.starred => {
+            MailDropDestination::Action("star")
+        }
+        Scope::Unified(StandardMailbox::Inbox) if message.folder == "Spam" => {
+            MailDropDestination::Action("not_spam")
+        }
+        Scope::Unified(StandardMailbox::Inbox) if message.folder == "Archive" => {
+            MailDropDestination::Action("unarchive")
+        }
+        Scope::Unified(StandardMailbox::Inbox) if message.folder != "Inbox" => {
+            MailDropDestination::Folder(
+                standard_mailbox_folder(state, message.account_id, StandardMailbox::Inbox)
+                    .ok_or_else(|| "this account has no inbox destination".to_owned())?,
+            )
+        }
+        Scope::Unified(StandardMailbox::Archive) if message.folder != "Archive" => {
+            MailDropDestination::Folder(
+                standard_mailbox_folder(state, message.account_id, StandardMailbox::Archive)
+                    .ok_or_else(|| "this account has no archive destination".to_owned())?,
+            )
+        }
+        Scope::Unified(StandardMailbox::Spam) if message.folder != "Spam" => {
+            standard_mailbox_folder(state, message.account_id, StandardMailbox::Spam)
                 .ok_or_else(|| "this account has no spam destination".to_owned())?;
             MailDropDestination::Action("spam")
         }
-        "Unified Trash" if message.folder != "Trash" => {
-            standard_mailbox_folder(state, message.account_id, "Trash")
+        Scope::Unified(StandardMailbox::Trash) if message.folder != "Trash" => {
+            standard_mailbox_folder(state, message.account_id, StandardMailbox::Trash)
                 .ok_or_else(|| "this account has no trash destination".to_owned())?;
             MailDropDestination::Action("trash")
         }
-        scope if scope.starts_with("Unified ") => {
+        Scope::Unified(_) => {
             return Err("this unified mailbox is not a drop destination".to_owned());
         }
-        _ => {
+        Scope::Folder(_) | Scope::Account { .. } => {
             if i64::from(target_account_id) != message.account_id {
                 return Err("messages cannot be moved between accounts".to_owned());
             }
@@ -753,7 +825,7 @@ fn resolve_single_mail_drop(
                 .find(|mailbox| {
                     !mailbox.is_account
                         && mailbox.account_id == message.account_id
-                        && mailbox.scope == target_scope
+                        && mailbox.scope == Some(target_scope)
                         && mailbox.folder_id == i64::from(target_folder_id)
                 })
                 .ok_or_else(|| "mailbox destination is no longer available".to_owned())?;
@@ -763,18 +835,34 @@ fn resolve_single_mail_drop(
             if target.label == message.folder {
                 return Err("message is already in this destination".to_owned());
             }
-            match target.label.as_str() {
-                "Starred" if !message.starred => MailDropDestination::Action("star"),
-                "Inbox" if message.folder == "Spam" => MailDropDestination::Action("not_spam"),
-                "Inbox" if message.folder == "Archive" => MailDropDestination::Action("unarchive"),
-                "Archive" => MailDropDestination::Folder(target.folder_id),
-                "Spam" => MailDropDestination::Action("spam"),
-                "Trash" => MailDropDestination::Action("trash"),
-                "Sent" | "Drafts" | "Starred" => {
+            // Custom folders are plain moves even when named like a
+            // standard mailbox.
+            let standard = match target_scope {
+                Scope::Account { mailbox, .. } => Some(mailbox),
+                _ => None,
+            };
+            match standard {
+                Some(StandardMailbox::Starred) if !message.starred => {
+                    MailDropDestination::Action("star")
+                }
+                Some(StandardMailbox::Inbox) if message.folder == "Spam" => {
+                    MailDropDestination::Action("not_spam")
+                }
+                Some(StandardMailbox::Inbox) if message.folder == "Archive" => {
+                    MailDropDestination::Action("unarchive")
+                }
+                Some(StandardMailbox::Archive) => MailDropDestination::Folder(target.folder_id),
+                Some(StandardMailbox::Spam) => MailDropDestination::Action("spam"),
+                Some(StandardMailbox::Trash) => MailDropDestination::Action("trash"),
+                Some(StandardMailbox::Sent | StandardMailbox::Drafts | StandardMailbox::Starred) => {
                     return Err("this mailbox is not a drop destination".to_owned());
                 }
-                _ if target.folder_id >= 0 => MailDropDestination::Folder(target.folder_id),
-                _ => return Err("mailbox destination is unavailable".to_owned()),
+                Some(StandardMailbox::Inbox) | None if target.folder_id >= 0 => {
+                    MailDropDestination::Folder(target.folder_id)
+                }
+                Some(StandardMailbox::Inbox) | None => {
+                    return Err("mailbox destination is unavailable".to_owned());
+                }
             }
         }
     };
@@ -785,7 +873,7 @@ fn resolve_single_mail_drop(
 fn resolve_mail_drop(
     state: &InboxState,
     payload: &MailDragPayload,
-    target_scope: &str,
+    target_scope: Scope,
     target_account_id: i32,
     target_folder_id: i32,
 ) -> Result<Vec<(i32, i64, MailDropDestination)>, String> {
@@ -813,7 +901,7 @@ fn perform_mail_drop(
     state: &Rc<RefCell<InboxState>>,
     _runtime: &tokio::runtime::Runtime,
     payload: &MailDragPayload,
-    target_scope: &str,
+    target_scope: Scope,
     target_account_id: i32,
     target_folder_id: i32,
 ) -> Result<(), String> {
@@ -1008,13 +1096,15 @@ impl InboxState {
             email_rows: Rc::new(VecModel::default()),
             mail_list_entries: Rc::new(VecModel::default()),
             mail_groups: MailGroupState::default(),
-            scope: "Unified Inbox".to_owned(),
+            scope: Scope::UNIFIED_INBOX,
             query: String::new(),
             search_filter: "All mail".to_owned(),
             page: 1,
             next_cursor: None,
             selected_id: None,
             pending_selection: None,
+            pending_selection_opens: false,
+            restore_thread_message: None,
             checked_ids: HashSet::new(),
             rendered_id: None,
             preview_closed: false,
@@ -1029,6 +1119,7 @@ impl InboxState {
             connected_accounts: Vec::new(),
             account_configs: Vec::new(),
             account_presentation: AccountPresentationSettings::default(),
+            profile_accounts: None,
             calendar_connections: Vec::new(),
             carddav_connections: Vec::new(),
             calendar_errors: HashMap::new(),
@@ -1043,6 +1134,80 @@ impl InboxState {
             mark_read_on_open: true,
             warm_start_cache,
         }
+    }
+
+    /// Select `scope`, or the equivalent mailbox the sidebar shows for the
+    /// mail view's accounts. A mailbox of an account outside the active
+    /// profile gives way to the profile's own.
+    fn set_scope(&mut self, scope: Scope) {
+        let scope = if self.shows_scope(scope) {
+            scope
+        } else {
+            scope.unified()
+        };
+        self.scope = scope.visible_for(&self.mail_accounts());
+    }
+
+    /// Whether the mail view shows this account's mail: every account's
+    /// unless a profile is active.
+    fn shows_account(&self, account_id: i64) -> bool {
+        self.profile_accounts
+            .as_ref()
+            .is_none_or(|accounts| accounts.binary_search(&account_id).is_ok())
+    }
+
+    /// The connected accounts the mail view shows.
+    fn mail_accounts(&self) -> Vec<Account> {
+        self.connected_accounts
+            .iter()
+            .filter(|account| self.shows_account(account.id))
+            .cloned()
+            .collect()
+    }
+
+    /// Whether `scope` belongs to a shown account, or to none. Folders and
+    /// labels not loaded yet count as shown; their page falls back to the
+    /// inbox if they are not.
+    fn shows_scope(&self, scope: Scope) -> bool {
+        match scope {
+            Scope::Unified(_) | Scope::Important | Scope::Other => true,
+            Scope::Account { account_id, .. } => self.shows_account(account_id),
+            Scope::Folder(_) => self
+                .mailboxes
+                .iter()
+                .find(|mailbox| mailbox.scope == Some(scope))
+                .is_none_or(|mailbox| self.shows_account(mailbox.account_id)),
+            Scope::Label { id, .. } => self
+                .labels
+                .iter()
+                .find(|label| label.id == id)
+                .and_then(|label| label.owner_account_id)
+                .is_none_or(|owner| self.shows_account(owner)),
+        }
+    }
+
+    /// Show the active profile's accounts, as the presentation settings name
+    /// them. Returns whether the mail view's accounts changed; the caller
+    /// then reloads the list and counts.
+    #[must_use]
+    fn sync_profile_accounts(&mut self) -> bool {
+        let accounts = self.account_presentation.active_profile_accounts();
+        if let Some(core) = &self.core {
+            core.set_profile_accounts(accounts.clone());
+        }
+        let changed = self.profile_accounts != accounts;
+        self.profile_accounts = accounts;
+        changed
+    }
+
+    /// Replace the account inventory. Returns whether the selection moved to
+    /// stay visible, in which case the caller must reload the message list.
+    #[must_use]
+    fn set_connected_accounts(&mut self, accounts: Vec<Account>) -> bool {
+        self.connected_accounts = accounts;
+        let previous = self.scope;
+        self.set_scope(previous);
+        self.scope != previous
     }
 
     fn queue_warm_start_update(&self) {
@@ -1062,13 +1227,14 @@ impl InboxState {
         }
         self.warm_start_cache
             .save(WarmStartSnapshot::capture(WarmStartProjection {
-                scope: &self.scope,
+                scope: self.scope,
                 inbox_count: self.inbox_count,
                 next_cursor: self.next_cursor.and_then(|cursor| match cursor {
                     MailCursor::Thread(cursor) => Some(cursor),
                     MailCursor::Search(_) => None,
                 }),
                 accounts: &self.connected_accounts,
+                profile_accounts: self.profile_accounts.as_deref(),
                 messages: &self.messages,
                 mailboxes: &self.mailboxes,
                 unified_mailboxes: &self.unified_mailboxes,
@@ -1081,6 +1247,8 @@ impl InboxState {
 /// sandbox paths and native services. See platform/README.md.
 #[derive(Clone)]
 pub struct PlatformContext {
+    /// Host URL dispatch for mail links and browser-based authorization.
+    pub external_urls: ExternalUrlOpener,
     pub paths: Paths,
     pub documents: Arc<dyn documents::DocumentProvider>,
     pub credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
@@ -1094,6 +1262,7 @@ impl PlatformContext {
         let credentials = desktop_credential_store(&paths);
         Ok(Self {
             paths,
+            external_urls: ExternalUrlOpener::default(),
             documents: documents::default_provider(),
             credentials,
             oauth_redirects: Arc::new(
@@ -1113,6 +1282,7 @@ impl PlatformContext {
     ) -> Self {
         Self {
             paths: Paths::new(data_root.join("data"), cache_dir),
+            external_urls: ExternalUrlOpener::default(),
             documents,
             credentials,
             oauth_redirects,
@@ -1226,8 +1396,7 @@ fn spawn_startup_load(
         let warm = load_warm_start_snapshot(&paths.warm_start_file()).await;
         let preferred_scope = warm
             .as_ref()
-            .map(|snapshot| snapshot.scope.clone())
-            .unwrap_or_else(|| "Unified Inbox".to_owned());
+            .map_or(Scope::UNIFIED_INBOX, |snapshot| snapshot.scope);
         metrics.emit(
             "warm_cache_loaded",
             serde_json::json!({
@@ -1256,7 +1425,7 @@ fn spawn_startup_load(
             paths,
             credentials,
             oauth_redirects,
-            &preferred_scope,
+            preferred_scope,
             &metrics,
         )
         .await;
@@ -1269,7 +1438,7 @@ fn spawn_startup_load(
         let follow_up = result
             .as_ref()
             .ok()
-            .map(|snapshot| (snapshot.core.clone(), snapshot.scope.clone()));
+            .map(|snapshot| (snapshot.core.clone(), snapshot.scope));
         let _ = startup_tx
             .send(StartupUpdate::Ready(result.map(Box::new)))
             .await;
@@ -1280,7 +1449,7 @@ fn spawn_startup_load(
         let metadata_tx = startup_tx.clone();
         let metadata_core = core.clone();
         tokio::spawn(async move {
-            let result = load_startup_mail_metadata(&metadata_core, &scope).await;
+            let result = load_startup_mail_metadata(&metadata_core, scope).await;
             let _ = metadata_tx.send(StartupUpdate::MailMetadata(result)).await;
         });
     });
@@ -1307,6 +1476,46 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let benchmark_disable_background =
         std::env::var("FLECTAR_BENCHMARK_DISABLE_SYNC").as_deref() == Ok("1");
     normalize_appimage_environment();
+
+    // Created before the backend: claiming the profile uses its reactor, and
+    // a launch that only forwards to a running instance should exit before
+    // any renderer or window is initialized.
+    let runtime = Rc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            // Mail sync is I/O-bound. Avoid reserving one Tokio worker per
+            // logical CPU in a desktop shell while leaving room for the UI,
+            // Blitz renderer, and the core's dedicated DB threads.
+            .worker_threads(2)
+            .max_blocking_threads(2)
+            .enable_all()
+            .build()?,
+    );
+    #[cfg(desktop)]
+    let background_launch = autostart::launched_in_background();
+    #[cfg(desktop)]
+    let mut instance = {
+        use single_instance::{Acquired, Request};
+        let request = if background_launch {
+            Request::Nothing
+        } else {
+            Request::Show {
+                activation_token: window_chrome::launch_activation_token(),
+            }
+        };
+        match single_instance::acquire(&runtime, &platform.paths.data_dir, request) {
+            Ok(Acquired::Primary(primary)) => Some(primary),
+            Ok(Acquired::Forwarded) => return Ok(()),
+            Ok(Acquired::Unresponsive(error)) => {
+                return Err(
+                    format!("Flectar Mail is already running but did not respond: {error}").into(),
+                );
+            }
+            Err(error) => {
+                eprintln!("could not coordinate with other Flectar Mail processes: {error}");
+                None
+            }
+        }
+    };
 
     let renderer_preference_path = platform.paths.data_dir.join("renderer.json");
     let tabs_path = platform.paths.data_dir.join("tabs.json");
@@ -1357,17 +1566,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     ))]
     slint::set_xdg_app_id("com.flectar.mail")?;
 
-    let runtime = Rc::new(
-        tokio::runtime::Builder::new_multi_thread()
-            // Mail sync is I/O-bound. Avoid reserving one Tokio worker per
-            // logical CPU in a desktop shell while leaving room for the UI,
-            // Blitz renderer, and the core's dedicated DB threads.
-            .worker_threads(2)
-            .max_blocking_threads(2)
-            .enable_all()
-            .build()?,
-    );
-
     // Register the deterministic emoji face before any initial text is measured.
     configure_emoji_font_fallback()?;
 
@@ -1380,6 +1578,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let app = renderer_preferences::initialize_step(use_wgpu, AppWindow::new)?;
     app.global::<MailListNavigation>()
         .on_target(mail_navigation::target);
+    app.global::<KeyboardKeys>().on_chord(keyboard_keys::chord);
     if let Some(width) = startup_presentation.workspace_list_pane_width {
         app.set_workspace_list_pane_width(width as f32);
     }
@@ -1402,17 +1601,32 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         });
     theme::register_theme_utilities(&app);
     app.set_print_supported(!cfg!(mobile));
-    app.set_document_apis_supported(!cfg!(mobile));
-    renderer_preferences::initialize_step(use_wgpu, || app.show())?;
-    startup_metrics.emit(
-        "window_shown",
-        serde_json::json!({
-            "renderer": if use_wgpu { "wgpu" } else { "software" },
-            "slint_backend": std::env::var("SLINT_BACKEND").ok(),
-            "display": std::env::var("DISPLAY").ok(),
-            "wayland_display": std::env::var("WAYLAND_DISPLAY").ok(),
-        }),
-    );
+    // Every host provides a document provider now: desktop dialogs on desktop,
+    // the system picker on mobile. The document entry points (compose
+    // attachments, account backups, database snapshots) stay available.
+    app.set_document_apis_supported(true);
+    // A sign-in launch stays in the tray only when the user keeps the app
+    // there and a tray can actually show it; otherwise the window opens.
+    #[cfg(desktop)]
+    let start_hidden = background_launch
+        && startup_presentation.close_to_tray
+        && window_controller::tray_host_available(&runtime);
+    #[cfg(mobile)]
+    let start_hidden = false;
+    if start_hidden {
+        startup_metrics.emit("started_in_tray", serde_json::Value::Null);
+    } else {
+        renderer_preferences::initialize_step(use_wgpu, || app.show())?;
+        startup_metrics.emit(
+            "window_shown",
+            serde_json::json!({
+                "renderer": if use_wgpu { "wgpu" } else { "software" },
+                "slint_backend": std::env::var("SLINT_BACKEND").ok(),
+                "display": std::env::var("DISPLAY").ok(),
+                "wayland_display": std::env::var("WAYLAND_DISPLAY").ok(),
+            }),
+        );
+    }
     startup_metrics.schedule_rendered_frame(app.as_weak(), "first_frame");
     let favicon_wake = UiWake::new(app.as_weak(), |app| app.invoke_drain_favicon_updates());
     let profile_avatar_wake = UiWake::new(app.as_weak(), |app| {
@@ -1473,7 +1687,21 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     app.set_microsoft_oauth_bundled(
         flectar_mail_core::oauth::providers::has_bundled_credentials(Provider::Microsoft),
     );
+    // A start in the tray needs its icon now; a visible start registers it
+    // once full settings are applied, after the first frame.
+    if start_hidden {
+        app.set_close_to_tray(true);
+    }
     let tray = create_and_register_window_lifecycle(&app)?;
+    #[cfg(desktop)]
+    if let Some(instance) = instance.as_mut() {
+        let app = app.as_weak();
+        instance.serve(&runtime, move |activation_token| {
+            let _ = app.upgrade_in_event_loop(move |app| {
+                window_controller::activate(&app, activation_token);
+            });
+        });
+    }
     let email_renderer = Rc::clone(&initial_state.email_renderer);
 
     let gpu_startup_error = Rc::new(RefCell::new(None::<String>));
@@ -1691,13 +1919,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_mail_drop_check = Rc::clone(&state);
     app.global::<MailDragApi>().on_can_drop_on_mailbox(
         move |data, target_scope, target_account_id, target_folder_id| {
-            let Some(payload) = mail_drag_payload(&data) else {
+            let (Some(payload), Ok(target_scope)) =
+                (mail_drag_payload(&data), target_scope.parse::<Scope>())
+            else {
                 return false;
             };
             resolve_mail_drop(
                 &state_for_mail_drop_check.borrow(),
                 &payload,
-                target_scope.as_str(),
+                target_scope,
                 target_account_id,
                 target_folder_id,
             )
@@ -1719,12 +1949,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 ));
                 return false;
             };
+            let Ok(target_scope) = target_scope.parse::<Scope>() else {
+                app.set_render_status(UiMessage::detail(
+                    "Message action failed: {}",
+                    "invalid mailbox destination",
+                ));
+                return false;
+            };
             match perform_mail_drop(
                 &app,
                 &state_for_mail_drop,
                 &runtime_for_mail_drop,
                 &payload,
-                target_scope.as_str(),
+                target_scope,
                 target_account_id,
                 target_folder_id,
             ) {
@@ -1798,6 +2035,26 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             app.set_contact_loading_more(false);
             match update.result {
                 Ok(page) => {
+                    {
+                        let mut directory = contact_load_state.borrow_mut();
+                        if update.cursor.is_none() {
+                            directory.photos.clear();
+                        }
+                        for (hash, images) in update.photos {
+                            let image = |data: FaviconImage| {
+                                Image::from_rgba8(
+                                    SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                                        &data.pixels,
+                                        data.width,
+                                        data.height,
+                                    ),
+                                )
+                            };
+                            directory
+                                .photos
+                                .insert(hash, (image(images.small), image(images.regular)));
+                        }
+                    }
                     if contact_load_state
                         .borrow_mut()
                         .apply_core_page(update.cursor.as_ref(), page)
@@ -1987,6 +2244,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let contacts_for_new = Rc::clone(&contact_state);
+    let inbox_for_new_contact = Rc::clone(&state);
+    let runtime_for_new_contact = Rc::clone(&runtime);
     app.on_new_contact(move || {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -1996,11 +2255,113 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         directory.editing_new = true;
         drop(directory);
         clear_contact_form(&app);
+        if let Some(account_id) = contacts_for_new
+            .borrow()
+            .scope
+            .strip_prefix("Account:")
+            .and_then(|id| id.parse().ok())
+            && let Some(core) = inbox_for_new_contact.borrow().core.clone()
+            && let Ok(Some(destination)) =
+                runtime_for_new_contact.block_on(core.contact_destination(account_id))
+        {
+            app.set_contact_source(destination.into());
+        }
         app.set_contact_has_selection(true);
         app.set_contact_save_status(UiMessage::plain(
-            "Add an email address, then save the contact.",
+            "Enter a name, email address, or phone number, then save.",
         ));
         apply_contact_rows(&app, &contacts_for_new);
+    });
+
+    app.on_usable_contact_email(|email| flectar_mail_core::carddav::vcard::usable_email(&email));
+    let values_app = app.as_weak();
+    app.on_add_contact_value(move |kind| {
+        let Some(app) = values_app.upgrade() else {
+            return;
+        };
+        let model = if kind == "email" {
+            app.get_contact_emails()
+        } else {
+            app.get_contact_phones()
+        };
+        if let Some(rows) = model.as_any().downcast_ref::<VecModel<ContactValueRow>>() {
+            rows.push(ContactValueRow::default());
+        }
+    });
+    let values_app = app.as_weak();
+    app.on_remove_contact_value(move |kind, index| {
+        let Some(app) = values_app.upgrade() else {
+            return;
+        };
+        let model = if kind == "email" {
+            app.get_contact_emails()
+        } else {
+            app.get_contact_phones()
+        };
+        if let Some(rows) = model.as_any().downcast_ref::<VecModel<ContactValueRow>>()
+            && index >= 0
+            && (index as usize) < rows.row_count()
+        {
+            rows.remove(index as usize);
+        }
+    });
+
+    let values_app = app.as_weak();
+    app.on_prefer_contact_value(move |kind, index| {
+        let Some(app) = values_app.upgrade() else {
+            return;
+        };
+        let model = if kind == "email" {
+            app.get_contact_emails()
+        } else {
+            app.get_contact_phones()
+        };
+        if index < 0 || index as usize >= model.row_count() {
+            return;
+        }
+        for row in 0..model.row_count() {
+            if let Some(mut value) = model.row_data(row) {
+                value.preference = if row == index as usize { 1 } else { 100 };
+                model.set_row_data(row, value);
+            }
+        }
+    });
+
+    let conflict_app = app.as_weak();
+    let conflict_contacts = Rc::clone(&contact_state);
+    let conflict_inbox = Rc::clone(&state);
+    let conflict_runtime = Rc::clone(&runtime);
+    let conflict_loaded = Rc::clone(&contacts_loaded);
+    app.on_resolve_contact_conflict(move |keep_local| {
+        let Some(app) = conflict_app.upgrade() else {
+            return;
+        };
+        let selected = {
+            let state = conflict_contacts.borrow();
+            state
+                .selected_id
+                .and_then(|id| state.contacts.iter().find(|c| c.id == id))
+                .cloned()
+        };
+        let Some(contact) = selected else {
+            return;
+        };
+        let Some(core) = conflict_inbox.borrow().core.clone() else {
+            return;
+        };
+        match conflict_runtime.block_on(core.resolve_contact_conflict(
+            contact.id,
+            contact.details.revision,
+            keep_local,
+        )) {
+            Ok(()) => {
+                conflict_loaded.set(false);
+                app.invoke_load_contacts();
+            }
+            Err(error) => {
+                app.set_contact_save_status(UiMessage::detail("Could not save contact: {}", error))
+            }
+        }
     });
 
     let app_weak = app.as_weak();
@@ -2013,8 +2374,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     app.on_save_contact(
         move |id,
               name,
-              email,
-              phone,
               company,
               job_title,
               website,
@@ -2026,13 +2385,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            let email = email.trim().to_lowercase();
-            if email.is_empty() || !email.contains('@') {
-                app.set_contact_save_status(UiMessage::plain(
-                    "Enter a valid email address before saving.",
-                ));
-                return;
-            }
             let previous = contacts_for_save
                 .borrow()
                 .contacts
@@ -2049,11 +2401,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 .and_then(|value| value.parse::<i64>().ok())
                 .into_iter()
                 .collect::<Vec<_>>();
-            let record = ContactRecord {
+            let mut record = ContactRecord {
+                details: previous
+                    .as_ref()
+                    .map(|c| c.details.clone())
+                    .unwrap_or_default(),
                 id: i64::from(id),
                 name: name.trim().to_owned(),
-                email,
-                phone: phone.trim().to_owned(),
+                email: String::new(),
+                phone: String::new(),
                 company: company.trim().to_owned(),
                 job_title: job_title.trim().to_owned(),
                 website: website.trim().to_owned(),
@@ -2072,6 +2428,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     .unwrap_or(new_contact_accounts),
                 is_managed: true,
             };
+            record.details.emails = contacts::contact_values(app.get_contact_emails());
+            record.details.phones = contacts::contact_values(app.get_contact_phones());
+            record.refresh_primary_values();
             let using_core = contacts_for_save.borrow().using_core;
             let core = if using_core {
                 let Some(core) = inbox_for_contact_save.borrow().core.clone() else {
@@ -2177,7 +2536,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 ));
                 return;
             };
-            if let Err(error) = runtime_for_delete.block_on(core.delete_contact(i64::from(id))) {
+            let revision = contacts_for_delete
+                .borrow()
+                .contacts
+                .iter()
+                .find(|contact| contact.id == i64::from(id))
+                .map_or(0, |contact| contact.details.revision);
+            if let Err(error) =
+                runtime_for_delete.block_on(core.delete_contact(i64::from(id), revision))
+            {
                 app.set_contact_save_status(UiMessage::detail(
                     "Could not delete contact: {}",
                     error,
@@ -2780,14 +3147,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     .any(|message| message.id == id);
             let selected_message_id = if selected_row.is_some_and(|row| row.id == id) {
                 selected_row.and_then(|row| {
-                    (state.conversation_owner_id == Some(row.id))
-                        .then(|| {
-                            state
-                                .conversation_messages
-                                .get(state.conversation_selected_index)
-                                .map(|message| i64::from(message.id))
-                        })
-                        .flatten()
+                    if state.conversation_owner_id == Some(row.id) {
+                        state
+                            .conversation_messages
+                            .get(state.conversation_selected_index)
+                            .map(|message| i64::from(message.id))
+                    } else {
+                        // A restored tab reopens the message it had open.
+                        state
+                            .restore_thread_message
+                            .filter(|(conversation, _)| *conversation == row.id)
+                            .map(|(_, message)| i64::from(message))
+                    }
                 })
             } else {
                 Some(i64::from(id))
@@ -2857,7 +3228,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 snapshot_is_current(&folder_update_state, metadata.account_revision)
             }) {
                 let mut state = folder_update_state.borrow_mut();
-                state.scope = metadata.scope.clone();
+                // Another mailbox or tab shown since then keeps its place,
+                // unless it is a folder that was just deleted.
+                let shown_removed = matches!(
+                    state.scope,
+                    Scope::Folder(id) if update.removed_folders.contains(&id)
+                );
+                let navigate = shown_removed || state.scope == update.issued_scope;
+                if shown_removed {
+                    state.set_scope(Scope::UNIFIED_INBOX);
+                } else if navigate {
+                    state.set_scope(metadata.scope);
+                }
                 state.mailboxes = metadata.mailboxes;
                 state.unified_mailboxes = metadata.unified_mailboxes;
                 state.inbox_count = metadata.inbox_count;
@@ -2866,11 +3248,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     state.collapsed_folder_ids.remove(&parent_id);
                 }
                 drop(state);
-                if let Err(error) = refresh_from_source(
+                // Only leaving a deleted folder starts the list over; the
+                // mailbox the change was made in keeps its rows and position.
+                if !navigate {
+                    refresh_list_metadata(&app, &folder_update_state);
+                } else if let Err(error) = refresh_from_source(
                     &app,
                     &folder_update_state,
                     &folder_update_runtime,
-                    false,
+                    !shown_removed,
                     &[],
                 ) {
                     app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
@@ -2934,7 +3320,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(core) = create_folder_state.borrow().core.clone() else {
             return;
         };
-        let scope = create_folder_state.borrow().scope.clone();
+        let scope = create_folder_state.borrow().scope;
         let updates = create_folder_updates.clone();
         let name = name.to_string();
         create_folder_runtime.spawn(async move {
@@ -2946,7 +3332,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 )
                 .await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -2959,6 +3345,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     metadata,
                     reveal_parent_id: (parent_id >= 0).then_some(i64::from(parent_id)),
+                    issued_scope: scope,
+                    removed_folders: Vec::new(),
                 })
                 .await;
         });
@@ -2971,13 +3359,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(core) = rename_folder_state.borrow().core.clone() else {
             return;
         };
-        let scope = rename_folder_state.borrow().scope.clone();
+        let scope = rename_folder_state.borrow().scope;
         let updates = rename_folder_updates.clone();
         let name = name.to_string();
         rename_folder_runtime.spawn(async move {
             let result = core.rename_folder(i64::from(folder_id), name).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -2990,6 +3378,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     metadata,
                     reveal_parent_id: None,
+                    issued_scope: scope,
+                    removed_folders: Vec::new(),
                 })
                 .await;
         });
@@ -3003,32 +3393,42 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         };
         let folder_id = i64::from(folder_id);
-        let (current_scope, selected_folder_is_deleted) = {
+        let (current_scope, removed_folders) = {
             let state = delete_folder_state.borrow();
-            let selected_folder_id = state
-                .scope
-                .strip_prefix("Folder:")
-                .and_then(|value| value.parse::<i64>().ok());
             let parents = state
                 .mailboxes
                 .iter()
                 .filter(|mailbox| mailbox.folder_id >= 0)
                 .map(|mailbox| (mailbox.folder_id, mailbox.parent_folder_id))
                 .collect::<HashMap<_, _>>();
-            let mut selected_folder_is_deleted = false;
-            let mut candidate = selected_folder_id.unwrap_or(-1);
-            let mut visited = HashSet::new();
-            while candidate >= 0 && visited.insert(candidate) {
-                if candidate == folder_id {
-                    selected_folder_is_deleted = true;
-                    break;
-                }
-                candidate = parents.get(&candidate).copied().unwrap_or(-1);
-            }
-            (state.scope.clone(), selected_folder_is_deleted)
+            // The folder and everything under it.
+            let removed_folders = std::iter::once(folder_id)
+                .chain(
+                    parents
+                        .keys()
+                        .copied()
+                        .filter(|&folder| folder != folder_id),
+                )
+                .filter(|&folder| {
+                    let mut candidate = folder;
+                    let mut visited = HashSet::new();
+                    while candidate >= 0 && visited.insert(candidate) {
+                        if candidate == folder_id {
+                            return true;
+                        }
+                        candidate = parents.get(&candidate).copied().unwrap_or(-1);
+                    }
+                    false
+                })
+                .collect::<Vec<_>>();
+            (state.scope, removed_folders)
         };
+        let selected_folder_is_deleted = matches!(
+            current_scope,
+            Scope::Folder(id) if removed_folders.contains(&id)
+        );
         let scope = if selected_folder_is_deleted {
-            "Unified Inbox".to_owned()
+            Scope::UNIFIED_INBOX
         } else {
             current_scope
         };
@@ -3036,7 +3436,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         delete_folder_runtime.spawn(async move {
             let result = core.delete_folder(folder_id).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -3049,6 +3449,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     metadata,
                     reveal_parent_id: None,
+                    issued_scope: current_scope,
+                    removed_folders,
                 })
                 .await;
         });
@@ -3060,11 +3462,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let calendar_for_core_updates = Rc::clone(&calendar_state);
     let mail_list_app = app.as_weak();
     let mail_list_refresh_in_progress_for_result = Rc::clone(&mail_list_refresh_in_progress);
+    let mail_list_refresh_requested_for_result = Rc::clone(&mail_list_refresh_requested);
     let mail_pagination_generation_for_result = Rc::clone(&mail_pagination_generation);
     let mail_pagination_in_progress_for_result = Rc::clone(&mail_pagination_in_progress);
     app.on_drain_mail_list_updates(move || {
         while let Ok(update) = mail_list_rx.borrow_mut().try_recv() {
-            let current_scope = mail_update_state.borrow().scope.clone();
+            let current_scope = mail_update_state.borrow().scope;
             let current_query = mail_update_state.borrow().query.clone();
             let Some(app) = mail_update_app.upgrade() else {
                 return;
@@ -3072,13 +3475,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             match update.kind {
                 MailListUpdateKind::Refresh => {
                     mail_list_refresh_in_progress_for_result.set(false);
-                    if update.scope == current_scope
-                        && update.query == current_query
+                    let same_view = update.scope == current_scope && update.query == current_query;
+                    let accepted = same_view
                         && mail_work::accepts_background(
                             &mail_update_state.borrow(),
                             update.view_generation,
-                        )
-                    {
+                        );
+                    if same_view && !accepted {
+                        // A navigation load started while this read ran and
+                        // may predate the change it carries; read again
+                        // once that load lands.
+                        mail_list_refresh_requested_for_result.set(true);
+                    }
+                    if accepted {
                         match update.result {
                             Ok(page) => apply_background_mail_page(
                                 &app,
@@ -3129,10 +3538,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         }
                     }
                     app.set_mail_loading_more(false);
-                    if !still_current {
-                        // A live refresh advanced the cursor while this page
-                        // was in flight. Re-check the current viewport so it
-                        // can immediately request the replacement cursor.
+                    // A live refresh advanced the cursor while this page was
+                    // in flight. Re-check the current viewport so it can
+                    // immediately request the replacement cursor; a
+                    // navigation load still running does that when it lands.
+                    if !still_current && !mail_work::loading(&mail_update_state.borrow()) {
                         app.set_mail_list_revision(app.get_mail_list_revision().wrapping_add(1));
                     }
                 }
@@ -3230,7 +3640,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         {
             let (using_core, core, scope) = {
                 let state = mail_update_state.borrow();
-                (state.using_core, state.core.clone(), state.scope.clone())
+                (state.using_core, state.core.clone(), state.scope)
             };
             if using_core && let Some(core) = core {
                 mail_metadata_refresh_requested_for_core.set(false);
@@ -3238,7 +3648,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 metadata_last_started.set(Some(std::time::Instant::now()));
                 let updates = mail_metadata_tx.clone();
                 mail_update_runtime.spawn(async move {
-                    let result = core.load_mail_metadata(&scope).await;
+                    let result = core.load_mail_metadata(scope).await;
                     let _ = updates.send(MailMetadataUpdate { result }).await;
                 });
             }
@@ -3247,14 +3657,16 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             && mail_list_refresh_requested_for_core.get()
             && !mail_list_refresh_in_progress_for_core.get()
             && !mail_work::actions_pending(&mail_update_state.borrow())
+            && !mail_work::loading(&mail_update_state.borrow())
         {
-            let (using_core, core, scope, query) = {
+            let (using_core, core, scope, query, limit) = {
                 let state = mail_update_state.borrow();
                 (
                     state.using_core,
                     state.core.clone(),
-                    state.scope.clone(),
+                    state.scope,
                     state.query.clone(),
+                    mail_work::refresh_limit(state.messages.len(), &state.query),
                 )
             };
             if using_core && let Some(core) = core {
@@ -3263,9 +3675,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 let view_generation = mail_work::generation(&mail_update_state.borrow());
                 let updates = mail_list_tx_for_core.clone();
                 mail_update_runtime.spawn(async move {
-                    let result = core
-                        .load_page(&scope, &query, None, PAGE_SIZE as i64, false)
-                        .await;
+                    let result = core.load_page(scope, &query, None, limit, false).await;
                     let _ = updates
                         .send(MailListUpdate {
                             view_generation,
@@ -3391,10 +3801,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         let is_selected =
                             state.selected_id == Some(update.id) && !state.preview_closed;
                         if is_selected {
-                            let selected_message_id = state
-                                .conversation_messages
-                                .get(state.conversation_selected_index)
-                                .map(|message| message.id);
+                            // A restored tab reopens the message it had open
+                            // when its conversation first loads.
+                            let restored = state
+                                .restore_thread_message
+                                .take_if(|(conversation, _)| *conversation == update.id)
+                                .filter(|_| state.conversation_owner_id != Some(update.id))
+                                .map(|(_, message)| message);
+                            let selected_message_id = restored.or_else(|| {
+                                state
+                                    .conversation_messages
+                                    .get(state.conversation_selected_index)
+                                    .map(|message| message.id)
+                            });
                             state.conversation_owner_id = Some(update.id);
                             state.conversation_messages = conversation.messages;
                             state.conversation_selected_index = selected_message_id
@@ -3700,17 +4119,22 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     {
                         let mut state = startup_state.borrow_mut();
                         state.core = Some(core.clone());
-                        state.connected_accounts = accounts;
-                        state.account_configs = account_configs;
-                        state.scope = scope;
-                        state.remote_images_enabled = allow_remote_images;
-                        state.mark_read_on_open = settings
-                            .as_ref()
-                            .is_none_or(|settings| settings.mark_read_on_open);
+                        // The first page already shows the saved profile's
+                        // accounts; the scope and sidebar follow them too.
                         if let Some(settings) = settings.as_ref() {
                             state.account_presentation =
                                 AccountPresentationSettings::from_settings(settings);
                         }
+                        let _ = state.sync_profile_accounts();
+                        // The startup scope was already validated for these
+                        // accounts, which also become the source of truth.
+                        let _ = state.set_connected_accounts(accounts);
+                        state.account_configs = account_configs;
+                        state.set_scope(scope);
+                        state.remote_images_enabled = allow_remote_images;
+                        state.mark_read_on_open = settings
+                            .as_ref()
+                            .is_none_or(|settings| settings.mark_read_on_open);
                         state.favicon_loader = if allow_remote_images {
                             match FaviconLoader::new(&startup_paths_for_ui.cache_dir) {
                                 Ok(loader) => Some(loader),
@@ -3724,7 +4148,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         };
                         if let Some(page) = page.filter(|page| page.account_count > 0) {
                             state.using_core = true;
-                            if state.scope == "Unified Inbox" {
+                            if state.scope == Scope::UNIFIED_INBOX {
                                 state.inbox_count = page.messages.len();
                             }
                             state.messages = page.messages;
@@ -3861,6 +4285,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     refresh_connected_accounts(&app, &startup_state);
                 }
             }
+        }
+        if let Some(app) = startup_app.upgrade() {
+            window_controller::trim_while_hidden(&app);
         }
     });
 
@@ -4064,6 +4491,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 .filter(|removal| removal.removed)
                 .map(|removal| removal.account_id);
             if let Some(account_id) = removed_account_id {
+                // Tabs look up the account's mailboxes before they are dropped.
+                app.global::<TabsUi>()
+                    .invoke_account_removed(account_id.to_string().into());
                 reconcile_removed_account(&mut ui_task_state.borrow_mut(), account_id);
                 removal_body_pending.set(None);
                 removal_pagination_generation
@@ -4160,16 +4590,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             }
             if update.clear_account_form {
                 app.set_account_form_open(false);
-                app.set_imap_security("auto".into());
-                app.set_smtp_security("auto".into());
+                app.set_incoming_security("tls".into());
+                app.set_smtp_security("tls".into());
                 app.set_trusted_certificate_pem("".into());
                 app.set_account_email("".into());
                 app.set_account_username("".into());
                 app.set_account_password("".into());
                 app.set_account_protocol("imap".into());
                 app.set_jmap_url("".into());
-                app.set_imap_host("".into());
+                app.set_incoming_host("".into());
+                app.set_incoming_port("993".into());
                 app.set_smtp_host("".into());
+                app.set_smtp_port("465".into());
             }
             if let Some(removal) = update.account_removal.as_mut().filter(|removal| removal.removed) {
                 let current_page = {
@@ -4328,7 +4760,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         }
         let account_id = i64::from(account_id);
-        let (core, scope, query, limit) = {
+        let (core, scope, query, limit, profile) = {
             let state = state_for_account_delete.borrow();
             let Some(core) = state.core.clone() else {
                 return;
@@ -4340,15 +4772,21 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             {
                 return;
             }
-            let scope = if account_owns_scope(&state.mailboxes, &state.scope, account_id) {
-                "Unified Inbox".to_owned()
+            let scope = if account_owns_scope(&state, account_id) {
+                Scope::UNIFIED_INBOX
             } else {
-                state.scope.clone()
+                state.scope
             };
             // Keep a surviving selection reachable after browsing past the
             // first page, including when deleting from a unified scope.
             let limit = state.messages.len().max(PAGE_SIZE) as i64;
-            (core, scope, state.query.clone(), limit)
+            (
+                core,
+                scope,
+                state.query.clone(),
+                limit,
+                state.profile_accounts.clone(),
+            )
         };
         let calendar_month = calendar_for_account_delete.borrow().visible_month;
         app.set_account_setup_in_progress(true);
@@ -4360,10 +4798,24 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             // Core deletion is journaled across stores. A late cleanup error
             // can occur after the account row was deleted; reflect that fact.
             let removed = account_was_removed(account_id, &result, accounts.as_ref());
+            // Match the selection `reconcile_removed_account` will leave.
+            let scope = accounts.as_ref().map_or(scope, |snapshot| {
+                let shown = snapshot
+                    .accounts
+                    .iter()
+                    .filter(|account| {
+                        profile
+                            .as_ref()
+                            .is_none_or(|accounts| accounts.binary_search(&account.id).is_ok())
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                scope.visible_for(&shown)
+            });
             let (metadata, page) = if removed {
                 let (metadata, page) = tokio::join!(
-                    core.load_mail_metadata(&scope),
-                    core.load_page(&scope, &query, None, limit, false)
+                    core.load_mail_metadata(scope),
+                    core.load_page(scope, &query, None, limit, false)
                 );
                 (metadata.ok(), page.ok())
             } else {
@@ -4444,6 +4896,91 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     UiMessage::plain("Mail history updated. Background sync is adjusting now.")
                 }
                 Err(error) => UiMessage::detail("Could not update mail history: {}", error),
+            };
+            // Reload on both success and failure so the selector always shows
+            // the authoritative persisted value.
+            let accounts = core.load_account_snapshot().await.ok();
+            let _ = updates
+                .send(UiTaskUpdate {
+                    message,
+                    accounts,
+                    calendar_connections: None,
+                    carddav_connections: None,
+                    calendar_error: None,
+                    account_removal: None,
+                    clear_account_form: false,
+                    finishes_account_setup: false,
+                    finishes_oauth: false,
+                    close_to_tray: None,
+                })
+                .await;
+        });
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_keep_on_server = Rc::clone(&state);
+    let runtime_for_keep_on_server = Rc::clone(&runtime);
+    let ui_task_tx_for_keep_on_server = ui_task_tx.clone();
+    app.on_save_account_keep_on_server(move |account_id, value| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_keep_on_server.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain(
+                "Server mail settings require local mail data.",
+            ));
+            return;
+        };
+        let account_id = i64::from(account_id);
+        let value = value.to_string();
+        app.set_sync_status(UiMessage::plain("Updating server mail settings…"));
+        let updates = ui_task_tx_for_keep_on_server.clone();
+        runtime_for_keep_on_server.spawn(async move {
+            let message = match core.set_account_keep_on_server(account_id, &value).await {
+                Ok(()) => UiMessage::plain("Server mail settings updated."),
+                Err(error) => UiMessage::detail("Could not update server mail settings: {}", error),
+            };
+            // Reload either way so the selector shows the saved choice.
+            let accounts = core.load_account_snapshot().await.ok();
+            let _ = updates
+                .send(UiTaskUpdate {
+                    message,
+                    accounts,
+                    calendar_connections: None,
+                    carddav_connections: None,
+                    calendar_error: None,
+                    account_removal: None,
+                    clear_account_form: false,
+                    finishes_account_setup: false,
+                    finishes_oauth: false,
+                    close_to_tray: None,
+                })
+                .await;
+        });
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_sent_copy_policy = Rc::clone(&state);
+    let runtime_for_sent_copy_policy = Rc::clone(&runtime);
+    let ui_task_tx_for_sent_copy_policy = ui_task_tx.clone();
+    app.on_save_account_sent_copy_policy(move |account_id, value| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_sent_copy_policy.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain("Sent copy settings require local mail data."));
+            return;
+        };
+        let account_id = i64::from(account_id);
+        let value = value.to_string();
+        app.set_sync_status(UiMessage::plain("Updating Sent copy settings…"));
+        let updates = ui_task_tx_for_sent_copy_policy.clone();
+        runtime_for_sent_copy_policy.spawn(async move {
+            let message = match core.set_account_sent_copy_policy(account_id, &value).await {
+                Ok(_) => {
+                    UiMessage::plain("Sent copy settings updated.")
+                }
+                Err(error) => UiMessage::detail("Could not update Sent copy settings: {}", error),
             };
             // Reload on both success and failure so the selector always shows
             // the authoritative persisted value.
@@ -4664,7 +5201,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         let (core, scope) = {
             let state = state_for_sync.borrow();
-            (state.core.clone(), state.scope.clone())
+            (state.core.clone(), state.scope)
         };
         let Some(core) = core else {
             sync_progress_for_click.set(false);
@@ -4679,7 +5216,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         runtime_for_sync.spawn(async move {
             let result = core.sync_now(None).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -4700,7 +5237,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         let (core, scope) = {
             let state = state_for_account_sync.borrow();
-            (state.core.clone(), state.scope.clone())
+            (state.core.clone(), state.scope)
         };
         let Some(core) = core else {
             sync_progress_for_account_click.set(false);
@@ -4716,7 +5253,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         runtime_for_account_sync.spawn(async move {
             let result = core.sync_now(Some(account_id)).await;
             let metadata = if result.is_ok() {
-                core.load_mail_metadata(&scope).await.ok()
+                core.load_mail_metadata(scope).await.ok()
             } else {
                 None
             };
@@ -4882,29 +5419,28 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let request = {
             let state = state_for_empty_trash.borrow();
             if !state.using_core { return; }
-            let account_id = if requested_account_id == 0 ||
-                (requested_account_id < 0 && state.scope == "Unified Trash") {
-                None
-            } else if requested_account_id > 0 {
-                Some(i64::from(requested_account_id))
-            } else {
-                match state.mailboxes.iter().find(|mailbox| {
-                    mailbox.scope == state.scope && mailbox.is_standard && mailbox.label == "Trash"
-                }) {
-                    Some(mailbox) => Some(mailbox.account_id),
-                    None => return,
-                }
+            // A negative id empties the trash currently shown.
+            let account_id = match (requested_account_id, state.scope) {
+                (0, _) | (..0, Scope::Unified(StandardMailbox::Trash)) => None,
+                (1.., _) => Some(i64::from(requested_account_id)),
+                (_, Scope::Account { account_id, mailbox: StandardMailbox::Trash }) => Some(account_id),
+                _ => return,
             };
-            state.core.clone().map(|core| (core, account_id))
+            // Every account's trash means every shown account's while a
+            // profile is active.
+            let operations = match (account_id, &state.profile_accounts) {
+                (None, Some(accounts)) => accounts
+                    .iter()
+                    .map(|account| (-1, 0, mail_work::Operation::EmptyTrash(Some(*account))))
+                    .collect(),
+                (account_id, _) => vec![(-1, 0, mail_work::Operation::EmptyTrash(account_id))],
+            };
+            state.core.clone().map(|core| (core, operations))
         };
-        let Some((core, account_id)) = request else {
+        let Some((core, operations)) = request else {
             return;
         };
-        if let Err(error) = mail_work::enqueue(
-            &state_for_empty_trash,
-            core,
-            vec![(-1, 0, mail_work::Operation::EmptyTrash(account_id))],
-        ) {
+        if let Err(error) = mail_work::enqueue(&state_for_empty_trash, core, operations) {
             app.set_render_status(UiMessage::detail("Message action failed: {}", error));
         }
     });
@@ -5067,23 +5603,26 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     .ok_or_else(|| "mail core is unavailable".to_owned())?
             };
             runtime_for_delete_label.block_on(core.delete_label(label_id))?;
-            {
+            let shown = {
                 let mut state = state_for_delete_label.borrow_mut();
-                if navigation_label_id(&state.scope) == Some(label_id) {
-                    state.scope = "Unified Inbox".to_owned();
-                    state.page = 1;
-                    state.next_cursor = None;
-                    state.selected_id = None;
-                    state.preview_closed = false;
-                }
+                // Tabs on the label now reopen at the inbox.
+                state.labels.retain(|label| label.id != label_id);
+                state.scope.label_id() == Some(label_id)
+            };
+            if shown {
+                // The inbox replaces the label's rows, as if chosen in the
+                // sidebar.
+                app.invoke_select_scope(Scope::UNIFIED_INBOX.to_string().into());
+                Ok(())
+            } else {
+                refresh_from_source(
+                    &app,
+                    &state_for_delete_label,
+                    &runtime_for_delete_label,
+                    true,
+                    &[],
+                )
             }
-            refresh_from_source(
-                &app,
-                &state_for_delete_label,
-                &runtime_for_delete_label,
-                true,
-                &[],
-            )
         })();
         match result {
             Ok(()) => app.set_render_status(UiMessage::plain("Label deleted.")),
@@ -5163,6 +5702,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     register_settings_preference_callbacks(&app, &state, &runtime);
 
     let compose_files = Rc::new(RefCell::new(Vec::<ComposeFile>::new()));
+    let compose_session = Rc::new(Cell::new(0u64));
     let compose_document = Rc::new(RefCell::new(RichComposeDocument::default()));
     let compose_editor = Rc::new(RefCell::new(LazyComposeEditor::default()));
     let compose_contacts = Rc::new(RefCell::new(
@@ -5416,6 +5956,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_message_compose = Rc::clone(&state);
     let runtime_for_message_compose = Rc::clone(&runtime);
     let files_for_message_compose = Rc::clone(&compose_files);
+    let session_for_message_compose = Rc::clone(&compose_session);
     let document_for_message_compose = Rc::clone(&compose_document);
     let editor_for_message_compose = Rc::clone(&compose_editor);
     let contacts_for_message_compose = Rc::clone(&compose_contacts);
@@ -5501,6 +6042,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             clear_compose(
                 &app,
                 &files_for_message_compose,
+                &session_for_message_compose,
                 &document_for_message_compose,
                 &editor_for_message_compose,
                 &contacts_for_message_compose,
@@ -5524,6 +6066,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         path,
                         filename: attachment.filename.clone(),
                         size,
+                        _import: None,
                     }
                 })
                 .collect::<Vec<_>>();
@@ -5601,6 +6144,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         clear_compose(
             &app,
             &files_for_message_compose,
+            &session_for_message_compose,
             &document_for_message_compose,
             &editor_for_message_compose,
             &contacts_for_message_compose,
@@ -5640,6 +6184,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_close = Rc::clone(&compose_files);
+    let session_for_close = Rc::clone(&compose_session);
     let document_for_close = Rc::clone(&compose_document);
     let editor_for_close = Rc::clone(&compose_editor);
     let contacts_for_close = Rc::clone(&compose_contacts);
@@ -5653,6 +6198,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             clear_compose(
                 &app,
                 &files_for_close,
+                &session_for_close,
                 &document_for_close,
                 &editor_for_close,
                 &contacts_for_close,
@@ -5663,72 +6209,104 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
     let app_weak = app.as_weak();
     let files_for_picker = Rc::clone(&compose_files);
+    let session_for_picker = Rc::clone(&compose_session);
+    let documents_for_picker = platform.documents.clone();
+    let runtime_for_picker = Rc::clone(&runtime);
+    let picking_for_picker = Rc::new(Cell::new(false));
     app.on_pick_compose_attachments(move || {
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        let Some(paths) = pick_compose_attachment_paths(
-            translated(&app, &UiMessage::plain("Attach files to this email")).to_string(),
-        ) else {
-            #[cfg(mobile)]
-            {
-                app.set_compose_notice(UiMessage::plain(
-                    "The platform host does not provide a document picker.",
-                ));
-                app.set_compose_notice_is_error(true);
-            }
+        if picking_for_picker.replace(true) {
             return;
-        };
-
-        let mut compose_files = files_for_picker.borrow_mut();
-        let mut total_size = compose_files.iter().map(|file| file.size).sum::<u64>();
-        let mut added = 0usize;
-        let mut skipped = 0usize;
-        for path in paths {
-            let path = std::fs::canonicalize(&path).unwrap_or(path);
-            if compose_files.iter().any(|file| file.path == path) {
-                skipped += 1;
-                continue;
-            }
-            let Ok(metadata) = std::fs::metadata(&path) else {
-                skipped += 1;
-                continue;
-            };
-            if !metadata.is_file()
-                || total_size.saturating_add(metadata.len()) > MAX_COMPOSE_ATTACHMENT_BYTES
-            {
-                skipped += 1;
-                continue;
-            }
-            let Some(filename) = path.file_name().map(|name| name.to_string_lossy().into_owned())
-            else {
-                skipped += 1;
-                continue;
-            };
-            total_size += metadata.len();
-            compose_files.push(ComposeFile {
-                path,
-                filename,
-                size: metadata.len(),
-            });
-            added += 1;
         }
-        apply_compose_files(&app, &compose_files);
-        if skipped == 0 {
-            app.set_compose_notice(if added == 1 {
-                UiMessage::plain("Added 1 attachment.")
+        let dialog = documents::DocumentDialog::titled(translated(
+            &app,
+            &UiMessage::plain("Attach files to this email"),
+        ));
+        let request = documents_for_picker.import_many(MAX_COMPOSE_ATTACHMENT_FILES, dialog);
+        let app_weak = app.as_weak();
+        let files = Rc::clone(&files_for_picker);
+        let session = Rc::clone(&session_for_picker);
+        let picked_in = session.get();
+        let picking = Rc::clone(&picking_for_picker);
+        documents::run_request(&runtime_for_picker, request, move |imported| {
+            picking.set(false);
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            // The composer was sent, discarded or replaced while the picker
+            // was open; dropping the documents releases their copies.
+            if session.get() != picked_in {
+                return;
+            }
+            let documents = match imported {
+                Ok(documents) => documents,
+                Err(error) => {
+                    tracing::warn!(%error, "compose attachment picker failed");
+                    app.set_compose_notice(UiMessage::detail(
+                        "Could not add attachments: {}",
+                        error,
+                    ));
+                    app.set_compose_notice_is_error(true);
+                    return;
+                }
+            };
+            if documents.is_empty() {
+                return;
+            }
+            let mut compose_files = files.borrow_mut();
+            let mut total_size = compose_files.iter().map(|file| file.size).sum::<u64>();
+            let mut added = 0usize;
+            let mut skipped = 0usize;
+            for document in documents {
+                let path = std::fs::canonicalize(document.path())
+                    .unwrap_or_else(|_| document.path().to_path_buf());
+                if compose_files.iter().any(|file| file.path == path) {
+                    skipped += 1;
+                    continue;
+                }
+                let Ok(metadata) = std::fs::metadata(&path) else {
+                    skipped += 1;
+                    continue;
+                };
+                if !metadata.is_file()
+                    || total_size.saturating_add(metadata.len()) > MAX_COMPOSE_ATTACHMENT_BYTES
+                {
+                    skipped += 1;
+                    continue;
+                }
+                let Some(filename) = path.file_name().map(|name| name.to_string_lossy().into_owned())
+                else {
+                    skipped += 1;
+                    continue;
+                };
+                total_size += metadata.len();
+                compose_files.push(ComposeFile {
+                    path,
+                    filename,
+                    size: metadata.len(),
+                    _import: Some(Rc::new(document)),
+                });
+                added += 1;
+            }
+            apply_compose_files(&app, &compose_files);
+            if skipped == 0 {
+                app.set_compose_notice(if added == 1 {
+                    UiMessage::plain("Added 1 attachment.")
+                } else {
+                    UiMessage::detail("Added {} attachments.", added)
+                });
+                app.set_compose_notice_is_error(false);
             } else {
-                UiMessage::detail("Added {} attachments.", added)
-            });
-            app.set_compose_notice_is_error(false);
-        } else {
-            app.set_compose_notice(UiMessage::arguments(
-                "Attachments added: {}. Skipped: {} (duplicate, unreadable, or over the 25 MB total limit).",
-                added,
-                skipped,
-            ));
-            app.set_compose_notice_is_error(added == 0);
-        }
+                app.set_compose_notice(UiMessage::arguments(
+                    "Attachments added: {}. Skipped: {} (duplicate, unreadable, or over the 25 MB total limit).",
+                    added,
+                    skipped,
+                ));
+                app.set_compose_notice_is_error(added == 0);
+            }
+        });
     });
 
     let app_weak = app.as_weak();
@@ -5997,6 +6575,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_compose = Rc::clone(&state);
     let runtime_for_compose = Rc::clone(&runtime);
     let files_for_save = Rc::clone(&compose_files);
+    let session_for_save = Rc::clone(&compose_session);
     let document_for_save = Rc::clone(&compose_document);
     let editor_for_save = Rc::clone(&compose_editor);
     let contacts_for_save = Rc::clone(&compose_contacts);
@@ -6121,6 +6700,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 clear_compose(
                     &app,
                     &files_for_save,
+                    &session_for_save,
                     &document_for_save,
                     &editor_for_save,
                     &contacts_for_save,
@@ -6144,6 +6724,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_send_result = Rc::clone(&state);
     let runtime_for_send_result = Rc::clone(&runtime);
     let files_for_send_result = Rc::clone(&compose_files);
+    let session_for_send_result = Rc::clone(&compose_session);
     let document_for_send_result = Rc::clone(&compose_document);
     let editor_for_send_result = Rc::clone(&compose_editor);
     let contacts_for_send_result = Rc::clone(&compose_contacts);
@@ -6164,6 +6745,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     clear_compose(
                         &app,
                         &files_for_send_result,
+                        &session_for_send_result,
                         &document_for_send_result,
                         &editor_for_send_result,
                         &contacts_for_send_result,
@@ -6195,7 +6777,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_account = Rc::clone(&state);
     let runtime_for_account = Rc::clone(&runtime);
     let ui_task_tx_for_account = ui_task_tx.clone();
-    oauth_browser::register(&app, platform.oauth_redirects.clone());
+    oauth_browser::register(
+        &app,
+        platform.oauth_redirects.clone(),
+        platform.external_urls.clone(),
+    );
     mail_setup::register(&app, &runtime);
 
     let suggestion_app = app.as_weak();
@@ -6205,27 +6791,34 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(app) = suggestion_app.upgrade() else {
             return;
         };
+        // Only server settings that the form shows are suggested.
+        let (protocol, standard_incoming_port) =
+            match MailProtocol::parse(app.get_account_protocol().as_str()) {
+                Some(MailProtocol::Imap) => (MailProtocol::Imap, "993"),
+                Some(MailProtocol::Pop3) => (MailProtocol::Pop3, "995"),
+                Some(MailProtocol::Gmail | MailProtocol::Jmap) | None => return,
+            };
         let transport_matches_last_suggestion = last_suggested_transport
             .borrow()
             .as_ref()
             .is_some_and(|config| {
-                app.get_imap_host().as_str() == config.imap_host
-                    && app.get_imap_port().as_str() == config.imap_port.to_string()
+                app.get_incoming_host().as_str() == config.incoming_host
+                    && app.get_incoming_port().as_str() == config.incoming_port.to_string()
                     && app.get_smtp_host().as_str() == config.smtp_host
                     && app.get_smtp_port().as_str() == config.smtp_port.to_string()
-                    && app.get_imap_security().as_str()
-                        == config.settings.connection.imap_security.as_str()
+                    && app.get_incoming_security().as_str()
+                        == config.settings.connection.incoming_security.as_str()
                     && app.get_smtp_security().as_str()
                         == config.settings.connection.smtp_security.as_str()
                     && app.get_trusted_certificate_pem().as_str()
                         == config.settings.connection.trusted_certificate_pem
             });
-        let transport_is_pristine = app.get_imap_host().trim().is_empty()
+        let transport_is_pristine = app.get_incoming_host().trim().is_empty()
             && app.get_smtp_host().trim().is_empty()
-            && app.get_imap_port().as_str() == "993"
+            && app.get_incoming_port().as_str() == standard_incoming_port
             && app.get_smtp_port().as_str() == "465"
-            && app.get_imap_security().as_str() == "auto"
-            && app.get_smtp_security().as_str() == "auto"
+            && app.get_incoming_security().as_str() == "tls"
+            && app.get_smtp_security().as_str() == "tls"
             && app.get_trusted_certificate_pem().trim().is_empty();
         if !transport_is_pristine && !transport_matches_last_suggestion {
             last_suggested_transport.borrow_mut().take();
@@ -6233,26 +6826,26 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         let suggestion = {
             let state = suggestion_state.borrow();
-            reusable_mail_transport(&state.account_configs, email.as_str()).cloned()
+            reusable_mail_transport(&state.account_configs, email.as_str(), protocol).cloned()
         };
         let Some(config) = suggestion else {
             if transport_matches_last_suggestion {
-                app.set_imap_host("".into());
-                app.set_imap_port("993".into());
+                app.set_incoming_host("".into());
+                app.set_incoming_port(standard_incoming_port.into());
                 app.set_smtp_host("".into());
                 app.set_smtp_port("465".into());
-                app.set_imap_security("auto".into());
-                app.set_smtp_security("auto".into());
+                app.set_incoming_security("tls".into());
+                app.set_smtp_security("tls".into());
                 app.set_trusted_certificate_pem("".into());
             }
             last_suggested_transport.borrow_mut().take();
             return;
         };
-        app.set_imap_host(config.imap_host.clone().into());
-        app.set_imap_port(config.imap_port.to_string().into());
+        app.set_incoming_host(config.incoming_host.clone().into());
+        app.set_incoming_port(config.incoming_port.to_string().into());
         app.set_smtp_host(config.smtp_host.clone().into());
         app.set_smtp_port(config.smtp_port.to_string().into());
-        app.set_imap_security(config.settings.connection.imap_security.as_str().into());
+        app.set_incoming_security(config.settings.connection.incoming_security.as_str().into());
         app.set_smtp_security(config.settings.connection.smtp_security.as_str().into());
         app.set_trusted_certificate_pem(
             config
@@ -6271,8 +6864,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
               username,
               password,
               jmap_url,
-              imap_host,
-              imap_port,
+              incoming_host,
+              incoming_port,
               smtp_host,
               smtp_port| {
             let Some(app) = app_weak.upgrade() else {
@@ -6281,31 +6874,57 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             if app.get_account_setup_in_progress() {
                 return;
             }
-            let mail_protocol = MailProtocol::from_storage(protocol.as_str());
-            let imap_port = if mail_protocol == MailProtocol::Jmap {
-                993
-            } else {
-                match imap_port.trim().parse::<u16>() {
-                    Ok(port) if port > 0 => port,
-                    _ => {
-                        app.set_sync_status(UiMessage::plain(
-                            "IMAP port must be between 1 and 65535.",
-                        ));
-                        return;
-                    }
-                }
+            let unsupported = || {
+                app.set_sync_status(UiMessage::plain(
+                    "Choose a supported account type and connection security.",
+                ))
             };
-            let smtp_port = if mail_protocol == MailProtocol::Jmap {
-                465
-            } else {
-                match smtp_port.trim().parse::<u16>() {
-                    Ok(port) if port > 0 => port,
-                    _ => {
+            let (Some(mail_protocol), Some(incoming_security), Some(smtp_security)) = (
+                MailProtocol::parse(protocol.as_str()),
+                ConnectionSecurity::parse(app.get_incoming_security().as_str()),
+                ConnectionSecurity::parse(app.get_smtp_security().as_str()),
+            ) else {
+                unsupported();
+                return;
+            };
+            let port = |value: &str| value.trim().parse::<u16>().ok().filter(|port| *port > 0);
+            let (incoming_port, smtp_port, progress) = match mail_protocol {
+                // JMAP discovers its endpoints; the server ports are unused.
+                MailProtocol::Jmap => (
+                    993,
+                    465,
+                    UiMessage::plain("Discovering JMAP and checking capabilities…"),
+                ),
+                MailProtocol::Imap | MailProtocol::Pop3 => {
+                    let Some(incoming_port) = port(&incoming_port) else {
+                        app.set_sync_status(match mail_protocol {
+                            MailProtocol::Pop3 => {
+                                UiMessage::plain("POP3 port must be between 1 and 65535.")
+                            }
+                            _ => UiMessage::plain("IMAP port must be between 1 and 65535."),
+                        });
+                        return;
+                    };
+                    let Some(smtp_port) = port(&smtp_port) else {
                         app.set_sync_status(UiMessage::plain(
                             "SMTP port must be between 1 and 65535.",
                         ));
                         return;
-                    }
+                    };
+                    (
+                        incoming_port,
+                        smtp_port,
+                        match mail_protocol {
+                            MailProtocol::Pop3 => {
+                                UiMessage::plain("Testing POP3 and SMTP connections…")
+                            }
+                            _ => UiMessage::plain("Testing IMAP and SMTP connections…"),
+                        },
+                    )
+                }
+                MailProtocol::Gmail => {
+                    unsupported();
+                    return;
                 }
             };
             let Some(core) = state_for_account.borrow().core.clone() else {
@@ -6314,11 +6933,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 ));
                 return;
             };
-            app.set_sync_status(if mail_protocol == MailProtocol::Jmap {
-                UiMessage::plain("Discovering JMAP and checking capabilities…")
-            } else {
-                UiMessage::plain("Testing IMAP and SMTP connections…")
-            });
+            app.set_sync_status(progress);
             let args = AddPasswordAccountArgs {
                 email: email.to_string(),
                 display_name: None,
@@ -6326,20 +6941,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 password: password.to_string(),
                 mail_protocol,
                 jmap_url: jmap_url.to_string(),
-                imap_host: imap_host.to_string(),
-                imap_port,
+                incoming_host: incoming_host.to_string(),
+                incoming_port,
                 smtp_host: smtp_host.to_string(),
                 smtp_port,
-                connection: flectar_mail_core::models::MailConnectionSettings {
-                    imap_security: flectar_mail_core::models::ConnectionSecurity::parse(
-                        app.get_imap_security().as_str(),
-                    )
-                    .unwrap_or_default(),
-                    smtp_security: flectar_mail_core::models::ConnectionSecurity::parse(
-                        app.get_smtp_security().as_str(),
-                    )
-                    .unwrap_or_default(),
+                connection: MailConnectionSettings {
                     trusted_certificate_pem: app.get_trusted_certificate_pem().to_string(),
+                    ..MailConnectionSettings::new(incoming_security, smtp_security)
                 },
             };
             app.set_account_setup_in_progress(true);
@@ -6389,6 +6997,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_oauth = Rc::clone(&state);
     let runtime_for_oauth = Rc::clone(&runtime);
     let ui_task_tx_for_oauth = ui_task_tx.clone();
+    let opener_for_oauth = platform.external_urls.clone();
     app.on_start_oauth(move |provider| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -6402,11 +7011,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             ));
             return;
         }
-        let provider = Provider::from_storage(provider.as_str());
-        if provider == Provider::Imap {
-            app.set_sync_status(UiMessage::plain("Choose Gmail or Outlook OAuth."));
-            return;
-        }
+        let provider = match Provider::parse(provider.as_str()) {
+            Some(provider @ (Provider::Gmail | Provider::Microsoft)) => provider,
+            Some(Provider::Generic) | None => {
+                app.set_sync_status(UiMessage::plain("Choose Gmail or Outlook OAuth."));
+                return;
+            }
+        };
         let Some(core) = state_for_oauth.borrow().core.clone() else {
             app.set_sync_status(UiMessage::plain(
                 "Local mail data is unavailable. Retry startup.",
@@ -6429,10 +7040,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         ));
         let updates = ui_task_tx_for_oauth.clone();
         let browser_app = app.as_weak();
+        let opener = opener_for_oauth.clone();
         runtime_for_oauth.spawn(async move {
             let result = core
                 .start_oauth_with_calendar(provider, connect_calendar, move |url| {
-                    oauth_browser::begin(browser_app.clone(), url)
+                    oauth_browser::begin(browser_app.clone(), url, opener.clone())
                 })
                 .await;
             let update = match result {
@@ -6475,6 +7087,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_reauth = Rc::clone(&state);
     let runtime_for_reauth = Rc::clone(&runtime);
     let ui_task_tx_for_reauth = ui_task_tx.clone();
+    let opener_for_reauth = platform.external_urls.clone();
     app.on_reauth_account(move |account_id| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -6502,10 +7115,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         ));
         let updates = ui_task_tx_for_reauth.clone();
         let browser_app = app.as_weak();
+        let opener = opener_for_reauth.clone();
         runtime_for_reauth.spawn(async move {
             let result = core
                 .reauth_account(i64::from(account_id), move |url| {
-                    oauth_browser::begin(browser_app.clone(), url)
+                    oauth_browser::begin(browser_app.clone(), url, opener.clone())
                 })
                 .await;
             let update = match result {
@@ -6560,6 +7174,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_calendar_connect = Rc::clone(&state);
     let runtime_for_calendar_connect = Rc::clone(&runtime);
     let updates_for_calendar_connect = ui_task_tx.clone();
+    let opener_for_calendar_connect = platform.external_urls.clone();
     app.on_connect_account_calendar(move |account_id| {
         let Some(app) = app_weak.upgrade() else {
             return;
@@ -6598,10 +7213,11 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         ));
         let updates = updates_for_calendar_connect.clone();
         let browser_app = app.as_weak();
+        let opener = opener_for_calendar_connect.clone();
         runtime_for_calendar_connect.spawn(async move {
             let result = core
                 .connect_provider_calendar(i64::from(account_id), provider, move |url| {
-                    oauth_browser::begin(browser_app.clone(), url)
+                    oauth_browser::begin(browser_app.clone(), url, opener.clone())
                 })
                 .await;
             let connections = core.load_calendar_connections().await.ok();
@@ -6845,6 +7461,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     register_data_management_callbacks(
         &app,
         &platform.paths,
+        &platform.documents,
         &state,
         &runtime,
         &ui_task_tx,
@@ -6855,7 +7472,14 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         &calendar_state,
     );
 
-    register_renderer_input_callbacks(&app, &email_renderer, use_wgpu);
+    import_controller::register_import_callbacks(&app, &platform.documents, &state, &runtime);
+
+    register_renderer_input_callbacks(
+        &app,
+        &email_renderer,
+        use_wgpu,
+        platform.external_urls.clone(),
+    );
 
     let app_weak = app.as_weak();
     let state_for_search = Rc::clone(&state);
@@ -6874,6 +7498,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             let mut state = state_for_search.borrow_mut();
             state.query = query.to_string();
             state.pending_selection = None;
+            state.pending_selection_opens = false;
+            state.restore_thread_message = None;
             state.mail_groups.clear();
             state.page = 1;
             state.next_cursor = None;
@@ -6924,8 +7550,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         app.set_mail_loading_more(false);
         {
             let mut state = state_for_scope.borrow_mut();
-            state.scope = scope.to_string();
+            // An unknown key cannot come from the sidebar; keep the inbox
+            // reachable rather than presenting a list for no mailbox.
+            state.set_scope(scope.parse().unwrap_or(Scope::UNIFIED_INBOX));
             state.pending_selection = None;
+            state.pending_selection_opens = false;
+            state.restore_thread_message = None;
             state.mail_groups.clear();
             state.page = 1;
             state.next_cursor = None;
@@ -6939,6 +7569,63 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
         }
         mail_metadata_refresh_requested_for_scope.set(true);
+        app.invoke_drain_core_updates();
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_profile = Rc::clone(&state);
+    let runtime_for_profile = Rc::clone(&runtime);
+    let mail_metadata_refresh_requested_for_profile = Rc::clone(&mail_metadata_refresh_requested);
+    let mail_pagination_generation_for_profile = Rc::clone(&mail_pagination_generation);
+    let mail_pagination_in_progress_for_profile = Rc::clone(&mail_pagination_in_progress);
+    // Showing another profile's accounts is like choosing a mailbox: the list
+    // starts over, and the sidebar and counts follow.
+    app.on_mail_profile_changed(move || {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        {
+            let mut state = state_for_profile.borrow_mut();
+            // With one account, the unified mailboxes go by its name.
+            let single_account = state.mail_accounts().len() == 1;
+            if !state.sync_profile_accounts() {
+                return;
+            }
+            let scope = match state.scope {
+                Scope::Account { mailbox, .. } if single_account => Scope::Unified(mailbox),
+                scope => scope,
+            };
+            state.set_scope(scope);
+            state.pending_selection = None;
+            state.pending_selection_opens = false;
+            state.restore_thread_message = None;
+            state.mail_groups.clear();
+            state.page = 1;
+            state.next_cursor = None;
+            state.selected_id = None;
+            state.checked_ids.clear();
+            state.preview_closed = false;
+            // Accounts the profile leaves out leave the sidebar at once; those
+            // it adds arrive with the counts.
+            let shown = state.profile_accounts.clone();
+            state.mailboxes.retain(|mailbox| {
+                shown
+                    .as_ref()
+                    .is_none_or(|accounts| accounts.binary_search(&mailbox.account_id).is_ok())
+            });
+            prefer_shown_compose_account(&app, &state);
+        }
+        mail_pagination_generation_for_profile
+            .set(mail_pagination_generation_for_profile.get().wrapping_add(1));
+        mail_pagination_in_progress_for_profile.set(false);
+        app.set_mail_loading_more(false);
+        if let Err(error) =
+            refresh_from_source(&app, &state_for_profile, &runtime_for_profile, false, &[])
+        {
+            app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
+        }
+        refresh_sidebar(&state_for_profile);
+        mail_metadata_refresh_requested_for_profile.set(true);
         app.invoke_drain_core_updates();
     });
 
@@ -6960,7 +7647,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             (
                 state.using_core,
                 state.core.clone(),
-                state.scope.clone(),
+                state.scope,
                 state.query.clone(),
                 state.next_cursor,
             )
@@ -6988,7 +7675,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let updates = mail_list_tx_for_more.clone();
         runtime_for_more.spawn(async move {
             let result = core
-                .load_page(&scope, &query, Some(cursor), PAGE_SIZE as i64, false)
+                .load_page(scope, &query, Some(cursor), PAGE_SIZE as i64, false)
                 .await;
             let _ = updates
                 .send(MailListUpdate {
@@ -7101,15 +7788,18 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         // Slint can retain a deferred window-surface error without
         // immediately exiting its event loop. Bound that otherwise blank-window
         // startup; normal GPU rendering marks completion in the notifier above.
+        // A start in the tray creates the surface when the window first opens.
         let completed = gpu_startup_completed.clone();
         let error = gpu_startup_error.clone();
-        Timer::single_shot(Duration::from_secs(15), move || {
-            if !completed.get() {
-                error.borrow_mut().get_or_insert_with(|| {
-                    "GPU did not produce its first frame within 15 seconds".into()
-                });
-                let _ = slint::quit_event_loop();
-            }
+        window_controller::when_first_shown(&app, move || {
+            Timer::single_shot(Duration::from_secs(15), move || {
+                if !completed.get() {
+                    error.borrow_mut().get_or_insert_with(|| {
+                        "GPU did not produce its first frame within 15 seconds".into()
+                    });
+                    let _ = slint::quit_event_loop();
+                }
+            });
         });
     }
 
@@ -7191,16 +7881,23 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
     });
 
+    if start_hidden {
+        app.invoke_suspend_rendering(true);
+    }
+
     // The main window is already shown above and the independently compiled
     // tray participates in the same process-wide event loop. This is Slint's
     // documented multi-component pattern; calling AppWindow::run() here would
-    // redundantly show the main window a second time.
+    // redundantly show the main window a second time. A start in the tray has
+    // no visible window, so only an explicit quit may end the loop.
     startup_metrics.emit("event_loop_entered", serde_json::Value::Null);
-    let event_loop_result = if benchmark_tray {
+    let event_loop_result = if benchmark_tray || start_hidden {
         slint::run_event_loop_until_quit()
     } else {
         slint::run_event_loop()
     };
+    // Timers stop with the event loop, so a pending tab save is written now.
+    app.global::<TabsUi>().invoke_flush();
     event_loop_result.map_err(|error| {
         renderer_preferences::startup_error(error, use_wgpu && !gpu_startup_completed.get())
     })?;
@@ -7425,7 +8122,7 @@ mod tests {
         let mut messages = fixture_messages();
         messages[1].folder = "Sent".into();
         messages[2].folder = "Archive".into();
-        let filtered = filtered_messages(&messages, "Unified Inbox", "", "All mail");
+        let filtered = filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "All mail", None);
 
         assert_eq!(filtered.len(), messages.len() - 2);
         assert!(filtered.iter().all(|email| email.folder == "Inbox"));
@@ -7440,7 +8137,16 @@ mod tests {
     #[test]
     fn folder_scope_and_search_can_be_combined() {
         let messages = fixture_messages();
-        let filtered = filtered_messages(&messages, "Flectar / Inbox", "calendar", "All mail");
+        let flectar = messages
+            .iter()
+            .find(|message| message.account == "Flectar")
+            .unwrap()
+            .account_id;
+        let scope = Scope::Account {
+            account_id: flectar,
+            mailbox: StandardMailbox::Inbox,
+        };
+        let filtered = filtered_messages(&messages, scope, "calendar", "All mail", None);
 
         assert_eq!(filtered.len(), 2);
         assert!(filtered.iter().all(|email| email.sender == "Google Calendar"));
@@ -7456,8 +8162,15 @@ mod tests {
         messages[0].starred = true;
         messages[1].has_attachments = true;
 
-        let starred = filtered_messages(&messages, "Unified Starred", "", "All mail");
-        let attachments = filtered_messages(&messages, "Unified Inbox", "", "Has attachments");
+        let starred = filtered_messages(
+            &messages,
+            Scope::Unified(StandardMailbox::Starred),
+            "",
+            "All mail",
+            None,
+        );
+        let attachments =
+            filtered_messages(&messages, Scope::UNIFIED_INBOX, "", "Has attachments", None);
 
         assert_eq!(starred.len(), 1);
         assert_eq!(starred[0].id, messages[0].id);
@@ -7491,14 +8204,17 @@ mod tests {
     fn account_starred_scope_filters_within_the_account() {
         let mut messages = fixture_messages();
         messages[0].starred = true;
-        let scope = format!("{} / Starred", messages[0].account);
-        let filtered = filtered_messages(&messages, &scope, "", "All mail");
+        let scope = Scope::Account {
+            account_id: messages[0].account_id,
+            mailbox: StandardMailbox::Starred,
+        };
+        let filtered = filtered_messages(&messages, scope, "", "All mail", None);
 
         assert!(filtered.iter().any(|message| message.id == messages[0].id));
         assert!(
             filtered
                 .iter()
-                .all(|message| message.account == messages[0].account && message.starred)
+                .all(|message| message.account_id == messages[0].account_id && message.starred)
         );
     }
 

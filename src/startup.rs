@@ -1,7 +1,8 @@
 //! Background startup snapshot and coalesced core-event ingestion.
 
 use crate::{
-    AccountRow, AppTheme, AppWindow, InboxState, MessageColors, PAGE_SIZE,
+    AccountPresentationSettings, AccountRow, AppTheme, AppWindow, InboxState, MessageColors,
+    PAGE_SIZE,
     account_controller::apply_connected_account_rows,
     avatar_initials,
     calendar::{
@@ -9,6 +10,7 @@ use crate::{
         calendar_range_millis, calendar_sources, core_calendar_event,
     },
     mail::{self, CoreMailSource, MailCursor, MailMessage, MailboxEntry},
+    mail_scope::Scope,
     mail_view_model::{refresh_list_metadata, refresh_rows_only},
     startup_metrics::StartupMetrics,
     theme::stored_color,
@@ -33,7 +35,9 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
-const WARM_START_FORMAT_VERSION: u32 = 3;
+// Version 4 keys account mailboxes by id instead of display name. Version 5
+// stores the provider and mail protocol names of the current account model.
+const WARM_START_FORMAT_VERSION: u32 = 5;
 const MAX_WARM_START_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_WARM_START_ACCOUNTS: usize = 64;
 const MAX_WARM_START_MESSAGES: usize = 25;
@@ -157,7 +161,9 @@ pub(crate) struct WarmStartMailbox {
     #[serde(default)]
     pub(crate) can_delete: bool,
     pub(crate) label: String,
-    pub(crate) scope: String,
+    /// Absent for account headings, which are not navigation targets.
+    #[serde(default)]
+    pub(crate) scope: Option<Scope>,
     pub(crate) context: String,
     pub(crate) detail: String,
     pub(crate) avatar: String,
@@ -187,7 +193,7 @@ impl From<&mail::MailboxEntry> for WarmStartMailbox {
             can_rename: mailbox.can_rename,
             can_delete: mailbox.can_delete,
             label: mailbox.label.clone(),
-            scope: mailbox.scope.clone(),
+            scope: mailbox.scope,
             context: mailbox.context.clone(),
             detail: mailbox.detail.clone(),
             avatar: mailbox.avatar.clone(),
@@ -225,20 +231,24 @@ impl From<WarmStartMailbox> for mail::MailboxEntry {
 pub(crate) struct WarmStartSnapshot {
     format_version: u32,
     pub(crate) saved_at_ms: i64,
-    pub(crate) scope: String,
+    pub(crate) scope: Scope,
     pub(crate) inbox_count: usize,
     pub(crate) next_cursor: Option<ThreadCursor>,
     pub(crate) accounts: Vec<Account>,
+    /// The active profile's accounts, which the saved rows show.
+    #[serde(default)]
+    pub(crate) profile_accounts: Option<Vec<i64>>,
     pub(crate) messages: Vec<WarmStartMessage>,
     pub(crate) mailboxes: Vec<WarmStartMailbox>,
     pub(crate) unified_mailboxes: Vec<WarmStartMailbox>,
 }
 
 pub(crate) struct WarmStartProjection<'a> {
-    pub(crate) scope: &'a str,
+    pub(crate) scope: Scope,
     pub(crate) inbox_count: usize,
     pub(crate) next_cursor: Option<ThreadCursor>,
     pub(crate) accounts: &'a [Account],
+    pub(crate) profile_accounts: Option<&'a [i64]>,
     pub(crate) messages: &'a [mail::MailMessage],
     pub(crate) mailboxes: &'a [mail::MailboxEntry],
     pub(crate) unified_mailboxes: &'a [mail::MailboxEntry],
@@ -249,7 +259,7 @@ impl WarmStartSnapshot {
         Self {
             format_version: WARM_START_FORMAT_VERSION,
             saved_at_ms: chrono::Utc::now().timestamp_millis(),
-            scope: projection.scope.to_owned(),
+            scope: projection.scope,
             inbox_count: projection.inbox_count,
             next_cursor: projection.next_cursor,
             accounts: projection
@@ -258,6 +268,7 @@ impl WarmStartSnapshot {
                 .take(MAX_WARM_START_ACCOUNTS)
                 .cloned()
                 .collect(),
+            profile_accounts: projection.profile_accounts.map(<[i64]>::to_vec),
             messages: projection
                 .messages
                 .iter()
@@ -286,7 +297,6 @@ impl WarmStartSnapshot {
             && self.messages.len() <= MAX_WARM_START_MESSAGES
             && self.mailboxes.len() <= MAX_WARM_START_MAILBOXES
             && self.unified_mailboxes.len() <= MAX_WARM_START_MAILBOXES
-            && !self.scope.trim().is_empty()
     }
 }
 
@@ -327,10 +337,13 @@ pub(crate) fn apply_warm_start_snapshot(
         // Core remains unset: cached rows are only a presentation until local
         // storage is ready, and the startup guard keeps actions inert.
         state.using_core = true;
-        state.scope = snapshot.scope;
+        // The saved rows show the profile's accounts; so do the sidebar and
+        // scope until settings load.
+        state.profile_accounts = snapshot.profile_accounts;
+        let _ = state.set_connected_accounts(snapshot.accounts);
+        state.set_scope(snapshot.scope);
         state.inbox_count = snapshot.inbox_count;
         state.next_cursor = snapshot.next_cursor.map(MailCursor::Thread);
-        state.connected_accounts = snapshot.accounts;
         state.messages = snapshot
             .messages
             .into_iter()
@@ -471,7 +484,7 @@ async fn clear_warm_start_snapshot(path: &Path) -> Result<(), String> {
 
 pub(crate) struct StartupSnapshot {
     pub(crate) core: CoreMailSource,
-    pub(crate) scope: String,
+    pub(crate) scope: Scope,
     pub(crate) page: Option<mail::MailPage>,
     pub(crate) remote_images_enabled: bool,
     pub(crate) accounts: Vec<Account>,
@@ -541,23 +554,26 @@ pub(crate) async fn load_startup_snapshot(
     paths: Paths,
     credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
     oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
-    preferred_scope: &str,
+    preferred_scope: Scope,
     metrics: &StartupMetrics,
 ) -> Result<StartupSnapshot, String> {
     let core = CoreMailSource::start(paths, credentials, oauth_redirects).await?;
     metrics.emit("core_opened", serde_json::Value::Null);
-    let (mail, configs, settings) = tokio::join!(
+    // The first page shows only the active profile's accounts.
+    let settings = core.load_settings().await.ok();
+    let _ = core.set_profile_accounts(settings.as_ref().and_then(|settings| {
+        AccountPresentationSettings::from_settings(settings).active_profile_accounts()
+    }));
+    let (mail, configs) = tokio::join!(
         // Counts walk every mailbox and can dominate startup on a large local
         // store. The first useful frame only needs one bounded page; sidebar
         // totals arrive as a separate progressive update.
         core.load_startup_page(preferred_scope, PAGE_SIZE as i64),
         core.load_account_configs(),
-        core.load_settings(),
     );
 
     let (accounts, scope, page) =
-        mail.unwrap_or_else(|_| (Vec::new(), "Unified Inbox".to_owned(), None));
-    let settings = settings.ok();
+        mail.unwrap_or_else(|_| (Vec::new(), Scope::UNIFIED_INBOX, None));
     metrics.emit(
         "startup_queries_loaded",
         serde_json::json!({
@@ -581,7 +597,7 @@ pub(crate) async fn load_startup_snapshot(
 
 pub(crate) async fn load_startup_mail_metadata(
     core: &CoreMailSource,
-    scope: &str,
+    scope: Scope,
 ) -> Result<mail::MailMetadata, String> {
     core.load_mail_metadata(scope).await
 }
@@ -781,30 +797,98 @@ mod warm_start_tests {
         software_renderer::{MinimalSoftwareWindow, RepaintBufferType},
     };
     use slint::{Model, Rgb8Pixel};
+    use std::{cell::Cell, time::Duration};
 
-    struct Headless(Rc<MinimalSoftwareWindow>);
+    struct Headless(Rc<MinimalSoftwareWindow>, Rc<Cell<Duration>>);
 
     impl Platform for Headless {
         fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
             Ok(self.0.clone())
         }
+
+        fn duration_since_start(&self) -> Duration {
+            self.1.get()
+        }
     }
 
-    #[test]
-    fn warm_start_paints_accounts_and_rows_before_core_ready() {
-        let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
-        slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
-        let app = AppWindow::new().unwrap();
-        app.window().set_size(slint::PhysicalSize::new(1320, 800));
-        app.show().unwrap();
-        let render = |name: &str| {
-            slint::platform::update_timers_and_animations();
-            app.window().request_redraw();
-            let size = app.window().size();
+    const PERSON_INBOX: Scope = Scope::Account {
+        account_id: 7,
+        mailbox: crate::StandardMailbox::Inbox,
+    };
+
+    /// A headless window with a controlled clock and an empty inbox state.
+    struct Harness {
+        window: Rc<MinimalSoftwareWindow>,
+        clock: Rc<Cell<Duration>>,
+        app: AppWindow,
+        runtime: tokio::runtime::Runtime,
+        state: Rc<RefCell<InboxState>>,
+        _cache: tempfile::TempDir,
+    }
+
+    impl Harness {
+        fn new() -> Self {
+            let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+            let clock = Rc::new(Cell::new(Duration::ZERO));
+            slint::platform::set_platform(Box::new(Headless(window.clone(), clock.clone())))
+                .unwrap();
+            let app = AppWindow::new().unwrap();
+            app.window().set_size(slint::PhysicalSize::new(1320, 800));
+            app.show().unwrap();
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let cache = tempfile::tempdir().unwrap();
+            let (favicons, _) = crate::bounded_ui_channel();
+            let (avatars, _) = crate::bounded_ui_channel();
+            let state = InboxState::empty(
+                None,
+                crate::UiSender::new(favicons, UiWake::new(app.as_weak(), |_| {})),
+                None,
+                crate::UiSender::new(avatars, UiWake::new(app.as_weak(), |_| {})),
+                false,
+                false,
+                WarmStartCacheWriter::spawn(&runtime, cache.path().join("warm.json")),
+            );
+            app.set_emails(state.email_rows.clone().into());
+            app.set_mail_list_entries(state.mail_list_entries.clone().into());
+            app.set_sidebar_rows(state.sidebar_rows.clone().into());
+            Self {
+                window,
+                clock,
+                app,
+                runtime,
+                state: Rc::new(RefCell::new(state)),
+                _cache: cache,
+            }
+        }
+
+        fn apply_single_account_snapshot(&self) {
+            apply_warm_start_snapshot(
+                &self.app,
+                &self.state,
+                &self.runtime,
+                single_account_snapshot(),
+            );
+        }
+
+        /// Paint a settled frame, saved as `<name>.png` when
+        /// `FLECTAR_STARTUP_REVIEW_DIR` is set.
+        fn render(&self, name: &str) -> Vec<Rgb8Pixel> {
+            let size = self.app.window().size();
             let mut pixels = vec![Rgb8Pixel::default(); (size.width * size.height) as usize];
-            window.draw_if_needed(|renderer| {
-                renderer.render(&mut pixels, size.width as usize);
-            });
+            // Evaluate bindings before advancing the clock: the compact drawer
+            // starts its animation on the first frame. Clicks and snapshots
+            // must see the settled layout even when PNG output is disabled.
+            for elapsed in [Duration::ZERO, Duration::from_secs(1)] {
+                self.clock.set(self.clock.get() + elapsed);
+                slint::platform::update_timers_and_animations();
+                self.app.window().request_redraw();
+                self.window.draw_if_needed(|renderer| {
+                    renderer.render(&mut pixels, size.width as usize);
+                });
+            }
             if let Some(directory) = std::env::var_os("FLECTAR_STARTUP_REVIEW_DIR") {
                 let directory = PathBuf::from(directory);
                 std::fs::create_dir_all(&directory).unwrap();
@@ -819,11 +903,75 @@ mod warm_start_tests {
                 .unwrap();
             }
             pixels
-        };
+        }
+
+        fn click(&self, x: f32, y: f32) {
+            let position = slint::LogicalPosition::new(x, y);
+            let button = slint::platform::PointerEventButton::Left;
+            self.app
+                .window()
+                .dispatch_event(slint::platform::WindowEvent::PointerPressed { position, button });
+            self.app
+                .window()
+                .dispatch_event(slint::platform::WindowEvent::PointerReleased { position, button });
+        }
+
+        fn shows_unified_inbox(&self) -> bool {
+            self.state
+                .borrow()
+                .sidebar_rows
+                .iter()
+                .any(|row| row.kind == crate::SidebarRowKind::UnifiedInbox)
+        }
+    }
+
+    /// One account whose cache was written while the unified inbox was
+    /// selected, with every standard mailbox discovered.
+    fn single_account_snapshot() -> WarmStartSnapshot {
+        let mut mailboxes = vec![mail::MailboxEntry {
+            is_account: true,
+            is_standard: false,
+            label: "Person".into(),
+            scope: None,
+            count: String::new(),
+            ..mailbox()
+        }];
+        for (index, mailbox_kind) in crate::StandardMailbox::ALL.into_iter().enumerate() {
+            mailboxes.push(mail::MailboxEntry {
+                label: mailbox_kind.label().into(),
+                scope: Some(Scope::Account {
+                    account_id: 7,
+                    mailbox: mailbox_kind,
+                }),
+                folder_id: index as i64 + 1,
+                count: if index == 0 {
+                    "3".into()
+                } else {
+                    String::new()
+                },
+                ..mailbox()
+            });
+        }
+        WarmStartSnapshot::capture(WarmStartProjection {
+            scope: Scope::UNIFIED_INBOX,
+            inbox_count: 3,
+            next_cursor: None,
+            accounts: &[account()],
+            profile_accounts: None,
+            messages: &[message()],
+            mailboxes: &mailboxes,
+            unified_mailboxes: &[],
+        })
+    }
+
+    #[test]
+    fn warm_start_paints_accounts_and_rows_before_core_ready() {
+        let harness = Harness::new();
+        let app = &harness.app;
         let mut loading_frames = Vec::new();
         for theme in ["light", "dark"] {
             app.set_theme_mode(theme.into());
-            let frame = render(&format!("loading-{theme}"));
+            let frame = harness.render(&format!("loading-{theme}"));
             assert!(
                 frame.iter().any(|pixel| *pixel != frame[0]),
                 "account discovery must display a loading view instead of a blank window"
@@ -831,38 +979,9 @@ mod warm_start_tests {
             loading_frames.push(frame);
         }
 
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let temporary = tempfile::tempdir().unwrap();
-        let (favicons, _) = crate::bounded_ui_channel();
-        let (avatars, _) = crate::bounded_ui_channel();
-        let state = crate::InboxState::empty(
-            None,
-            crate::UiSender::new(favicons, UiWake::new(app.as_weak(), |_| {})),
-            None,
-            crate::UiSender::new(avatars, UiWake::new(app.as_weak(), |_| {})),
-            false,
-            false,
-            WarmStartCacheWriter::spawn(&runtime, temporary.path().join("warm.json")),
-        );
-        app.set_emails(state.email_rows.clone().into());
-        app.set_mail_list_entries(state.mail_list_entries.clone().into());
-        app.set_sidebar_rows(state.sidebar_rows.clone().into());
-        let state = Rc::new(RefCell::new(state));
-        let snapshot = WarmStartSnapshot::capture(WarmStartProjection {
-            scope: "Person / Inbox",
-            inbox_count: 3,
-            next_cursor: None,
-            accounts: &[account()],
-            messages: &[message()],
-            mailboxes: &[mailbox()],
-            unified_mailboxes: &[],
-        });
+        harness.apply_single_account_snapshot();
 
-        apply_warm_start_snapshot(&app, &state, &runtime, snapshot);
-
+        let state = &harness.state;
         assert!(app.get_startup_hydrated());
         assert!(!app.get_startup_ready());
         assert!(state.borrow().core.is_none());
@@ -874,17 +993,101 @@ mod warm_start_tests {
             app.get_emails().row_data(0).unwrap().subject,
             "Cached subject"
         );
-        assert!(app.get_sidebar_rows().row_count() > 0);
+        // The cached unified selection resolves to the only account's inbox,
+        // which the sidebar lists first, without a unified section.
+        assert_eq!(state.borrow().scope, PERSON_INBOX);
+        assert_eq!(app.get_selected_scope(), PERSON_INBOX.to_string());
+        assert_eq!(app.get_selected_scope_title(), "Person / Inbox");
+        let rows = state.borrow().sidebar_rows.iter().collect::<Vec<_>>();
+        assert_eq!(rows[0].kind, crate::SidebarRowKind::Account);
+        assert!(!harness.shows_unified_inbox());
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.kind == crate::SidebarRowKind::Folder)
+                .count(),
+            crate::StandardMailbox::ALL.len()
+        );
         for (index, theme) in ["light", "dark"].into_iter().enumerate() {
             app.set_theme_mode(theme.into());
-            assert_ne!(render(&format!("cached-{theme}")), loading_frames[index]);
+            assert_ne!(
+                harness.render(&format!("cached-{theme}")),
+                loading_frames[index]
+            );
         }
         app.window().set_size(slint::PhysicalSize::new(390, 844));
-        render("cached-compact");
+        harness.render("cached-compact");
         assert!(
             !app.get_startup_ready(),
             "rendering cached mail must not unlock storage actions"
         );
+    }
+
+    /// The projected account folders must be usable in the compact drawer as
+    /// well as the desktop sidebar once startup unlocks the shell.
+    #[test]
+    fn single_account_inbox_is_selectable_in_compact_and_desktop_layouts() {
+        let harness = Harness::new();
+        let app = &harness.app;
+        harness.apply_single_account_snapshot();
+        app.set_startup_ready(true);
+        app.global::<crate::MotionSettings>().set_enabled(false);
+        let selected = Rc::new(RefCell::new(String::new()));
+        let clicked = selected.clone();
+        app.on_select_scope(move |scope| *clicked.borrow_mut() = scope.to_string());
+        app.window().set_size(slint::PhysicalSize::new(390, 844));
+        for theme in ["light", "dark"] {
+            app.set_theme_mode(theme.into());
+            harness.render(&format!("ready-compact-{theme}"));
+            harness.click(31., 29.);
+            harness.render(&format!("ready-compact-drawer-{theme}"));
+            selected.borrow_mut().clear();
+            harness.click(140., 165.);
+            assert_eq!(selected.borrow().parse(), Ok(PERSON_INBOX));
+            app.window().set_size(slint::PhysicalSize::new(1320, 800));
+            harness.render(&format!("ready-desktop-{theme}"));
+            selected.borrow_mut().clear();
+            harness.click(140., 209.);
+            assert_eq!(selected.borrow().parse(), Ok(PERSON_INBOX));
+            app.window().set_size(slint::PhysicalSize::new(390, 844));
+        }
+    }
+
+    #[test]
+    fn account_inventory_controls_the_unified_section_and_visible_selection() {
+        let harness = Harness::new();
+        harness.apply_single_account_snapshot();
+        let state = &harness.state;
+        // A second account counts even before its folders arrive, and even
+        // when offline. Adding it keeps the account's own selection.
+        let mut offline = account();
+        offline.id = 8;
+        offline.sync_state = "error".into();
+        offline.sync_error = Some("Offline".into());
+        let both = vec![account(), offline];
+        assert!(!state.borrow_mut().set_connected_accounts(both.clone()));
+        // Searching folders must not redefine that inventory.
+        for query in ["", "Inbox", ""] {
+            state.borrow_mut().folder_filter = query.into();
+            crate::refresh_sidebar(state);
+            assert_eq!(harness.shows_unified_inbox(), query.is_empty());
+            assert_eq!(state.borrow().scope, PERSON_INBOX);
+        }
+
+        // A unified selection that would disappear moves to the survivor.
+        state.borrow_mut().set_scope(Scope::Unified(crate::StandardMailbox::Sent));
+        assert!(state.borrow_mut().set_connected_accounts(vec![account()]));
+        assert_eq!(
+            state.borrow().scope,
+            Scope::Account {
+                account_id: 7,
+                mailbox: crate::StandardMailbox::Sent,
+            }
+        );
+        crate::refresh_sidebar(state);
+        assert!(!harness.shows_unified_inbox());
+        assert!(!state.borrow_mut().set_connected_accounts(both));
+        crate::refresh_sidebar(state);
+        assert!(harness.shows_unified_inbox());
     }
 
     fn account() -> Account {
@@ -893,12 +1096,13 @@ mod warm_start_tests {
             email: "person@example.com".into(),
             display_name: Some("Person".into()),
             avatar_url: None,
-            provider: Provider::Imap,
+            provider: Provider::Generic,
             auth_kind: AuthKind::Password,
             mail_protocol: MailProtocol::Imap,
             sync_state: "idle".into(),
             sync_error: None,
             can_create_top_level_mailbox: true,
+            server_keeps_mail_days: None,
         }
     }
 
@@ -947,7 +1151,7 @@ mod warm_start_tests {
             can_rename: false,
             can_delete: false,
             label: "Inbox".into(),
-            scope: "Person / Inbox".into(),
+            scope: Some(PERSON_INBOX),
             context: "Person".into(),
             detail: "person@example.com".into(),
             avatar: "P".into(),
@@ -964,13 +1168,14 @@ mod warm_start_tests {
         let messages = [message()];
         let mailboxes = [mailbox()];
         let snapshot = WarmStartSnapshot::capture(WarmStartProjection {
-            scope: "Person / Inbox",
+            scope: PERSON_INBOX,
             inbox_count: 3,
             next_cursor: Some(ThreadCursor {
                 last_message_at: 123,
                 thread_id: 7,
             }),
             accounts: &accounts,
+            profile_accounts: Some(&[7]),
             messages: &messages,
             mailboxes: &mailboxes,
             unified_mailboxes: &[],
@@ -983,7 +1188,8 @@ mod warm_start_tests {
         assert!(!json.contains("secret-recipient"));
 
         let restored = load_warm_start_snapshot(&path).await.unwrap();
-        assert_eq!(restored.scope, "Person / Inbox");
+        assert_eq!(restored.scope, PERSON_INBOX);
+        assert_eq!(restored.profile_accounts, Some(vec![7]));
         assert_eq!(restored.messages.len(), 1);
         let restored_message = mail::MailMessage::from(restored.messages[0].clone());
         assert_eq!(restored_message.subject, "Cached subject");
@@ -1004,6 +1210,21 @@ mod warm_start_tests {
         assert!(!path.exists());
     }
 
+    /// Version 3 keyed account mailboxes by display name; such a cache is a
+    /// miss rather than a selection of the wrong mailbox.
+    #[tokio::test]
+    async fn previous_format_warm_start_is_ignored_and_removed() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("warm.json");
+        let mut json = serde_json::to_value(single_account_snapshot()).unwrap();
+        json["format_version"] = 3.into();
+        json["scope"] = "Person / Inbox".into();
+        tokio::fs::write(&path, json.to_string()).await.unwrap();
+
+        assert!(load_warm_start_snapshot(&path).await.is_none());
+        assert!(!path.exists());
+    }
+
     #[tokio::test]
     async fn warm_start_projection_is_bounded_to_the_visible_page() {
         let messages = (0..100)
@@ -1016,10 +1237,11 @@ mod warm_start_tests {
         let accounts = [account()];
         let mailboxes = [mailbox()];
         let snapshot = WarmStartSnapshot::capture(WarmStartProjection {
-            scope: "Unified Inbox",
+            scope: Scope::UNIFIED_INBOX,
             inbox_count: messages.len(),
             next_cursor: None,
             accounts: &accounts,
+            profile_accounts: None,
             messages: &messages,
             mailboxes: &mailboxes,
             unified_mailboxes: &[],
@@ -1031,11 +1253,13 @@ mod warm_start_tests {
     #[test]
     fn benchmark_warm_cache_fixture_matches_the_current_format() {
         let snapshot: WarmStartSnapshot = serde_json::from_str(include_str!(
-            "../resources/benchmarks/warm-cache/warm-start-mailbox-v3.json"
+            "../resources/benchmarks/warm-cache/warm-start-mailbox-v5.json"
         ))
         .unwrap();
 
         assert!(snapshot.is_valid());
         assert_eq!(snapshot.messages.len(), 3);
+        // Caches written before profiles filtered mail show every account.
+        assert_eq!(snapshot.profile_accounts, None);
     }
 }

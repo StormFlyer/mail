@@ -1,6 +1,8 @@
 //! Pending-action executor. Local mutations already happened optimistically
 //! when the action was enqueued (see Core::perform_action); this module
-//! replays the intent against the server, in order, when connected.
+//! replays the intent against the server, in order, when connected. For mail
+//! that exists only on this device, the queued change is already the result,
+//! and only deletions have work left to finish.
 
 use crate::accounts::credentials::{self, Slot};
 use crate::db::repo;
@@ -27,10 +29,37 @@ pub struct ActionSliceResult {
     pub due_remaining: bool,
 }
 
+/// Where queued actions are carried out.
+enum ActionTarget<'a> {
+    /// The account's IMAP mailbox.
+    Imap(&'a mut Session),
+    /// The SMTP submission worker, which only sends.
+    Submission,
+    /// Mail that exists only on this device.
+    Device,
+}
+
 pub async fn execute_due(
     ctx: &SyncCtx,
     config: &AccountConfig,
     session: &mut Session,
+) -> Result<ActionSliceResult> {
+    execute_due_except_send(ctx, config, ActionTarget::Imap(session)).await
+}
+
+/// Complete the due actions of an account whose mail exists only on this
+/// device. Nothing here contacts a server.
+pub async fn execute_due_on_device(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+) -> Result<ActionSliceResult> {
+    execute_due_except_send(ctx, config, ActionTarget::Device).await
+}
+
+async fn execute_due_except_send(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    target: ActionTarget<'_>,
 ) -> Result<ActionSliceResult> {
     let account_id = config.id;
     let due = ctx
@@ -39,7 +68,7 @@ pub async fn execute_due(
             repo::actions::due_except_send(conn, account_id, now_ms(), MAX_ACTIONS_PER_SLICE)
         })
         .await?;
-    let result = execute_actions(ctx, config, Some(session), due).await?;
+    let result = execute_actions(ctx, config, target, due).await?;
     let due_remaining = ctx
         .db
         .read(move |conn| repo::actions::has_due_except_send(conn, account_id, now_ms()))
@@ -61,7 +90,7 @@ pub async fn execute_due_sends(ctx: &SyncCtx, config: &AccountConfig) -> Result<
             repo::actions::due_sends(conn, account_id, now_ms(), MAX_ACTIONS_PER_SLICE)
         })
         .await?;
-    let result = execute_actions(ctx, config, None, due).await?;
+    let result = execute_actions(ctx, config, ActionTarget::Submission, due).await?;
     let due_remaining = ctx
         .db
         .read(move |conn| repo::actions::has_due_sends(conn, account_id, now_ms()))
@@ -75,7 +104,7 @@ pub async fn execute_due_sends(ctx: &SyncCtx, config: &AccountConfig) -> Result<
 async fn execute_actions(
     ctx: &SyncCtx,
     config: &AccountConfig,
-    mut session: Option<&mut Session>,
+    mut target: ActionTarget<'_>,
     due: Vec<repo::actions::PendingAction>,
 ) -> Result<ActionSliceResult> {
     let account_id = config.id;
@@ -100,7 +129,7 @@ async fn execute_actions(
         }
         processed += 1;
 
-        let outcome = execute_one(ctx, config, session.as_deref_mut(), &action).await;
+        let outcome = execute_one(ctx, config, &mut target, &action).await;
         match outcome {
             Ok(()) => {
                 ctx.db
@@ -321,12 +350,12 @@ fn mark_failed_and_rollback(
 
     let source_uid = failed.payload["srcUid"].as_i64();
     repo::messages::set_uid_and_folder(&tx, message_id, source_folder, source_uid)?;
-    let multi_mailbox: bool = tx.query_row(
-        "SELECT provider='gmail' OR mail_protocol='jmap' FROM accounts WHERE id=?1",
+    let protocol: crate::models::MailProtocol = tx.query_row(
+        "SELECT mail_protocol FROM accounts WHERE id=?1",
         rusqlite::params![failed.account_id],
         |row| row.get(0),
     )?;
-    if multi_mailbox {
+    if protocol.has_multi_mailbox_messages() {
         if let Some(target_folder) = target_folder {
             tx.execute(
                 "DELETE FROM message_folders WHERE message_id=?1 AND folder_id=?2",
@@ -348,18 +377,52 @@ fn mark_failed_and_rollback(
 async fn execute_one(
     ctx: &SyncCtx,
     config: &AccountConfig,
-    session: Option<&mut Session>,
+    target: &mut ActionTarget<'_>,
     action: &repo::actions::PendingAction,
 ) -> Result<()> {
     if action.kind == "send" {
         return send_action(ctx, config, action).await;
     }
-    let session = session.ok_or_else(|| {
-        CoreError::Other(format!(
-            "{} action was routed without an IMAP session",
+    match target {
+        ActionTarget::Imap(session) => execute_on_imap(ctx, config, session, action).await,
+        ActionTarget::Device => complete_on_device(ctx, config, action).await,
+        ActionTarget::Submission => Err(CoreError::Other(format!(
+            "{} action was routed to the submission worker",
             action.kind
-        ))
-    })?;
+        ))),
+    }
+}
+
+/// Finish an action on mail that exists only on this device. Its change
+/// was made when it was queued; deletions end with the same cleanup that
+/// follows a server's confirmation.
+async fn complete_on_device(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    action: &repo::actions::PendingAction,
+) -> Result<()> {
+    match action.kind.as_str() {
+        "empty_trash" => {
+            let snapshot_ids = crate::sync::snapshot_trash_ids(ctx, config.id).await?;
+            crate::sync::finish_empty_trash(ctx, config.id, snapshot_ids).await
+        }
+        "delete_permanently" => crate::sync::finish_permanent_delete(ctx, action.message_id).await,
+        "archive" | "unarchive" | "trash" | "spam" | "not_spam" | "move" | "mark_read"
+        | "mark_unread" | "star" | "unstar" | "add_label" | "remove_label" | "snooze"
+        | "unsnooze" => Ok(()),
+        other => {
+            tracing::warn!("action kind {other} has nothing to do on this device");
+            Ok(())
+        }
+    }
+}
+
+async fn execute_on_imap(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    session: &mut Session,
+    action: &repo::actions::PendingAction,
+) -> Result<()> {
     match action.kind.as_str() {
         "empty_trash" => {
             let folder_id = action.payload["folderId"]
@@ -378,7 +441,7 @@ async fn execute_one(
                 ));
             }
             let snapshot_ids = crate::sync::snapshot_trash_ids(ctx, config.id).await?;
-            imap::select(session, &folder.imap_name).await?;
+            imap::select(session, &folder.path).await?;
             imap::empty_selected_trash(session).await?;
             crate::sync::finish_empty_trash(ctx, config.id, snapshot_ids).await
         }
@@ -415,7 +478,7 @@ async fn execute_one(
             {
                 return Err(CoreError::NotFound("message is no longer in Trash".into()));
             }
-            let selected = imap::select(session, &folder.imap_name).await?;
+            let selected = imap::select(session, &folder.path).await?;
             match (folder.uidvalidity, selected.uid_validity) {
                 (Some(stored), Some(remote)) if stored == remote => {}
                 _ => {
@@ -461,7 +524,7 @@ async fn resolve_remote(
 
     // The payload's remote location: where the message lived when the action
     // was enqueued (optimistic mutation may have already moved it locally).
-    let (Some(folder_id), Some(uid)) = (row.folder_id, row.uid) else {
+    let Some(folder_id) = row.folder_id else {
         return Ok(None);
     };
     let folder = ctx
@@ -471,8 +534,12 @@ async fn resolve_remote(
     let Some(folder) = folder else {
         return Ok(None);
     };
-    imap::select(session, &folder.imap_name).await?;
-    Ok(Some((folder, uid as u32)))
+    imap::select(session, &folder.path).await?;
+    let uid = match valid_uid(row.uid) {
+        Some(uid) => Some(uid),
+        None => uid_by_message_id(session, row.message_id.as_deref()).await?,
+    };
+    Ok(uid.map(|uid| (folder, uid)))
 }
 
 /// For moves the local row already points at the *target* folder; the remote
@@ -481,15 +548,11 @@ async fn resolve_source(
     ctx: &SyncCtx,
     session: &mut Session,
     action: &repo::actions::PendingAction,
+    message_id: i64,
 ) -> Result<(repo::folders::Folder, u32)> {
     let fid = action.payload["srcFolderId"]
         .as_i64()
         .ok_or_else(|| CoreError::NotFound("source mailbox for queued move".into()))?;
-    let uid = action.payload["srcUid"]
-        .as_i64()
-        .and_then(|uid| u32::try_from(uid).ok())
-        .filter(|uid| *uid > 0)
-        .ok_or_else(|| CoreError::NotFound("valid source UID for queued move".into()))?;
     let folder = ctx
         .db
         .read(move |conn| repo::folders::get(conn, fid))
@@ -500,8 +563,55 @@ async fn resolve_source(
             "queued move source belongs to another account".into(),
         ));
     }
-    imap::select(session, &folder.imap_name).await?;
+    imap::select(session, &folder.path).await?;
+    if let Some(uid) = valid_uid(action.payload["srcUid"].as_i64()) {
+        return Ok((folder, uid));
+    }
+    let row = ctx
+        .db
+        .read(move |conn| repo::messages::get_row(conn, message_id))
+        .await?;
+    let uid = uid_by_message_id(session, row.and_then(|row| row.message_id).as_deref())
+        .await?
+        .ok_or_else(|| CoreError::NotFound("message in the source mailbox".into()))?;
     Ok((folder, uid))
+}
+
+fn valid_uid(uid: Option<i64>) -> Option<u32> {
+    uid.and_then(|uid| u32::try_from(uid).ok())
+        .filter(|uid| *uid > 0)
+}
+
+/// The newest copy of a message in the selected mailbox, by Message-ID. A
+/// move that already ran leaves the message's UID unknown until its new
+/// mailbox syncs, and an undo or a flag change can come first. SEARCH HEADER
+/// matches substrings, or words on some servers, so each candidate's header
+/// is compared whole, and copies awaiting expunge don't count.
+async fn uid_by_message_id(session: &mut Session, message_id: Option<&str>) -> Result<Option<u32>> {
+    let Some(bare) = message_id
+        .map(|id| id.trim_matches(['<', '>']))
+        .filter(|id| !id.is_empty())
+    else {
+        return Ok(None);
+    };
+    let candidates = imap::uid_search_header(session, "Message-ID", &format!("<{bare}>")).await?;
+    let mut newest = None;
+    for chunk in candidates.chunks(100) {
+        let uids = chunk
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        for header in imap::fetch_headers(session, &uids).await? {
+            if !header.flags.deleted
+                && crate::mime::parse_header_block(&header.header_bytes)
+                    .is_ok_and(|parsed| parsed.message_id.as_deref() == Some(bare))
+            {
+                newest = newest.max(Some(header.uid));
+            }
+        }
+    }
+    Ok(newest)
 }
 
 async fn flag_action(
@@ -548,7 +658,7 @@ async fn move_action(
     let message_id = action
         .message_id
         .ok_or_else(|| CoreError::NotFound("message for queued move".into()))?;
-    let (_src, uid) = resolve_source(ctx, session, action).await?;
+    let (_src, uid) = resolve_source(ctx, session, action, message_id).await?;
     let tfid = action.payload["targetFolderId"]
         .as_i64()
         .ok_or_else(|| CoreError::NotFound("target mailbox for queued move".into()))?;
@@ -563,10 +673,11 @@ async fn move_action(
         ));
     }
 
-    imap::uid_move(session, uid, &target.imap_name).await?;
+    imap::uid_move(session, uid, &target.path).await?;
 
     // The message's new UID in the target is unknown (COPYUID not parsed in
     // v1); clear it so the next target-folder sync re-links by Message-ID.
+    // Actions that run before then look it up the same way.
     ctx.db
         .write(move |conn| repo::messages::set_uid_and_folder(conn, message_id, tfid, None))
         .await?;
@@ -582,19 +693,16 @@ async fn append_sent_action(
     let message_id = action
         .message_id
         .ok_or_else(|| CoreError::NotFound("message for Sent filing".into()))?;
-    let (raw_path, rfc_message_id) = ctx
+    let row = ctx
         .db
         .read(move |conn| {
-            let row = repo::messages::get_row(conn, message_id)?
-                .ok_or_else(|| CoreError::NotFound(format!("message {message_id}")))?;
-            Ok((
-                row.raw_path
-                    .ok_or_else(|| CoreError::NotFound("outgoing MIME snapshot".into()))?,
-                row.message_id
-                    .ok_or_else(|| CoreError::NotFound("outgoing Message-ID".into()))?,
-            ))
+            repo::messages::get_row(conn, message_id)?
+                .ok_or_else(|| CoreError::NotFound(format!("message {message_id}")))
         })
         .await?;
+    if row.account_id != config.id || action.account_id != config.id {
+        return Err(CoreError::Other("Sent filing account mismatch".into()));
+    }
     let sent = ctx
         .db
         .read({
@@ -603,10 +711,39 @@ async fn append_sent_action(
         })
         .await?
         .ok_or_else(|| CoreError::Imap("Sent mailbox has not been discovered yet".into()))?;
-
-    // The action payload is durable database state, but still treat its file
-    // reference as untrusted. Outgoing snapshots must stay inside this
-    // account's app-managed mail directory.
+    let selected = imap::select(session, &sent.path).await?;
+    let existing_uid = if row.folder_id == Some(sent.id)
+        && sent.uidvalidity.is_some()
+        && sent.uidvalidity == selected.uid_validity
+    {
+        row.uid
+            .and_then(|uid| u32::try_from(uid).ok())
+            .filter(|uid| *uid > 0)
+    } else {
+        None
+    };
+    let rfc_message_id = row
+        .message_id
+        .as_deref()
+        .ok_or_else(|| CoreError::NotFound("outgoing Message-ID".into()))?;
+    let sent_uid = match existing_uid {
+        Some(uid) => Some(uid),
+        None => find_sent_uid(session, rfc_message_id).await?,
+    };
+    if let Some(uid) = sent_uid {
+        return finish_sent_filing(ctx, action, sent.id, selected.uid_validity, Some(uid)).await;
+    }
+    // Persisted *before* the command. A timeout, disconnect, or process crash
+    // cannot prove APPEND failed. Reconcile by identity on subsequent attempts,
+    // and leave the local outgoing snapshot intact if the result stays unknown.
+    if action.payload["sentAppendStarted"].as_bool() == Some(true) {
+        return Err(CoreError::Other(
+            "Sent copy could not be confirmed after an interrupted APPEND; automatic append suppressed to avoid duplicates".into(),
+        ));
+    }
+    let raw_path = row
+        .raw_path
+        .ok_or_else(|| CoreError::NotFound("outgoing MIME snapshot".into()))?;
     let mail_root = tokio::fs::canonicalize(ctx.paths.mail_dir(config.id)).await?;
     let canonical = tokio::fs::canonicalize(&raw_path).await?;
     if !canonical.starts_with(&mail_root) {
@@ -620,28 +757,103 @@ async fn append_sent_action(
         "outgoing MIME snapshot",
     )
     .await?;
+    let action_id = action.id;
+    let mut payload = action.payload.clone();
+    payload["sentAppendStarted"] = true.into();
+    ctx.db
+        .write(move |conn| {
+            conn.execute(
+                "UPDATE pending_actions SET payload=?2 WHERE id=?1",
+                rusqlite::params![action_id, serde_json::to_string(&payload)?],
+            )?;
+            Ok(())
+        })
+        .await?;
+    let receipt = imap::append_with_receipt(session, &sent.path, &raw, true).await?;
+    // Tagged OK is enough to complete filing even without UIDPLUS. Header sync
+    // will attach the UID later; no fallible post-APPEND SELECT/search is needed.
+    let (validity, uid) = receipt
+        .map(|r| (Some(i64::from(r.uid_validity)), Some(r.uid)))
+        .unwrap_or((selected.uid_validity, None));
+    finish_sent_filing(ctx, action, sent.id, validity, uid).await
+}
 
-    imap::select(session, &sent.imap_name).await?;
-    let header_value = format!("<{}>", rfc_message_id.trim_matches(['<', '>']));
-    if imap::uid_search_header(session, "Message-ID", &header_value)
-        .await?
-        .is_empty()
-    {
-        imap::append(session, &sent.imap_name, &raw, true).await?;
-        tracing::debug!(
-            account_id = config.id,
-            message_id,
-            folder = %sent.imap_name,
-            "smtp send: appended durable copy to Sent",
-        );
-    } else {
-        tracing::debug!(
-            account_id = config.id,
-            message_id,
-            folder = %sent.imap_name,
-            "smtp send: Sent copy already exists",
-        );
+async fn find_sent_uid(session: &mut Session, message_id: &str) -> Result<Option<u32>> {
+    let bare = message_id.trim_matches(['<', '>']);
+    if bare.is_empty() {
+        return Err(CoreError::NotFound("outgoing Message-ID".into()));
     }
+    let mut candidates =
+        imap::uid_search_header(session, "Message-ID", &format!("<{bare}>")).await?;
+    candidates
+        .extend(imap::uid_search_header(session, crate::mime::SUBMISSION_ID_HEADER, bare).await?);
+    candidates.sort_unstable();
+    candidates.dedup();
+    let mut found = None;
+    // SEARCH HEADER is a substring search: verify complete header identities
+    // before assigning a UID. Chunk to keep the FETCH command bounded.
+    for chunk in candidates.chunks(100) {
+        let uids = chunk
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        for header in imap::fetch_headers(session, &uids).await? {
+            let parsed = crate::mime::parse_header_block(&header.header_bytes)?;
+            if parsed.message_id.as_deref() == Some(bare)
+                || parsed.submission_id.as_deref() == Some(bare)
+            {
+                if found.is_some() {
+                    return Err(CoreError::Other(
+                        "multiple Sent copies match this submission; automatic append suppressed"
+                            .into(),
+                    ));
+                }
+                found = Some(header.uid);
+            }
+        }
+    }
+    Ok(found)
+}
+
+async fn finish_sent_filing(
+    ctx: &SyncCtx,
+    action: &repo::actions::PendingAction,
+    folder_id: i64,
+    uid_validity: Option<i64>,
+    uid: Option<u32>,
+) -> Result<()> {
+    let action = action.clone();
+    ctx.db
+        .write(move |conn| finish_sent_filing_in_db(conn, &action, folder_id, uid_validity, uid))
+        .await
+}
+
+fn finish_sent_filing_in_db(
+    conn: &mut rusqlite::Connection,
+    action: &repo::actions::PendingAction,
+    folder_id: i64,
+    uid_validity: Option<i64>,
+    uid: Option<u32>,
+) -> Result<()> {
+    let tx = conn.transaction()?;
+    // A user may have moved the local row while filing was in flight. Never
+    // undo that newer intent or bind a UID from another mailbox generation.
+    if let (Some(message_id), Some(validity), Some(uid)) = (action.message_id, uid_validity, uid) {
+        tx.execute(
+            "UPDATE messages SET uid=?3 WHERE id=?1 AND folder_id=?2 AND uid IS NULL
+             AND account_id=?4 AND EXISTS(SELECT 1 FROM folders WHERE id=?2 AND uidvalidity=?5)",
+            rusqlite::params![
+                message_id,
+                folder_id,
+                i64::from(uid),
+                action.account_id,
+                validity
+            ],
+        )?;
+    }
+    repo::actions::set_state(&tx, action.id, "done", None)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -802,11 +1014,12 @@ async fn send_action(
     crate::file_io::write_atomic(&raw_path, &raw, "outgoing MIME snapshot").await?;
     let raw_path_string = raw_path.to_string_lossy().into_owned();
     let stable_id = msg_id_bare.clone();
+    let snapshot_path = raw_path_string.clone();
     ctx.db
         .write(move |conn| {
             conn.execute(
-                "UPDATE messages SET message_id = ?2 WHERE id = ?1",
-                rusqlite::params![draft_id, stable_id],
+                "UPDATE messages SET message_id = ?2, raw_path = ?3 WHERE id = ?1",
+                rusqlite::params![draft_id, stable_id, snapshot_path],
             )?;
             Ok(())
         })
@@ -920,15 +1133,30 @@ async fn send_action(
     // so the Sent-folder sync dedupes against this row instead of duplicating.
     let sent_at = now_ms();
     let send_action_id = action.id;
-    let should_append_sent = config.provider != Provider::Gmail;
     let (thread_id, staged_paths) = ctx
         .db
         .write(move |conn| {
             let tx = conn.transaction()?;
+            // The dedicated SMTP worker outlives settings edits. Read the
+            // latest policy at completion instead of its startup snapshot.
+            let current = repo::accounts::get_config(&tx, account_id)?
+                .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))?;
+            let should_append_sent = match current.mail_protocol {
+                MailProtocol::Imap => current
+                    .settings
+                    .sent_copy_policy
+                    .should_append(current.provider),
+                // The local Sent folder is the only one a POP3 account has.
+                MailProtocol::Pop3 => false,
+                // These submit through their own APIs, which file sent mail.
+                MailProtocol::Gmail | MailProtocol::Jmap => false,
+            };
+
             tx.execute(
                 "UPDATE messages SET is_draft = 0, is_outgoing = 1, is_read = 1,
                         message_id = ?2, raw_path = ?3,
-                        folder_id = COALESCE(?4, folder_id), uid = NULL, date = ?5
+                        folder_id = COALESCE(?4, folder_id),
+                        uid = CASE WHEN folder_id = ?4 THEN uid ELSE NULL END, date = ?5
                  WHERE id = ?1",
                 rusqlite::params![
                     draft_id,
@@ -1111,7 +1339,7 @@ mod tests {
         let mut conn = crate::db::testutil::conn();
         crate::db::testutil::seed_account(&conn);
         conn.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'Archive', 'archive')",
             [],
         )
@@ -1142,9 +1370,9 @@ mod tests {
         let mut conn = crate::db::testutil::conn();
         crate::db::testutil::seed_account(&conn);
         conn.execute_batch(
-            "INSERT INTO folders (id, account_id, imap_name, role)
+            "INSERT INTO folders (id, account_id, path, role)
              VALUES (2, 1, 'Archive', 'archive');
-             INSERT INTO folders (id, account_id, imap_name, role)
+             INSERT INTO folders (id, account_id, path, role)
              VALUES (3, 1, 'Later', '');",
         )
         .unwrap();
@@ -1195,3 +1423,9 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+pub(crate) mod sent_tests;
+
+#[cfg(test)]
+mod move_tests;

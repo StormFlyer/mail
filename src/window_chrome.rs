@@ -24,6 +24,8 @@ use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use std::cell::Cell;
 
 #[cfg(linux_desktop)]
+mod activation;
+#[cfg(linux_desktop)]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -165,11 +167,13 @@ fn register_desktop_events(app: &AppWindow) {
         };
         match event {
             winit::event::WindowEvent::ModifiersChanged(state) => modifiers.set(state.state()),
-            // Tab shortcuts work wherever focus is, as in a browser.
+            // Tab shortcuts work wherever focus is, as in a browser, except in
+            // the composer and the calendar editor, which keep their keys.
             winit::event::WindowEvent::KeyboardInput { event, .. }
                 if event.state.is_pressed()
                     && app.global::<crate::TabsUi>().get_enabled()
-                    && !app.get_compose_open() =>
+                    && !app.get_compose_open()
+                    && !app.get_calendar_editor_open() =>
             {
                 if let Some(command) = crate::tabs::shortcut(&event.logical_key, modifiers.get()) {
                     app.global::<crate::TabsUi>()
@@ -186,15 +190,46 @@ fn register_desktop_events(app: &AppWindow) {
                 }
                 #[cfg(target_os = "macos")]
                 macos::refresh(&app);
+                report_minimized(&app);
             }
-            // AppKit lays the title bar out again on resize and full-screen
-            // transitions, which moves the traffic lights back.
-            #[cfg(target_os = "macos")]
-            winit::event::WindowEvent::Resized(_) => macos::refresh(&app),
+            winit::event::WindowEvent::Resized(size) => {
+                // AppKit lays the title bar out again on resize and full-screen
+                // transitions, which moves the traffic lights back.
+                #[cfg(target_os = "macos")]
+                macos::refresh(&app);
+                // Windows reports minimizing as a resize to zero.
+                if size.width == 0
+                    || size.height == 0
+                    || crate::window_controller::reported_minimized()
+                {
+                    report_minimized(&app);
+                }
+            }
+            winit::event::WindowEvent::Occluded(_) => report_minimized(&app),
+            // X11 may restore a window without another event; its first frame
+            // is the earliest reliable signal.
+            winit::event::WindowEvent::RedrawRequested
+                if crate::window_controller::reported_minimized() =>
+            {
+                report_minimized(&app);
+            }
             _ => {}
         }
         EventResult::Propagate
     });
+}
+
+/// Forward the platform's minimized state to the window lifecycle. Wayland
+/// cannot report it, so nothing is released there.
+#[cfg(desktop)]
+fn report_minimized(app: &AppWindow) {
+    if let Some(minimized) = app
+        .window()
+        .with_winit_window(|window| window.is_minimized())
+        .flatten()
+    {
+        crate::window_controller::minimized_changed(app, minimized);
+    }
 }
 
 /// Apply a saved preference. Every desktop platform switches immediately.
@@ -260,6 +295,49 @@ fn show_window_menu(window: &slint::Window, x: f32, y: f32) {
 
 fn toggle_maximized(window: &slint::Window) {
     window.set_maximized(!window.is_maximized());
+}
+
+/// The activation token this process was launched with, to forward to an
+/// already running instance.
+#[cfg(desktop)]
+pub(crate) fn launch_activation_token() -> Option<String> {
+    #[cfg(linux_desktop)]
+    return activation::launch_token();
+    #[cfg(not(linux_desktop))]
+    None
+}
+
+/// Ask the platform to focus the main window, using a launcher's activation
+/// token where the desktop requires one. A window shown from the tray is
+/// created again first, so this waits for the native window.
+#[cfg(desktop)]
+pub(crate) fn focus(app: &AppWindow, activation_token: Option<String>) {
+    let app = app.as_weak();
+    let _ = slint::spawn_local(async move {
+        let Some(app) = app.upgrade() else {
+            return;
+        };
+        let Ok(window) = app.window().winit_window().await else {
+            return;
+        };
+        #[cfg(linux_desktop)]
+        if let Some(token) = activation_token.as_deref()
+            && activation::activate(&window, token)
+        {
+            return;
+        }
+        #[cfg(not(linux_desktop))]
+        let _ = activation_token;
+        window.focus_window();
+    });
+}
+
+/// Prepare platform hooks before the main window is shown again. Hiding it
+/// destroys the native window, and Slint creates the new one without the
+/// attributes hook passed to the backend selector.
+pub(crate) fn before_show() {
+    #[cfg(target_os = "windows")]
+    windows::rearm();
 }
 
 /// Follow the same path as the platform close button so tray and

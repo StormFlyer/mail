@@ -159,6 +159,20 @@ export struct MailProfileRow {
     account_count: int,
 }
 
+// An account in the profile editor's checklist; checked accounts belong to
+// the profile being edited.
+export struct ProfileMemberRow {
+    id: int,
+    name: string,
+    email: string,
+    initials: string,
+    avatar: image,
+    has_avatar: bool,
+    // The other profile the account is in now; empty when none.
+    other_profile: string,
+    checked: bool,
+}
+
 // Messages remain separate inside a conversation. The native side keeps the
 // bodies and renderer state; this lightweight model is safe to virtualize even
 // for long threads.
@@ -199,14 +213,19 @@ export struct AccountRow {
     has_account_color: bool,
     username: string,
     jmap_url: string,
-    imap_security: string,
+    incoming_security: string,
     smtp_security: string,
     trusted_certificate_pem: string,
-    imap_host: string,
-    imap_port: string,
+    incoming_host: string,
+    incoming_port: string,
     smtp_host: string,
     smtp_port: string,
     mail_history: string,
+    sent_copy_policy: string,
+    keep_on_server: string,
+    // Days a POP3 server keeps downloaded mail on its own; -1 when it
+    // keeps it or hasn't said.
+    server_keeps_mail_days: int,
     calendar_connected: bool,
     calendar_enabled: bool,
     calendar_status: string,
@@ -355,7 +374,20 @@ export struct ComposeContact {
     initials: string,
 }
 
+// Mirrors flectar_mail_core::models::ContactSync.
+export enum ContactSyncState { local, detached, synced, pending, conflict, unavailable, failed }
+
+export struct ContactValueRow {
+    key: string,
+    value: string,
+    label: string,
+    preference: int,
+}
+
 export struct ContactRow {
+    avatar: image,
+    has-avatar: bool,
+    source: string,
     id: int,
     name: string,
     email: string,

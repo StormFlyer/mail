@@ -1,5 +1,6 @@
 //! End-to-end fixtures for scheduling and IMAP compatibility in one sync cycle.
 use super::*;
+use crate::db::repo::messages::NewMessage;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -193,17 +194,18 @@ async fn courier_cycle_applies_move_and_downloads_sparse_new_uid_without_uidnext
                     email: "reader@example.test",
                     display_name: None,
                     avatar_url: None,
-                    provider: Provider::Imap,
+                    provider: Provider::Generic,
                     auth_kind: AuthKind::Password,
                     mail_protocol: MailProtocol::Imap,
                     username: "reader@example.test",
                     jmap_url: "",
                     jmap_account_id: None,
-                    imap_host: "127.0.0.1",
-                    imap_port: port,
+                    incoming_host: "127.0.0.1",
+                    incoming_port: port,
                     smtp_host: "127.0.0.1",
                     smtp_port: 465,
                 },
+                &crate::db::testutil::account_settings(),
             )?;
             let inbox_id =
                 repo::folders::upsert(conn, account_id, "INBOX", Some("/"), Some(roles::INBOX))?;
@@ -280,7 +282,7 @@ async fn courier_cycle_applies_move_and_downloads_sparse_new_uid_without_uidnext
         .await
         .unwrap();
     config.settings.connection = MailConnectionSettings {
-        imap_security: ConnectionSecurity::Tls,
+        incoming_security: ConnectionSecurity::Tls,
         smtp_security: ConnectionSecurity::Tls,
         trusted_certificate_pem: CERT.into(),
     };
@@ -368,17 +370,18 @@ async fn deleted_mail_context(port: u16) -> (tempfile::TempDir, SyncCtx, Account
                     email: "reader@example.test",
                     display_name: None,
                     avatar_url: None,
-                    provider: Provider::Imap,
+                    provider: Provider::Generic,
                     auth_kind: AuthKind::Password,
                     mail_protocol: MailProtocol::Imap,
                     username: "reader@example.test",
                     jmap_url: "",
                     jmap_account_id: None,
-                    imap_host: "127.0.0.1",
-                    imap_port: port,
+                    incoming_host: "127.0.0.1",
+                    incoming_port: port,
                     smtp_host: "127.0.0.1",
                     smtp_port: 465,
                 },
+                &crate::db::testutil::account_settings(),
             )?;
             let folder_id =
                 repo::folders::upsert(conn, account_id, "INBOX", Some("/"), Some(roles::INBOX))?;
@@ -391,7 +394,7 @@ async fn deleted_mail_context(port: u16) -> (tempfile::TempDir, SyncCtx, Account
         .await
         .unwrap();
     config.settings.connection = MailConnectionSettings {
-        imap_security: ConnectionSecurity::Tls,
+        incoming_security: ConnectionSecurity::Tls,
         smtp_security: ConnectionSecurity::Tls,
         trusted_certificate_pem: CERT.into(),
     };

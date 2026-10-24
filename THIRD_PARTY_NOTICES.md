@@ -9,7 +9,11 @@ authors.
 Slint 1.18 is copyright © SixtyFPS GmbH and Slint contributors. Flectar Mail
 uses Slint under the `GPL-3.0-only` option offered by the Slint crates. The
 license text is in [`LICENSES/GPL-3.0-only.txt`](LICENSES/GPL-3.0-only.txt), and
-the upstream source is <https://github.com/slint-ui/slint>.
+the upstream source is <https://github.com/slint-ui/slint>. The locally patched
+`i-slint-backend-winit` 1.18.1 crate retains its upstream license texts in
+[`crates/i-slint-backend-winit/LICENSES`](crates/i-slint-backend-winit/LICENSES).
+Its Wayland clipboard backport, source checksum, and removal condition are
+documented in [`patches/slint-winit/README.md`](patches/slint-winit/README.md).
 
 ## Blitz
 
@@ -32,6 +36,14 @@ licensed under MIT. Its copyright and license are included in
 [`LICENSES/Parley-Emoji-MIT.txt`](LICENSES/Parley-Emoji-MIT.txt).
 Published packages and checksums are pinned in `Cargo.lock`. The backport
 retained for Slint is documented in [`patches/parley/README.md`](patches/parley/README.md).
+
+## Candle
+
+The optional CPU embedding runtime uses Candle under Apache-2.0. The locally
+patched `candle-core` 0.11.0 retains its upstream license in
+[`crates/candle-core/LICENSE`](crates/candle-core/LICENSE). Its ZIP 9 adaptation,
+source checksum, and removal condition are documented in
+[`patches/candle/README.md`](patches/candle/README.md).
 
 ## Reader integration dependencies
 

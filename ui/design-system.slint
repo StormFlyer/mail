@@ -70,8 +70,14 @@ export global SettingsIconPalette {
     out property <color> notifications: #f59e0b;
     out property <color> shortcuts: #22a06b;
     out property <color> storage: #a855f7;
-    out property <color> services: #0ea5e9;
+    out property <color> services: AppTheme.dark ? #a5b4fc : #6366f1;
     out property <color> about: #ec4899;
+}
+
+// Hosted services keep distinct identities in both light and dark palettes.
+export global ServiceIconPalette {
+    out property <color> sync: AppTheme.dark ? #60a5fa : #2563eb;
+    out property <color> business: AppTheme.dark ? #2dd4bf : #0f766e;
 }
 
 // Application colors live here instead of being re-declared by every custom
@@ -92,6 +98,8 @@ export global AppTheme {
     in-out property <color> custom-dark-surface: #18191a;
     in-out property <color> custom-dark-text: #f3f3f2;
     in-out property <color> custom-dark-border: #3a3b3c;
+    // Set with WindowChrome.top-bar, while the tab strip spans the window.
+    in property <bool> top-bar: false;
 
     out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
 
@@ -136,8 +144,13 @@ export global AppTheme {
     out property <color> surface: preset == "default" ? (dark ? #18191a : #ffffff) : themed-surface;
     out property <color> surface-raised: preset == "default" ? (dark ? #131415 : #fafaf8)
         : themed-surface.mix(themed-page-bg, 0.72);
-    out property <color> sidebar-bg: preset == "default" ? (dark ? #151617 : #f0f0ee)
+    // The sidebars' own tint, also a soft fill on the content.
+    out property <color> sidebar-tint: preset == "default" ? (dark ? #151617 : #f0f0ee)
         : themed-page-bg.mix(themed-surface, 0.72);
+    // Under the tab strip, sidebars share the content's surface, so the
+    // active tab opens into one color wherever it sits; dividers alone
+    // separate the panes there.
+    out property <color> sidebar-bg: root.top-bar ? root.surface : root.sidebar-tint;
     out property <color> control-bg: preset == "default" ? (dark ? #232425 : #f1f1ef)
         : themed-surface.mix(themed-text, dark ? 0.90 : 0.94);
     out property <color> muted-control-bg: preset == "default" ? (dark ? #242526 : #e8e8e5)

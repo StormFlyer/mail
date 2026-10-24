@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercise release validation and publishing without contacting GitHub."""
 
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -30,11 +32,140 @@ release_assets = load_script("prepare-release")
 prepare = release_assets.prepare
 android_signing = load_script("verify-android-signing")
 verify_android_signing = android_signing.verify
+android_version_code = load_script("android-version-code").version_code
 linux_metadata = load_script("stage-linux-metadata")
 stage_linux_metadata = linux_metadata.stage
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_android_ci_never_generates_a_release_key(self):
+        for ci_variable in ("CI", "GITHUB_ACTIONS"):
+            with self.subTest(ci_variable=ci_variable), tempfile.TemporaryDirectory() as directory:
+                environment = {
+                    **os.environ,
+                    "CI": "", "GITHUB_ACTIONS": "", ci_variable: "true",
+                    "FLECTAR_ANDROID_KEYSTORE": "",
+                    "FLECTAR_ANDROID_VERSION_NAME": "0.1.0-alpha.8",
+                    "XDG_DATA_HOME": directory,
+                }
+                result = subprocess.run(
+                    ["bash", str(SCRIPTS / "build-android-test-apk.sh")],
+                    env=environment, capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("requires FLECTAR_ANDROID_KEYSTORE", result.stderr)
+                self.assertEqual(list(Path(directory).rglob("*")), [])
+
+    def test_android_persistent_key_restore_and_pin(self):
+        # Exercise the workflow's actual restore command and its verifier.
+        # Stand in for keytool's public DER export; no private keys in fixtures.
+        certificate = b"original public certificate"
+        digest = hashlib.sha256(certificate).hexdigest()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            (root / "platform/android").mkdir(parents=True)
+            pin = root / "platform/android/app-signing-certificate.sha256"
+            pin.write_text(digest + "\n")
+            for name in ("verify-android-keystore.sh", "restore-android-keystore.sh"):
+                shutil.copyfile(SCRIPTS / name, root / "scripts" / name)
+            keytool = root / "keytool"
+            keytool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, sys\n"
+                "if sys.argv[1] == '-list':\n"
+                "    print('Keystore type: JKS')\n"
+                "    sys.exit(0)\n"
+                "assert sys.argv[1] in ('-exportcert', '-certreq')\n"
+                "assert sys.argv[2] == '-keystore'\n"
+                "assert sys.argv[4:8] == ['-alias', 'release-key', '-storepass:env', 'FLECTAR_ANDROID_KEYSTORE_PASSWORD']\n"
+                "if os.environ['FLECTAR_ANDROID_KEYSTORE_PASSWORD'] != 'fixture store password': sys.exit(1)\n"
+                "if sys.argv[1] == '-certreq':\n"
+                "    assert sys.argv[8:] == ['-keypass:env', 'FLECTAR_ANDROID_KEY_PASSWORD']\n"
+                "    sys.exit(0 if os.environ['FLECTAR_ANDROID_KEY_PASSWORD'] == 'fixture key password' else 1)\n"
+                "data = pathlib.Path(sys.argv[3]).read_bytes()\n"
+                "if data == b'unreadable keystore': sys.exit(1)\n"
+                "sys.stdout.buffer.write(data)\n"
+            )
+            keytool.chmod(0o755)
+            output = root / "github-env"
+            environment = {
+                **os.environ, "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                "RUNNER_TEMP": str(root), "GITHUB_ENV": str(output),
+                "FLECTAR_ANDROID_KEY_ALIAS": "release-key",
+                "FLECTAR_ANDROID_KEYSTORE_PASSWORD": "fixture store password",
+                "FLECTAR_ANDROID_KEY_PASSWORD": "fixture key password",
+            }
+            for encoded, success, message in (
+                ("", False, "FLECTAR_ANDROID_KEYSTORE_BASE64 is required"),
+                ("not base64!", False, ""),
+                (base64.b64encode(b"unreadable keystore").decode(), False, ""),
+                (base64.b64encode(b"replacement public certificate").decode(), False, "differs from the pinned"),
+                (base64.b64encode(certificate).decode(), True, digest),
+            ):
+                with self.subTest(encoded=encoded):
+                    output.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", str(root / "scripts/restore-android-keystore.sh")], cwd=root,
+                        env={**environment, "FLECTAR_ANDROID_KEYSTORE_BASE64": encoded},
+                        capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode == 0, success, result.stderr)
+                    self.assertIn(message, result.stdout + result.stderr)
+                    if success:
+                        keystore = Path(output.read_text().strip().split("=", 1)[1])
+                        self.assertEqual(keystore.stat().st_mode & 0o777, 0o600)
+                    else:
+                        self.assertFalse(output.exists())
+                        self.assertFalse(list(root.glob("flectar-app-signing.*.keystore")))
+            output.unlink()
+            result = subprocess.run(
+                ["bash", str(root / "scripts/restore-android-keystore.sh")],
+                env={**environment, "FLECTAR_ANDROID_KEYSTORE_BASE64": base64.b64encode(certificate).decode(),
+                     "FLECTAR_ANDROID_KEY_PASSWORD": "wrong password"},
+                capture_output=True, text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(output.exists())
+            self.assertEqual(list(root.glob("flectar-app-signing.*.keystore")), [keystore])
+            for missing in ("FLECTAR_ANDROID_KEYSTORE_PASSWORD", "FLECTAR_ANDROID_KEY_ALIAS", "FLECTAR_ANDROID_KEY_PASSWORD"):
+                with self.subTest(missing=missing):
+                    result = subprocess.run(
+                        ["bash", str(root / "scripts/restore-android-keystore.sh")],
+                        env={**environment, "FLECTAR_ANDROID_KEYSTORE_BASE64": base64.b64encode(certificate).decode(),
+                             missing: ""},
+                        capture_output=True, text=True,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(f"requires {missing}", result.stderr)
+                    self.assertFalse(output.exists())
+                    self.assertEqual(list(root.glob("flectar-app-signing.*.keystore")), [keystore])
+            for value in ("", "not-a-digest"):
+                pin.write_text(value)
+                result = subprocess.run(
+                    ["bash", str(root / "scripts/verify-android-keystore.sh")],
+                    env={**environment, "FLECTAR_ANDROID_KEYSTORE": str(keystore)},
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("pinned Android app signing certificate SHA-256 is invalid", result.stderr)
+
+    def test_android_version_codes_order_all_release_channels(self):
+        versions = (
+            "0.1.0-alpha.8", "0.1.0-alpha.999", "0.1.0-beta.1", "0.1.0-beta.999",
+            "0.1.0-rc.1", "0.1.0-rc.999", "0.1.0", "0.1.1-alpha.1", "0.1.1",
+            "0.2.0-alpha.1", "0.99.99", "1.0.0-alpha.1", "20.99.99",
+        )
+        codes = [android_version_code(version) for version in versions]
+        self.assertEqual(codes, sorted(set(codes)))
+        self.assertEqual(android_version_code("0.1.0-alpha.8"), 1_000_008)
+        self.assertEqual(android_version_code("0.1.0"), 1_009_999)
+        self.assertLessEqual(max(codes), 2_100_000_000)
+        for version in ("21.0.0", "0.100.0", "0.0.100", "0.1.0-alpha.1000", "0.1.0-alpha.0",
+                        "01.1.0", "0.1.0-dev.1", "0.1.0+build", "0.1.0-alpha.01"):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                android_version_code(version)
+
     def test_flatpak_pdfium_archive_keeps_expected_layout(self):
         manifest = (
             SCRIPTS.parent / "packaging/flatpak/com.flectar.mail.yml"
@@ -106,6 +237,7 @@ class ReleaseTests(unittest.TestCase):
         expected = "6f269ab047ca5d5eae7317758a265251e3d5645c5307633a5b92d192b8646280"
         for output in (signing, signing.replace("V2 Signer:", "Signer #1")):
             verify_android_signing(output, "test", expected)
+            verify_android_signing(output, "production", expected)
             with self.assertRaises(ValueError):
                 verify_android_signing(output, "test", "00" * 32)
             with self.assertRaises(ValueError):
@@ -141,21 +273,20 @@ class ReleaseTests(unittest.TestCase):
                 f"Signer #1 certificate DN: {subject}\n"
                 f"Signer #1 certificate SHA-256 digest: {digest}\n"
             )
-            with self.subTest(subject=subject):
-                verify_android_signing(signing, "test", digest.upper())
-                for expected in (None, "", "invalid", "cd" * 32):
+            for mode in ("test", "production"):
+                with self.subTest(subject=subject, mode=mode):
+                    verify_android_signing(signing, mode, digest.upper())
+                    for expected in (None, "", "invalid", "cd" * 32):
+                        with self.assertRaises(ValueError):
+                            verify_android_signing(signing, mode, expected)
                     with self.assertRaises(ValueError):
-                        verify_android_signing(signing, "test", expected)
-                with self.assertRaises(ValueError):
-                    verify_android_signing(signing, "production")
-                with self.assertRaises(ValueError):
-                    verify_android_signing(signing.replace("signers: 1", "signers: 2"), "test", digest)
-                with self.assertRaises(ValueError):
-                    verify_android_signing(signing.replace(": true", ": false"), "test", digest)
-        production = signing.replace("CN=Flectar Mail Test", "CN=Flectar")
-        verify_android_signing(production, "production")
+                        verify_android_signing(signing.replace("signers: 1", "signers: 2"), mode, digest)
+                    with self.assertRaises(ValueError):
+                        verify_android_signing(signing.replace(": true", ": false"), mode, digest)
+        # A plausible release subject cannot make a replacement key trusted.
+        production = signing.replace("CN=Flectar Mail Test", "CN=Flectar").replace(digest, "cd" * 32)
         with self.assertRaises(ValueError):
-            verify_android_signing(production.replace("CN=Flectar", "CN=Android Debug"), "production")
+            verify_android_signing(production, "production", digest)
 
     def test_linux_metadata_versions(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -261,10 +392,38 @@ class ReleaseTests(unittest.TestCase):
 
             # Exercise the AppImage shell packager up to its tool boundary,
             # without downloading deployment tools or compiling the application.
+            # Model the explicitly bundled X11 libraries without depending on
+            # the host's development packages or invoking real deployment tools.
+            libraries = root / "fixture-libs"
+            libraries.mkdir()
+            for name in ("libxkbcommon-x11.so.0", "libxkbcommon.so.0"):
+                shutil.copyfile("/bin/true", libraries / name)
+            pkg_config = root / "bin/pkg-config"
+            pkg_config.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "assert sys.argv[1:] == ['--variable=libdir', 'xkbcommon-x11']\n"
+                f"print({str(libraries)!r})\n"
+            )
+            pkg_config.chmod(0o755)
+            # The fixture ELFs carry no RUNPATH; report the one linuxdeploy sets.
+            readelf = root / "bin/readelf"
+            readelf.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "assert sys.argv[1] == '-d'\n"
+                "runpath = '$ORIGIN/../lib' if sys.argv[2].endswith('/usr/bin/flectar-mail') else '$ORIGIN'\n"
+                "print(f' 0x000000000000001d (RUNPATH)            Library runpath: [{runpath}]')\n"
+            )
+            readelf.chmod(0o755)
             deploy = root / "bin/linuxdeploy"
             deploy.write_text('''#!/usr/bin/env python3
-import pathlib, sys
+import pathlib, shutil, sys
 appdir = pathlib.Path(sys.argv[sys.argv.index("--appdir") + 1])
+library = pathlib.Path(sys.argv[sys.argv.index("--library") + 1])
+assert library.name == "libxkbcommon-x11.so.0"
+for name in ("libxkbcommon-x11.so.0", "libxkbcommon.so.0"):
+    shutil.copyfile(library.parent / name, appdir / "usr/lib" / name)
 (appdir / "com.flectar.mail.desktop").symlink_to("usr/share/applications/com.flectar.mail.desktop")
 ''')
             pack = root / "bin/appimagetool"
@@ -350,7 +509,7 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             dist = root / "dist"
             prepare(source, dist, "0.1.0-beta.1")
             self.assertEqual(len(list(dist.iterdir())), 12)
-            self.assertTrue((dist / "flectar-mail-0.1.0-beta.1-android-arm64-test.apk").is_file())
+            self.assertTrue((dist / "flectar-mail-0.1.0-beta.1-android-arm64.apk").is_file())
             # GitHub must not rewrite a download name after we checksum it.
             deb = dist / "flectar-mail_0.1.0.beta.1_amd64.deb"
             self.assertEqual(deb.read_bytes(), (source / names[1]).read_bytes())
@@ -374,20 +533,23 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             with self.assertRaises(ValueError):
                 prepare(source, root / "duplicate", "0.1.0-beta.1")
 
-            # Stable releases keep the ten desktop downloads, even if the
-            # input folder happens to contain test APKs from another step.
+            # Stable releases also require exactly one signed Android APK.
+            (source / missing.name).unlink()
             (source / "linux/deb/flectar-mail_0.1.0~beta.1_amd64.deb").rename(
                 source / "linux/deb/flectar-mail_0.1.0_amd64.deb"
             )
             stable_dist = root / "stable"
             prepare(source, stable_dist, "0.1.0")
-            self.assertEqual(len(list(stable_dist.iterdir())), 11)
+            self.assertEqual(len(list(stable_dist.iterdir())), 12)
             self.assertTrue((stable_dist / "flectar-mail_0.1.0_amd64.deb").is_file())
-            self.assertFalse(list(stable_dist.glob("*.apk")))
+            self.assertTrue((stable_dist / "flectar-mail-0.1.0-android-arm64.apk").is_file())
+            missing.unlink()
+            with self.assertRaises(ValueError):
+                prepare(source, root / "missing-stable", "0.1.0")
 
     def test_notes_distinguish_android_preview(self):
-        self.assertIn("test-signed", release_assets.release_notes("0.1.0-beta.1"))
-        self.assertIn("prereleases only", release_assets.release_notes("0.1.0"))
+        for version in ("0.1.0-beta.1", "0.1.0"):
+            self.assertIn("previews and stable releases share one signing", release_assets.release_notes(version))
         self.assertIn("does not receive Flathub updates", release_assets.release_notes("0.1.0-beta.1"))
         self.assertIn("build-provenance attestations", release_assets.release_notes("0.1.0-beta.1"))
         self.assertIn("Apple silicon and Intel", release_assets.release_notes("0.1.0-beta.1"))

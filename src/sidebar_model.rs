@@ -283,13 +283,14 @@ pub(super) fn refresh_sidebar_with_motion(state: &Rc<RefCell<InboxState>>, anima
     let gmail_account_ids = state
         .connected_accounts
         .iter()
-        .filter(|account| account.provider == Provider::Gmail)
+        .filter(|account| account.mail_protocol == MailProtocol::Gmail)
         .filter_map(|account| i32::try_from(account.id).ok())
         .collect::<HashSet<_>>();
     let rows = if filtering {
         make_filtered_sidebar_rows(mailboxes, labels, query, &gmail_account_ids)
     } else {
         make_sidebar_rows(
+            SidebarLayout::for_account_count(state.mail_accounts().len()),
             mailboxes,
             make_mailbox_rows(
                 &state.unified_mailboxes,
@@ -520,22 +521,72 @@ fn account_label_rows(
     rows
 }
 
+/// Whether the sidebar leads with cross-account shortcuts. With one account
+/// they would only duplicate that account's own mailboxes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SidebarLayout {
+    Unified,
+    SingleAccount,
+}
+
+impl SidebarLayout {
+    /// Every connected account counts, including ones whose folders have not
+    /// been discovered yet or that are currently offline.
+    pub(super) fn for_account_count(count: usize) -> Self {
+        if count > 1 {
+            Self::Unified
+        } else {
+            Self::SingleAccount
+        }
+    }
+}
+
+/// Unified layout: shortcuts, shared navigation, then accounts. Single-account
+/// layout: the account first, then the shared categories and labels that
+/// remain reachable without the unified section.
 fn make_sidebar_rows(
+    layout: SidebarLayout,
     mailboxes: Vec<MailboxRow>,
     unified: Vec<MailboxRow>,
     labels: Vec<MailLabelRow>,
     gmail_account_ids: &HashSet<i32>,
     collapsed: &HashSet<String>,
 ) -> Vec<SidebarRow> {
+    let shared = shared_navigation_rows(&labels, collapsed);
+    let accounts = account_rows(mailboxes, &labels, gmail_account_ids, collapsed);
+    match layout {
+        SidebarLayout::Unified => {
+            let mut rows = unified_rows(unified);
+            rows.extend(shared);
+            rows.push(row(SidebarRowKind::AccountsHeading, "accounts-heading"));
+            rows.extend(accounts);
+            rows
+        }
+        SidebarLayout::SingleAccount => {
+            let mut rows = accounts;
+            rows.extend(shared);
+            rows
+        }
+    }
+}
+
+fn unified_rows(unified: Vec<MailboxRow>) -> Vec<SidebarRow> {
     use SidebarRowKind as Kind;
-    let mut rows = vec![row(Kind::UnifiedHeading, "unified-heading")];
-    rows.push(row(Kind::UnifiedInbox, "unified-inbox"));
+    let mut rows = vec![
+        row(Kind::UnifiedHeading, "unified-heading"),
+        row(Kind::UnifiedInbox, "unified-inbox"),
+    ];
     rows.extend(unified.into_iter().map(|mailbox| SidebarRow {
         key: format!("unified:{}", mailbox.scope).into(),
         mailbox,
         ..row(Kind::UnifiedMailbox, "")
     }));
-    rows.push(section(Kind::CategoriesSection, "categories", collapsed));
+    rows
+}
+
+fn shared_navigation_rows(labels: &[MailLabelRow], collapsed: &HashSet<String>) -> Vec<SidebarRow> {
+    use SidebarRowKind as Kind;
+    let mut rows = vec![section(Kind::CategoriesSection, "categories", collapsed)];
     if !collapsed.contains("categories") {
         rows.push(row(Kind::Important, "important"));
         rows.push(row(Kind::Other, "other"));
@@ -568,7 +619,17 @@ fn make_sidebar_rows(
             );
         }
     }
-    rows.push(row(Kind::AccountsHeading, "accounts-heading"));
+    rows
+}
+
+fn account_rows(
+    mailboxes: Vec<MailboxRow>,
+    labels: &[MailLabelRow],
+    gmail_account_ids: &HashSet<i32>,
+    collapsed: &HashSet<String>,
+) -> Vec<SidebarRow> {
+    use SidebarRowKind as Kind;
+    let mut rows = Vec::new();
     // Group once by stable account id, not display text. Preserve account and
     // folder order even when providers return interleaved mailbox entries.
     let mut accounts = Vec::new();
@@ -625,7 +686,7 @@ fn make_sidebar_rows(
                 });
                 if !collapsed.contains(&label_key) {
                     rows.extend(account_label_rows(
-                        &labels,
+                        labels,
                         account_id,
                         gmail_account_ids.contains(&account_id),
                         collapsed,
@@ -694,6 +755,106 @@ mod tests {
     }
 
     #[test]
+    fn single_account_folders_precede_shared_navigation_without_duplicates() {
+        let labels = vec![
+            MailLabelRow {
+                id: 11,
+                account_id: 1,
+                name: "Travel".into(),
+                ..Default::default()
+            },
+            MailLabelRow {
+                id: 12,
+                is_global: true,
+                name: "Projects".into(),
+                ..Default::default()
+            },
+            MailLabelRow {
+                id: 13,
+                is_auto: true,
+                name: "Newsletters".into(),
+                ..Default::default()
+            },
+        ];
+        for count in 0..=2 {
+            let rows = make_sidebar_rows(
+                SidebarLayout::for_account_count(count as usize),
+                accounts(count, 7),
+                vec![MailboxRow {
+                    scope: "Unified Starred".into(),
+                    ..Default::default()
+                }],
+                labels.clone(),
+                &HashSet::new(),
+                &HashSet::new(),
+            );
+            for kind in [
+                Kind::UnifiedHeading,
+                Kind::UnifiedInbox,
+                Kind::UnifiedMailbox,
+                Kind::AccountsHeading,
+            ] {
+                assert_eq!(
+                    rows.iter().filter(|row| row.kind == kind).count(),
+                    usize::from(count > 1)
+                );
+            }
+            for kind in [
+                Kind::Category,
+                Kind::GlobalLabel,
+                Kind::Important,
+                Kind::Other,
+            ] {
+                assert_eq!(rows.iter().filter(|row| row.kind == kind).count(), 1);
+            }
+            assert_eq!(
+                rows.iter().filter(|row| row.kind == Kind::Folder).count(),
+                (count * 7) as usize
+            );
+            if count == 1 {
+                assert_eq!(rows[0].kind, Kind::Account);
+                let last_account_row = rows
+                    .iter()
+                    .rposition(|row| row.kind == Kind::AccountLabel)
+                    .unwrap();
+                let shared = rows
+                    .iter()
+                    .position(|row| row.kind == Kind::CategoriesSection)
+                    .unwrap();
+                assert!(last_account_row < shared);
+            }
+        }
+    }
+
+    #[test]
+    fn changing_account_count_preserves_collapsed_sections_and_row_identity() {
+        let collapsed = HashSet::from(["account:1".into(), "categories".into()]);
+        let model = SidebarModel::default();
+        for count in [2, 1, 2, 0, 1] {
+            let rows = make_sidebar_rows(
+                SidebarLayout::for_account_count(count as usize),
+                accounts(count, 7),
+                vec![],
+                vec![],
+                &HashSet::new(),
+                &collapsed,
+            );
+            model.reconcile(rows.clone());
+            assert_rows_equal(&model.iter().collect::<Vec<_>>(), &rows);
+            assert!(
+                !rows
+                    .iter()
+                    .any(|row| row.kind == Kind::Folder && row.mailbox.account_id == 1)
+            );
+            assert!(!rows.iter().any(|row| row.kind == Kind::Important));
+            if count > 0 {
+                let account = rows.iter().find(|row| row.key == "account:1").unwrap();
+                assert!(!account.open);
+            }
+        }
+    }
+
+    #[test]
     fn new_account_labels_start_collapsed_without_collapsing_accounts() {
         let mut initialized = HashSet::new();
         let mut collapsed = defaults();
@@ -727,6 +888,7 @@ mod tests {
     fn every_folder_occurs_once_and_stays_with_its_account() {
         for (account_count, folder_count) in [(1, 750), (5, 150), (50, 150)] {
             let rows = make_sidebar_rows(
+                SidebarLayout::for_account_count(account_count as usize),
                 accounts(account_count, folder_count),
                 vec![],
                 vec![],
@@ -759,7 +921,14 @@ mod tests {
     fn account_order_and_interleaved_folders_use_ids_not_display_names() {
         let data = accounts(2, 2);
         let interleaved = [3, 1, 4, 0, 5, 2].map(|i| data[i].clone()).to_vec();
-        let rows = make_sidebar_rows(interleaved, vec![], vec![], &HashSet::new(), &defaults());
+        let rows = make_sidebar_rows(
+            SidebarLayout::Unified,
+            interleaved,
+            vec![],
+            vec![],
+            &HashSet::new(),
+            &defaults(),
+        );
         let ids: Vec<_> = rows
             .iter()
             .filter(|row| row.kind == Kind::Account || row.kind == Kind::Folder)
@@ -795,6 +964,7 @@ mod tests {
             },
         ];
         let rows = make_sidebar_rows(
+            SidebarLayout::Unified,
             accounts(2, 1),
             vec![],
             labels,
@@ -819,6 +989,7 @@ mod tests {
     #[test]
     fn gmail_creates_labels_while_other_accounts_create_folders() {
         let rows = make_sidebar_rows(
+            SidebarLayout::Unified,
             accounts(2, 0),
             vec![],
             vec![],
@@ -849,7 +1020,14 @@ mod tests {
     fn account_without_root_creation_right_has_no_new_folder_action() {
         let mut rows_input = accounts(1, 0);
         rows_input[0].can_create_children = false;
-        let rows = make_sidebar_rows(rows_input, vec![], vec![], &HashSet::new(), &HashSet::new());
+        let rows = make_sidebar_rows(
+            SidebarLayout::SingleAccount,
+            rows_input,
+            vec![],
+            vec![],
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         assert!(!rows.iter().any(|row| row.kind == Kind::NewFolder));
     }
 
@@ -869,6 +1047,7 @@ mod tests {
             label(4, "Orphan/Child"),
         ];
         let rows = make_sidebar_rows(
+            SidebarLayout::SingleAccount,
             accounts(1, 0),
             vec![],
             labels.clone(),
@@ -898,6 +1077,7 @@ mod tests {
         );
 
         let collapsed = make_sidebar_rows(
+            SidebarLayout::SingleAccount,
             accounts(1, 0),
             vec![],
             labels,
@@ -965,6 +1145,7 @@ mod tests {
         ];
         let mut collapsed = HashSet::from(["account:1".into()]);
         let open = make_sidebar_rows(
+            SidebarLayout::Unified,
             accounts(2, 3),
             vec![],
             labels.clone(),
@@ -980,6 +1161,7 @@ mod tests {
         collapsed.insert("categories".into());
         collapsed.insert("global-labels".into());
         let closed = make_sidebar_rows(
+            SidebarLayout::Unified,
             accounts(2, 3),
             vec![],
             labels.clone(),
@@ -995,11 +1177,18 @@ mod tests {
         collapsed.remove("global-labels");
         assert_rows_equal(
             &open,
-            &make_sidebar_rows(accounts(2, 3), vec![], labels, &HashSet::new(), &collapsed),
+            &make_sidebar_rows(
+                SidebarLayout::Unified,
+                accounts(2, 3),
+                vec![],
+                labels,
+                &HashSet::new(),
+                &collapsed,
+            ),
         );
         let mut reordered = accounts(2, 3);
         reordered.rotate_left(4);
-        let rows = make_sidebar_rows(reordered, vec![], vec![], &HashSet::new(), &collapsed);
+        let rows = make_sidebar_rows(SidebarLayout::Unified, reordered, vec![], vec![], &HashSet::new(), &collapsed);
         assert!(!rows.iter().find(|row| row.key == "account:1").unwrap().open);
         assert!(rows.iter().find(|row| row.key == "account:2").unwrap().open);
     }
@@ -1280,10 +1469,16 @@ mod interaction_tests {
         let app = AppWindow::new().unwrap();
         app.set_startup_ready(true);
         app.set_startup_hydrated(true);
-        app.set_connected_accounts(ModelRc::new(VecModel::from(vec![AccountRow {
-            id: 1,
-            ..Default::default()
-        }])));
+        app.set_connected_accounts(ModelRc::new(VecModel::from(vec![
+            AccountRow {
+                id: 1,
+                ..Default::default()
+            },
+            AccountRow {
+                id: 2,
+                ..Default::default()
+            },
+        ])));
         app.window().set_size(slint::PhysicalSize::new(1320, 800));
         let mut mailboxes = vec![MailboxRow {
             account_id: 1,
@@ -1299,6 +1494,12 @@ mod interaction_tests {
             expanded: true,
             ..Default::default()
         }));
+        mailboxes.push(MailboxRow {
+            account_id: 2,
+            label: "Second account".into(),
+            is_account: true,
+            ..Default::default()
+        });
         let collapsed = Rc::new(RefCell::new(HashSet::from([
             "categories".into(),
             "global-labels".into(),
@@ -1308,6 +1509,7 @@ mod interaction_tests {
         animation.reconcile(
             &model,
             make_sidebar_rows(
+                SidebarLayout::Unified,
                 mailboxes.clone(),
                 vec![],
                 vec![],
@@ -1333,6 +1535,7 @@ mod interaction_tests {
             animation_for_click.reconcile(
                 &model_for_click,
                 make_sidebar_rows(
+                    SidebarLayout::Unified,
                     mailboxes.clone(),
                     vec![],
                     vec![],

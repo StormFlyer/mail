@@ -22,9 +22,9 @@ export component RecipientRow inherits Rectangle {
     height: 40px;
     background: root.background-color;
 
-    Text {
+    row-label := Text {
         x: 12px;
-        width: 34px;
+        width: max(34px, self.preferred-width);
         height: parent.height;
         text: root.label;
         color: field.has-focus ? root.focus-color : root.label-color;
@@ -34,7 +34,7 @@ export component RecipientRow inherits Rectangle {
     }
 
     Text {
-        x: 50px;
+        x: row-label.x + row-label.width + 4px;
         width: max(0px, parent.width - self.x - root.right-padding);
         height: parent.height;
         visible: root.text == "";
@@ -46,7 +46,7 @@ export component RecipientRow inherits Rectangle {
     }
 
     field := TextInput {
-        x: 50px;
+        x: row-label.x + row-label.width + 4px;
         width: max(0px, parent.width - self.x - root.right-padding);
         height: parent.height;
         text <=> root.text;
@@ -162,6 +162,7 @@ export component ModeButton inherits Rectangle {
     in property <color> selected-text-color;
     in property <color> hover-color;
     in property <color> selected-background;
+    out property <length> label-width: mode-label.preferred-width;
     callback clicked;
 
     width: 58px;
@@ -169,7 +170,7 @@ export component ModeButton inherits Rectangle {
     border-radius: 5px;
     background: root.selected ? root.selected-background : hit.has-hover ? root.hover-color : transparent;
 
-    Text {
+    mode-label := Text {
         text: root.text;
         color: root.selected ? root.selected-text-color : root.text-color;
         font-size: TypeScale.caption;

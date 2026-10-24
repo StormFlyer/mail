@@ -198,8 +198,15 @@ pub(crate) fn select_backend(
 pub(crate) fn restart_cpu(error: &dyn std::error::Error) -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("GPU initialization failed; restarting once in CPU / Low Memory mode: {error}");
     let mut command = std::process::Command::new(std::env::current_exe()?);
+    // The fallback reopens the window rather than the tray: GPU failures
+    // surface while the window is being created or shown, and a hidden
+    // restart could leave the user with neither.
     command
-        .args(std::env::args_os().skip(1))
+        .args(
+            std::env::args_os()
+                .skip(1)
+                .filter(|argument| argument != crate::autostart::BACKGROUND_ARGUMENT),
+        )
         .env("FLECTAR_GPU_FALLBACK", "1");
     #[cfg(unix)]
     {

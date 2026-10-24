@@ -542,11 +542,14 @@ pub(super) fn complete_compose_recipient(
 pub(super) fn clear_compose(
     app: &AppWindow,
     files: &Rc<RefCell<Vec<ComposeFile>>>,
+    session: &Cell<u64>,
     document: &Rc<RefCell<RichComposeDocument>>,
     editor: &Rc<RefCell<LazyComposeEditor>>,
     contacts: &Rc<RefCell<Vec<flectar_mail_core::models::Address>>>,
 ) {
     files.borrow_mut().clear();
+    // A picker still open for this composer must not attach to the next one.
+    session.set(session.get().wrapping_add(1));
     app.global::<AccountMailPreferences>()
         .invoke_composer_reset();
     document.borrow_mut().reset();

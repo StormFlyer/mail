@@ -23,6 +23,7 @@ pub fn launch_context() -> Result<crate::PlatformContext, flectar_mail_core::err
         )
     })?;
     Ok(crate::PlatformContext {
+        external_urls: crate::ExternalUrlOpener::default(),
         paths: flectar_mail_core::config::Paths::new(
             root.join("Library/Application Support/Flectar"),
             root.join("Library/Caches/Flectar"),
@@ -30,9 +31,7 @@ pub fn launch_context() -> Result<crate::PlatformContext, flectar_mail_core::err
         documents: Arc::new(documents::IosDocuments),
         // The Keychain bridge is not integrated yet; account setup reports
         // that instead of storing secrets anywhere else.
-        credentials: Arc::new(
-            flectar_mail_core::accounts::credentials::UnavailableCredentialStore,
-        ),
+        credentials: Arc::new(flectar_mail_core::accounts::credentials::UnavailableCredentialStore),
         oauth_redirects: Arc::new(
             flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default(),
         ),

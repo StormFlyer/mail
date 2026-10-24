@@ -12,7 +12,11 @@ export component CopyableDiagnostic inherits Rectangle {
     height: max(28px, diagnostic-text.preferred-height);
     background: transparent;
 
+    // The row is exactly as tall as its text or the copy button, so vertical
+    // box padding would cut the text off.
     HorizontalBox {
+        padding-top: 0px;
+        padding-bottom: 0px;
         spacing: 6px;
 
         diagnostic-text := TextInput {
@@ -20,6 +24,7 @@ export component CopyableDiagnostic inherits Rectangle {
             text: root.text;
             color: root.text-color;
             font-size: root.font-size;
+            vertical-alignment: center;
             read-only: true;
             single-line: false;
             wrap: word-wrap;

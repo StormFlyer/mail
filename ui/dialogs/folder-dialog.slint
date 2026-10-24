@@ -34,7 +34,10 @@ export component FolderDialog inherits Rectangle {
 
     dialog-card := Rectangle {
         width: min(420px, parent.width - 32px);
-        height: root.mode == "delete" ? 194px : 224px;
+        // The message and name field follow the heading, which grows with the platform font.
+        height: root.mode == "delete"
+            ? folder-message.y + folder-message.height + 86px
+            : folder-name-frame.y + folder-name-frame.height + 86px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         border-radius: 12px;
@@ -42,11 +45,11 @@ export component FolderDialog inherits Rectangle {
         border-color: root.ui-border-color;
         background: root.surface-color;
 
-        Text {
+        folder-heading := Text {
             x: 22px;
             y: 20px;
             width: parent.width - 44px;
-            height: 28px;
+            height: max(28px, self.preferred-height);
             text: root.mode == "create" && root.item-kind == "label" ? @tr("New label")
                 : root.mode == "create" ? @tr("New folder")
                 : root.mode == "rename" && root.item-kind == "label" ? @tr("Rename label")
@@ -59,11 +62,11 @@ export component FolderDialog inherits Rectangle {
             overflow: elide;
         }
 
-        Text {
+        folder-message := Text {
             x: 22px;
-            y: 54px;
+            y: folder-heading.y + folder-heading.height + 6px;
             width: parent.width - 44px;
-            height: root.mode == "delete" ? 54px : 34px;
+            height: max(root.mode == "delete" ? 54px : 34px, self.preferred-height);
             text: root.mode == "delete"
                 ? root.item-kind == "label"
                     ? root.has-descendants
@@ -87,7 +90,7 @@ export component FolderDialog inherits Rectangle {
         folder-name-frame := Rectangle {
             visible: root.mode != "delete";
             x: 22px;
-            y: 98px;
+            y: folder-message.y + folder-message.height + 10px;
             width: parent.width - 44px;
             height: 40px;
             border-radius: 6px;

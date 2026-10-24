@@ -197,15 +197,15 @@ export component EmailTemplates inherits Rectangle {
 
                     for template[index] in root.templates : Rectangle {
                         width: max(0px, templates-list.visible-width - 12px);
-                        height: 64px;
+                        height: template-detail.y + template-detail.height + 12px;
                         border-radius: 7px;
                         background: template-hit.has-hover ? root.hover-color : transparent;
 
-                        Text {
+                        template-name := Text {
                             x: 10px;
                             y: 9px;
                             width: max(0px, parent.width - 162px);
-                            height: 22px;
+                            height: max(22px, self.preferred-height);
                             text: template.name;
                             color: root.title-color;
                             font-size: TypeScale.body;
@@ -213,11 +213,11 @@ export component EmailTemplates inherits Rectangle {
                             overflow: elide;
                         }
 
-                        Text {
+                        template-detail := Text {
                             x: 10px;
-                            y: 32px;
+                            y: template-name.y + template-name.height + 1px;
                             width: max(0px, parent.width - 162px);
-                            height: 20px;
+                            height: max(20px, self.preferred-height);
                             text: template.shortcut == ""
                                 ? (template.subject == "" ? @tr("No subject") : template.subject)
                                 : "/" + template.shortcut + (template.subject == "" ? "" : " · " + template.subject);
@@ -313,7 +313,7 @@ export component EmailTemplates inherits Rectangle {
                 }
 
                 if root.notice != "" : Text {
-                    height: 22px;
+                    height: max(22px, self.preferred-height);
                     text: root.notice;
                     color: root.notice-is-error ? #d04a43 : root.accent-color;
                     font-size: TypeScale.caption;

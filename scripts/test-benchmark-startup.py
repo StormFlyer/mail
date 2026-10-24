@@ -32,11 +32,14 @@ class SmapsParsingTests(unittest.TestCase):
                 while True:
                     executable = benchmark.runtime_executable(process.pid)
                     if executable == Path(sleep).resolve():
-                        break
+                        # /proc/pid/exe changes at exec before the dynamic
+                        # loader necessarily faults in the executable's pages.
+                        report = benchmark.read_proc_mappings(process.pid, executable)
+                        if report["by_kind"].get("executable", {}).get("rss_kib", 0) > 0:
+                            break
                     if time.monotonic() >= deadline:
-                        self.fail("launcher did not exec the target ELF")
+                        self.fail("target ELF did not become resident after exec")
                     time.sleep(0.01)
-                report = benchmark.read_proc_mappings(process.pid, executable)
                 self.assertGreater(report["by_kind"]["executable"]["rss_kib"], 0)
                 self.assertNotIn(directory, json.dumps(report))
             finally:

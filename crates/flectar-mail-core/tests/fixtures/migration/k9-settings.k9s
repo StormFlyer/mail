@@ -1,0 +1,112 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<k9settings version="112" format="1">
+  <global>
+    <value key="theme">DARK</value>
+  </global>
+  <accounts>
+    <account uuid="0d3a8a1e-5b0f-4c55-9a3e-2f6c1f9e7b21">
+      <name>Work</name>
+      <incoming-server type="IMAP">
+        <host>imap.example.com</host>
+        <port>993</port>
+        <connection-security>SSL_TLS_REQUIRED</connection-security>
+        <authentication-type>PLAIN</authentication-type>
+        <username>jane@example.com</username>
+        <password>must-never-be-read</password>
+        <extra>
+          <value key="autoDetectNamespace">true</value>
+        </extra>
+      </incoming-server>
+      <outgoing-server type="SMTP">
+        <host>smtp.example.com</host>
+        <connection-security>STARTTLS_REQUIRED</connection-security>
+        <authentication-type>CRAM_MD5</authentication-type>
+        <username>jane@example.com</username>
+      </outgoing-server>
+      <settings>
+        <value key="chipColor">#2196f3</value>
+        <value key="displayCount">25</value>
+      </settings>
+      <identities>
+        <identity>
+          <name>Jane Doe</name>
+          <email>jane@example.com</email>
+          <description>Main</description>
+          <settings>
+            <value key="signature">Jane &amp; Co.
+Example Ltd</value>
+            <value key="signatureUse">true</value>
+            <value key="signatureIsHtml">false</value>
+            <value key="replyTo"></value>
+          </settings>
+        </identity>
+        <identity>
+          <name>Support</name>
+          <email>support@example.com</email>
+          <settings>
+            <value key="signature">unused</value>
+            <value key="signatureUse">false</value>
+            <value key="replyTo">help@example.com</value>
+          </settings>
+        </identity>
+      </identities>
+      <folders>
+        <folder name="INBOX">
+          <value key="syncEnabled">true</value>
+        </folder>
+      </folders>
+    </account>
+    <account uuid="5b1c2d3e-0000-4000-8000-000000000002">
+      <name>Gmail</name>
+      <incoming-server type="IMAP">
+        <host>imap.gmail.com</host>
+        <port>993</port>
+        <connection-security>SSL_TLS_REQUIRED</connection-security>
+        <authentication-type>XOAUTH2</authentication-type>
+        <username>jane.doe@gmail.com</username>
+      </incoming-server>
+      <outgoing-server type="SMTP">
+        <host>smtp.gmail.com</host>
+        <port>465</port>
+        <connection-security>SSL_TLS_REQUIRED</connection-security>
+        <authentication-type>XOAUTH2</authentication-type>
+        <username>jane.doe@gmail.com</username>
+      </outgoing-server>
+      <identities>
+        <identity>
+          <name>Jane</name>
+          <email>jane.doe@gmail.com</email>
+        </identity>
+        <identity>
+          <name>Jane (alias)</name>
+          <email>jane@custom.example</email>
+        </identity>
+      </identities>
+    </account>
+    <account uuid="5b1c2d3e-0000-4000-8000-000000000003">
+      <name>Old POP</name>
+      <incoming-server type="POP3">
+        <host>pop.example.net</host>
+        <port>995</port>
+        <connection-security>SSL_TLS_REQUIRED</connection-security>
+        <authentication-type>PLAIN</authentication-type>
+        <username>old</username>
+      </incoming-server>
+      <outgoing-server type="SMTP">
+        <host>smtp.example.net</host>
+        <connection-security>NONE</connection-security>
+        <authentication-type>PLAIN</authentication-type>
+        <username>old</username>
+      </outgoing-server>
+      <settings>
+        <value key="deletePolicy">DELETE</value>
+      </settings>
+      <identities>
+        <identity>
+          <name>Old</name>
+          <email>old@example.net</email>
+        </identity>
+      </identities>
+    </account>
+  </accounts>
+</k9settings>

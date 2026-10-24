@@ -36,28 +36,29 @@ export component CalendarEventDialog inherits Rectangle {
                 accessible-role: groupbox;
                 accessible-label: root.calendar_event_editing ? @tr("Edit calendar event") : @tr("New calendar event");
                 x: root.compact ? 0px : (parent.width - 420px) / 2;
-                y: root.compact ? 0px : (parent.height - 390px) / 2;
+                y: root.compact ? 0px : (parent.height - self.height) / 2;
                 width: root.compact ? parent.width : 420px;
-                height: root.compact ? parent.height : 390px;
+                // Fields stack below their labels, which grow with the platform font.
+                height: root.compact ? parent.height : event-divider.y + 86px;
                 border-radius: root.compact ? 0px : 12px;
                 border-width: root.compact ? 0px : 1px;
                 border-color: root.border;
                 background: root.surface;
                 TouchArea { }
 
-                Text { x: 24px; y: 22px; width: parent.width - 48px; height: 28px; text: root.calendar_event_editing ? @tr("Edit event") : @tr("New event"); color: root.title-color; font-size: TypeScale.title-small; font-weight: 700; }
-                Text { x: 24px; y: 66px; width: parent.width - 48px; height: 18px; text: @tr("TITLE"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
-                LineEdit { x: 24px; y: 88px; width: parent.width - 48px; height: root.compact ? 44px : 38px; text: root.calendar_event_title; placeholder-text: @tr("Event title"); edited(value) => { root.calendar_event_title = value; } }
-                Text { x: 24px; y: 142px; width: (parent.width - 56px) / 2; height: 18px; text: @tr("DATE"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
-                Text { x: parent.width / 2 + 4px; y: 142px; width: (parent.width - 56px) / 2; height: 18px; text: @tr("START TIME"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
-                LineEdit { x: 24px; y: 164px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_date; placeholder-text: @tr("YYYY-MM-DD"); edited(value) => { root.calendar_event_date = value; } }
-                LineEdit { x: parent.width / 2 + 4px; y: 164px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_time; placeholder-text: @tr("09:00"); edited(value) => { root.calendar_event_time = value; } }
-                Text { x: 24px; y: 218px; width: parent.width - 48px; height: 18px; text: @tr("DURATION (MINUTES)"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
-                LineEdit { x: 24px; y: 240px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_duration; placeholder-text: @tr("60"); input-type: InputType.number; edited(value) => { root.calendar_event_duration = value; } }
-                Text { x: parent.width / 2 + 4px; y: 218px; width: (parent.width - 56px) / 2; height: 18px; text: @tr("CALENDAR"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                event-heading := Text { x: 24px; y: 22px; width: parent.width - 48px; height: max(28px, self.preferred-height); text: root.calendar_event_editing ? @tr("Edit event") : @tr("New event"); color: root.title-color; font-size: TypeScale.title-small; font-weight: 700; }
+                title-label := Text { x: 24px; y: event-heading.y + event-heading.height + 16px; width: parent.width - 48px; height: max(18px, self.preferred-height); text: @tr("TITLE"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                title-field := LineEdit { x: 24px; y: title-label.y + title-label.height + 4px; width: parent.width - 48px; height: root.compact ? 44px : 38px; text: root.calendar_event_title; placeholder-text: @tr("Event title"); edited(value) => { root.calendar_event_title = value; } }
+                date-label := Text { x: 24px; y: title-field.y + 54px; width: (parent.width - 56px) / 2; height: max(18px, max(self.preferred-height, start-label.preferred-height)); wrap: word-wrap; text: @tr("DATE"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                start-label := Text { x: parent.width / 2 + 4px; y: date-label.y; width: (parent.width - 56px) / 2; height: date-label.height; wrap: word-wrap; text: @tr("START TIME"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                date-field := LineEdit { x: 24px; y: date-label.y + date-label.height + 4px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_date; placeholder-text: @tr("YYYY-MM-DD"); edited(value) => { root.calendar_event_date = value; } }
+                LineEdit { x: parent.width / 2 + 4px; y: date-field.y; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_time; placeholder-text: @tr("09:00"); edited(value) => { root.calendar_event_time = value; } }
+                duration-label := Text { x: 24px; y: date-field.y + 54px; width: (parent.width - 56px) / 2; height: max(18px, max(self.preferred-height, calendar-label.preferred-height)); wrap: word-wrap; text: @tr("DURATION (MINUTES)"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                duration-field := LineEdit { x: 24px; y: duration-label.y + duration-label.height + 4px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_duration; placeholder-text: @tr("60"); input-type: InputType.number; edited(value) => { root.calendar_event_duration = value; } }
+                calendar-label := Text { x: parent.width / 2 + 4px; y: duration-label.y; width: (parent.width - 56px) / 2; height: duration-label.height; wrap: word-wrap; text: @tr("CALENDAR"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
                 HorizontalBox {
                     x: parent.width / 2 + 4px;
-                    y: 240px;
+                    y: duration-field.y;
                     width: (parent.width - 56px) / 2;
                     height: root.compact ? 44px : 38px;
                     spacing: 8px;
@@ -78,12 +79,12 @@ export component CalendarEventDialog inherits Rectangle {
                         }
                     }
                 }
-                Rectangle { x: 0px; y: root.compact ? parent.height - 72px : 304px; width: parent.width; height: 1px; background: root.border-subtle; }
-                Button { x: parent.width - 196px; y: root.compact ? parent.height - 60px : 328px; width: 82px; height: root.compact ? 44px : 40px; text: @tr("Cancel"); clicked => { root.calendar_editor_open = false; } }
-                Button {
-                    x: parent.width - 106px;
-                    y: root.compact ? parent.height - 60px : 328px;
-                    width: 82px;
+                event-divider := Rectangle { x: 0px; y: root.compact ? root.height - 72px : duration-field.y + 64px; width: parent.width; height: 1px; background: root.border-subtle; }
+                Button { x: save-button.x - self.width - 8px; y: save-button.y; width: max(82px, self.content-width); height: root.compact ? 44px : 40px; text: @tr("Cancel"); clicked => { root.calendar_editor_open = false; } }
+                save-button := Button {
+                    x: parent.width - self.width - 24px;
+                    y: root.compact ? root.height - 60px : event-divider.y + 24px;
+                    width: max(82px, self.content-width);
                     height: root.compact ? 44px : 40px;
                     text: root.calendar_event_editing ? @tr("Save") : @tr("Create");
                     primary: true;

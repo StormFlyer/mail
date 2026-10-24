@@ -51,12 +51,30 @@ host-provided service:
 | `documents` | Native file dialogs | Implements `documents::DocumentProvider` with the system picker |
 | `credentials` | System keychain (`SystemCredentialStore`) | Implements `CredentialStore` with the platform keystore |
 | `oauth_redirects` | Loopback redirect broker | Implements `OAuthRedirectBroker` (app links, custom schemes) |
+| `external_urls` | System URL launcher | `ExternalUrlOpener::new` with the host's native URL bridge |
 
 Mobile hosts use `PlatformContext::app_private(data_root, cache_dir, documents,
 credentials, oauth_redirects)`, which keeps durable data below
 `data_root/data`. A host without secure storage yet must pass
 `UnavailableCredentialStore` so account setup reports the gap. Never fall back
 to a plaintext store.
+
+The constructors default `external_urls` to the system URL launcher. A host
+without desktop launchers configures its context before calling `run`:
+
+```rust,ignore
+platform.external_urls = flectar_mail::ExternalUrlOpener::new(bridge::open_url);
+```
+
+This replaces the process-global `set_external_url_opener` registration. The
+callback may capture host state; cloned contexts share it. Mail links invoke it
+on the application event loop, and browser-based OAuth (including retries)
+invokes it on a worker thread. The host must marshal calls onto any thread its
+native API requires and return promptly after submitting the request. Errors
+reach the UI without falling back to a desktop launcher. Email links retain
+their `http`/`https`/`mailto`/`tel` allowlist, while browser authorization requires
+a parsed HTTPS URL with a host. The existing in-app `mailto` compose route and
+native OAuth broker flows remain in place.
 
 Each mobile operating system also has a module in `src/platform/` that
 provides these crate-internal items, which shared code calls without a `cfg`:
@@ -71,14 +89,24 @@ provides these crate-internal items, which shared code calls without a `cfg`:
 Hosts that launch through `src/desktop.rs` (desktop and iOS) also provide
 `platform::launch_context()`.
 
+`DocumentProvider::export()` receives files from two app-private places:
+generated files below the cache directory, and database snapshots, which are
+staged as one zip in `snapshot-staging` beside the data directory because Core
+refuses to write snapshots inside the data and cache roots. A host that
+restricts export sources must accept both.
+
+Shared code starts every picker and export through `documents::run_request`,
+which runs the provider future on the Tokio runtime while the UI event loop
+keeps going. A host that needs another threading policy while its picker is
+up changes that one function.
+
 ### Known gaps
 
-- Compose attachments, account backups and database snapshots still use
-  desktop file dialogs directly. On `mobile` they report that the host has no
-  picker. Routing them through `DocumentProvider` will make them available to
-  every host.
 - iOS has no Keychain-backed `CredentialStore` yet and uses
   `UnavailableCredentialStore`.
+- Mobile document transfers are capped at 512 MiB, so Android and iOS cannot
+  export database snapshots of larger mailboxes yet. The export fails before
+  the picker opens.
 
 ## Adding a platform
 

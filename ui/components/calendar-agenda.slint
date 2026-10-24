@@ -74,7 +74,9 @@ export component CalendarAgendaFilter inherits Rectangle {
                         mouse-drag-pan-enabled: root.compact;
                         for filter in root.filters: Rectangle {
                             width: filter-list.visible-width;
-                            height: 52px;
+                            height: filter.account == ""
+                                ? max(52px, filter-name.preferred-height + 28px)
+                                : max(52px, filter-account.y + filter-account.height + 6px);
                             border-radius: 6px;
                             background: filter-hit.has-hover ? AppTheme.muted-control-bg : transparent;
                             border-width: filter-keyboard.focus-visible ? 2px : 0px;
@@ -86,7 +88,7 @@ export component CalendarAgendaFilter inherits Rectangle {
                             forward-focus: filter-keyboard;
                             Rectangle {
                                 x: 8px;
-                                y: 17px;
+                                y: (parent.height - self.height) / 2;
                                 width: 18px;
                                 height: 18px;
                                 border-radius: 4px;
@@ -95,8 +97,8 @@ export component CalendarAgendaFilter inherits Rectangle {
                                 background: filter.checked ? CalendarAgendaStyle.color(filter.color-index) : transparent;
                                 Image { visible: filter.checked; x: 3px; y: 3px; width: 12px; height: 12px; source: @image-url("../icons/lucide/outline/check.svg"); colorize: white; }
                             }
-                            Text { x: 36px; y: filter.account == "" ? 14px : 6px; width: parent.width - 44px; height: 24px; text: filter.name; color: AppTheme.heading; font-size: TypeScale.body; overflow: elide; vertical-alignment: center; }
-                            Text { x: 36px; y: 29px; width: parent.width - 44px; height: 17px; text: filter.account; color: AppTheme.secondary; font-size: TypeScale.caption; overflow: elide; }
+                            filter-name := Text { x: 36px; y: filter.account == "" ? max(14px, (52px - self.height) / 2) : 6px; width: parent.width - 44px; height: max(24px, self.preferred-height); text: filter.name; color: AppTheme.heading; font-size: TypeScale.body; overflow: elide; vertical-alignment: center; }
+                            filter-account := Text { x: 36px; y: filter-name.y + filter-name.height - 1px; width: parent.width - 44px; height: max(17px, self.preferred-height); text: filter.account; color: AppTheme.secondary; font-size: TypeScale.caption; overflow: elide; }
                             filter-keyboard := FocusVisibleScope {
                                 key-pressed(event) => {
                                     if event.text == Key.Return || event.text == Key.Space { root.toggled(filter.id, !filter.checked); return accept; }
@@ -192,7 +194,7 @@ export component CalendarAgenda inherits Rectangle {
                     y: 24px;
                     width: parent.width;
                     height: 44px;
-                    background: AppTheme.sidebar-bg;
+                    background: AppTheme.sidebar-tint;
                 }
                 if row.kind == "day": HorizontalBox {
                     y: 24px;
@@ -203,11 +205,11 @@ export component CalendarAgenda inherits Rectangle {
                     cross-axis-alignment: center;
                     Text { text: row.date-label; color: row.is-today ? AppTheme.accent : AppTheme.heading; font-size: TypeScale.secondary; font-weight: 600; overflow: elide; horizontal-stretch: 1; }
                     if row.is-today: Rectangle {
-                        width: 48px;
-                        height: 22px;
-                        border-radius: 11px;
+                        width: max(48px, today-label.preferred-width + 12px);
+                        height: max(22px, today-label.preferred-height + 4px);
+                        border-radius: self.height / 2;
                         background: AppTheme.accent-soft;
-                        Text { text: @tr("Today"); color: AppTheme.accent; font-size: TypeScale.caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                        today-label := Text { text: @tr("Today"); color: AppTheme.accent; font-size: TypeScale.caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
                     }
                     Text { text: @tr("{n} event" | "{n} events" % row.count); color: AppTheme.muted; font-size: TypeScale.caption; }
                 }
@@ -218,11 +220,11 @@ export component CalendarAgenda inherits Rectangle {
                     spacing: root.compact ? 12px : 20px;
                     cross-axis-alignment: center;
                     VerticalBox {
-                        width: root.compact ? 62px : 82px;
+                        width: max(root.compact ? 62px : 82px, max(agenda-start.preferred-width, agenda-end.preferred-width));
                         padding: 0px;
                         spacing: 3px;
-                        Text { text: row.time-label; color: AppTheme.body; font-size: TypeScale.secondary; font-weight: 600; overflow: elide; }
-                        Text { text: row.end-label; color: AppTheme.muted; font-size: TypeScale.caption; }
+                        agenda-start := Text { text: row.time-label; color: AppTheme.body; font-size: TypeScale.secondary; font-weight: 600; overflow: elide; }
+                        agenda-end := Text { text: row.end-label; color: AppTheme.muted; font-size: TypeScale.caption; }
                     }
                     Rectangle { width: 3px; height: 36px; border-radius: 2px; background: CalendarAgendaStyle.color(row.event.color-index); opacity: agenda-row.cancelled ? 0.5 : 1; }
                     VerticalBox {

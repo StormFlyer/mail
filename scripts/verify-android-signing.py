@@ -31,18 +31,12 @@ def verify(signing: str, mode: str, expected_sha256: str | None = None) -> None:
         raise ValueError("APK v2 signature is missing")
     if not re.search(r"^Number of signers: 1$", signing, re.MULTILINE):
         raise ValueError("expected exactly one APK signer")
-    if mode == "test":
+    if mode in ("test", "production"):
         actual = certificate_digest(signing, "SHA-256")
         if not expected_sha256 or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256):
-            raise ValueError("expected test certificate SHA-256 digest is missing or invalid")
+            raise ValueError("expected certificate SHA-256 digest is missing or invalid")
         if actual != expected_sha256.lower():
-            raise ValueError("APK signer does not match the configured test keystore")
-    elif mode == "production":
-        # Subject formatting differs between SDK/JDK versions. Check the CN
-        # without depending on ordering or spaces between the subject fields.
-        subject = certificate_field(signing, "DN")
-        if re.search(r"(?:^|,)\s*CN\s*=\s*(?:Flectar Mail Test|Android Debug)\s*(?:,|$)", subject):
-            raise ValueError("a test/debug signing identity was used for production")
+            raise ValueError("APK signer does not match the expected signing certificate")
     else:
         raise ValueError(f"unknown signing mode: {mode}")
 

@@ -305,7 +305,7 @@ export component SidebarSectionHeader inherits SidebarRowSurface {
     private property <length> label-left: root.icon-left + SidebarStyle.label-offset;
     callback toggled(bool);
 
-    height: root.folder-row-style ? 28px : root.detail == "" ? 32px : 42px;
+    height: root.folder-row-style ? 28px : root.detail == "" ? 32px : 7px + max(20px, header-label.preferred-height) + header-detail.height;
     idle-background: root.sidebar-background;
     hovered: header-hit.has-hover;
 
@@ -341,11 +341,11 @@ export component SidebarSectionHeader inherits SidebarRowSurface {
         color: root.icon-color;
     }
 
-    Text {
+    header-label := Text {
         x: root.label-left;
         y: root.detail == "" ? 0px : 4px;
         width: parent.width - self.x - 8px;
-        height: root.detail == "" ? parent.height : 20px;
+        height: root.detail == "" ? parent.height : max(20px, self.preferred-height);
         text: root.label;
         color: root.body-color;
         font-size: SidebarStyle.label-size;
@@ -354,11 +354,12 @@ export component SidebarSectionHeader inherits SidebarRowSurface {
         overflow: elide;
     }
 
-    if root.detail != "": Text {
+    header-detail := Text {
+        visible: root.detail != "";
         x: root.label-left;
-        y: 22px;
+        y: header-label.y + header-label.height - 2px;
         width: parent.width - self.x - 8px;
-        height: 15px;
+        height: max(15px, self.preferred-height);
         text: root.detail;
         color: root.muted-color;
         font-size: TypeScale.caption;

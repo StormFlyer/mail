@@ -1103,6 +1103,16 @@ fn float_text_wrap_and_clear() {
                     if let PositionedLayoutItem::GlyphRun(run) = item {
                         let left = origin.x + run.offset() / inline.layout.scale();
                         let right = left + run.advance() / inline.layout.scale();
+                        // Parley 0.12 includes trailing whitespace in a run's
+                        // advance. That whitespace may hang beyond the line's
+                        // edge, but must not count as text overlapping a float.
+                        let content_end = origin.x
+                            + (line.metrics().inline_min_coord
+                                + line.metrics().offset
+                                + line.metrics().advance
+                                - line.metrics().hanging_advance)
+                                / inline.layout.scale();
+                        let right = right.min(content_end);
                         assert!(
                             if direction == "left" {
                                 left >= pos.x + 80.0 + 7.0

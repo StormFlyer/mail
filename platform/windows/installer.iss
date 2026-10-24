@@ -36,3 +36,15 @@ Name: "{userprograms}\Flectar Mail"; Filename: "{app}\flectar-mail.exe"
 
 [Run]
 Filename: "{app}\flectar-mail.exe"; Description: "Open Flectar Mail"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// The app registers its own per-user sign-in entry; remove it with the app so
+// Windows does not keep a startup item that points at a deleted executable.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Flectar Mail');
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', 'Flectar Mail');
+  end;
+end;

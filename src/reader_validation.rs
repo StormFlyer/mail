@@ -69,7 +69,30 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         .borrow_mut()
         .configure_resources(runtime.handle().clone(), false)
         .unwrap();
-    register_renderer_input_callbacks(&app, &renderer, false);
+    let opened_urls = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorded_urls = opened_urls.clone();
+    register_renderer_input_callbacks(
+        &app,
+        &renderer,
+        false,
+        ExternalUrlOpener::new(move |url| {
+            recorded_urls.lock().unwrap().push(url.to_owned());
+            Err("test host unavailable".into())
+        }),
+    );
+    app.invoke_open_email_link("https://example.com/external".into());
+    assert_eq!(
+        *opened_urls.lock().unwrap(),
+        ["https://example.com/external"]
+    );
+    assert_eq!(app.get_render_message().key, "Could not open link: {}");
+    assert_eq!(app.get_render_message().argument, "test host unavailable");
+    app.invoke_open_email_link("javascript:alert(1)".into());
+    app.invoke_open_email_link("#fragment".into());
+    app.invoke_open_email_link("mailto:person@example.com?subject=Hello%20there".into());
+    assert_eq!(app.get_compose_to(), "person@example.com");
+    assert_eq!(app.get_compose_subject(), "Hello there");
+    assert_eq!(opened_urls.lock().unwrap().len(), 1);
     let requests = Rc::new(RefCell::new(Vec::new()));
     let requests2 = requests.clone();
     app.global::<EmailReader>()
@@ -685,6 +708,7 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
     }
     // Releasing a product must retain the source record of an edited contact.
     let contact = ContactRecord {
+        details: Default::default(),
         id: 1,
         name: "Original name".into(),
         email: "contact@example.com".into(),
@@ -728,5 +752,129 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         &mut directory.borrow_mut()
     ));
     assert!(directory.borrow().contacts.is_empty());
+    app.hide().unwrap();
+}
+
+/// Slint's software renderer (CPU mode, Android) panics when it paints a
+/// rectangle reaching past ±32767 physical pixels (#35). Reader surfaces sized
+/// by a long message must keep painting within the visible window.
+#[test]
+fn tall_messages_paint_with_the_software_renderer() {
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+    slint::platform::set_platform(Box::new(Headless(window.clone(), Rc::default()))).unwrap();
+    let app = AppWindow::new().unwrap();
+    app.window()
+        .dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor: 2.0 });
+    app.set_startup_ready(true);
+    app.set_startup_hydrated(true);
+    app.set_connected_accounts(ModelRc::new(VecModel::from(vec![AccountRow {
+        id: 1,
+        ..Default::default()
+    }])));
+    app.set_active_view("mail".into());
+    let (width, height) = (2560, 1800);
+    app.window()
+        .set_size(slint::PhysicalSize::new(width, height));
+    app.show().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (favicons, _) = bounded_ui_channel();
+    let (avatars, _) = bounded_ui_channel();
+    let mut state = InboxState::empty(
+        None,
+        UiSender::new(favicons, UiWake::new(app.as_weak(), |_| {})),
+        None,
+        UiSender::new(avatars, UiWake::new(app.as_weak(), |_| {})),
+        false,
+        false,
+        WarmStartCacheWriter::spawn(&runtime, dir.path().join("warm.json")),
+    );
+    let mut message = mail::fixture_messages().remove(0);
+    message.folder = "Inbox".into();
+    // The loading skeleton covers the whole body until it arrives.
+    message.body_pending = true;
+    // Templates often wrap the whole message in one link. The blocked remote
+    // image leaves a placeholder taller than the coordinate range by itself.
+    message.html = Some(
+        "<body style='margin:0'><a href='https://example.com/'>\
+         <img src='https://example.com/banner.png' width='320' height='18000' alt='Banner'>\
+         <p style='height:2000px'>End of message</p></a></body>"
+            .into(),
+    );
+    state.messages = vec![message];
+    state.mailboxes = fixture_mailboxes(&state.messages);
+    app.set_emails(state.email_rows.clone().into());
+    let renderer = state.email_renderer.clone();
+    register_renderer_input_callbacks(
+        &app,
+        &renderer,
+        false,
+        ExternalUrlOpener::new(|_| Err("test host unavailable".into())),
+    );
+    let state = Rc::new(RefCell::new(state));
+    let mut pixels = vec![Rgb8Pixel::default(); (width * height) as usize];
+    let mut paint = || {
+        slint::platform::update_timers_and_animations();
+        let (w, h) = email_viewport_size(&app);
+        if let Some(frame) = renderer
+            .borrow_mut()
+            .render_cpu_if_needed(w, h, app.window().scale_factor())
+            .unwrap()
+        {
+            apply_cpu_frame(&app, frame);
+        }
+        app.window().request_redraw();
+        window.draw_if_needed(|r| {
+            r.render(&mut pixels, width as usize);
+        });
+    };
+    render_current(&app, &state, &runtime).unwrap();
+    paint();
+    let reader = app.global::<EmailReader>();
+    let physical_height = app.get_email_viewport_width()
+        * reader.get_width_ratio()
+        * app.get_email_content_aspect()
+        * app.window().scale_factor();
+    assert!(
+        physical_height > f32::from(i16::MAX),
+        "the message must exceed the software renderer's range, got {physical_height}"
+    );
+    assert!(reader.get_body_pending());
+    assert!(!app.get_text_mode());
+    assert!(reader.get_images().row_count() > 0);
+    // The skeleton fades out over the loaded body.
+    reader.set_body_pending(false);
+    paint();
+    for command in ["page-down", "end", "page-up", "home"] {
+        reader.invoke_command(command.into());
+        paint();
+    }
+    // Keyboard focus outlines a link as tall as the message.
+    app.window()
+        .dispatch_event(slint::platform::WindowEvent::PointerPressed {
+            position: slint::LogicalPosition::new(750.0, 431.0),
+            button: slint::platform::PointerEventButton::Left,
+        });
+    app.window()
+        .dispatch_event(slint::platform::WindowEvent::PointerReleased {
+            position: slint::LogicalPosition::new(750.0, 431.0),
+            button: slint::platform::PointerEventButton::Left,
+        });
+    for pressed in [true, false] {
+        let text = slint::platform::Key::Tab.into();
+        app.window().dispatch_event(if pressed {
+            slint::platform::WindowEvent::KeyPressed { text }
+        } else {
+            slint::platform::WindowEvent::KeyReleased { text }
+        });
+    }
+    assert_eq!(reader.get_destination(), "https://example.com/");
+    paint();
+    reader.invoke_command("end".into());
+    paint();
+    assert!(!app.get_text_mode());
     app.hide().unwrap();
 }

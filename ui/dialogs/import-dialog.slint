@@ -1,0 +1,576 @@
+import { ScrollView } from "std-widgets.slint";
+import { AppTheme } from "../design-system.slint";
+import { Button } from "../components/button.slint";
+import { SelectionCheckBox } from "../components/controls.slint";
+import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
+import { TypeScale } from "../typography.slint";
+
+export struct ImportFindingRow {
+    code: string,
+    detail: string,
+    // Quantity for codes whose wording depends on a number.
+    count: int,
+    blocking: bool,
+}
+
+export struct ImportAccountRow {
+    email: string,
+    label: string,
+    server: string,
+    // ready | already-added | unsupported
+    status: string,
+    // password | google | microsoft
+    sign-in: string,
+    selected: bool,
+    findings: [ImportFindingRow],
+}
+
+export struct ImportProfileRow {
+    name: string,
+    path: string,
+    is-default: bool,
+}
+
+export struct ImportFailureRow {
+    email: string,
+    error: string,
+}
+
+// State of the account import flow. Rust owns the source, plan, and results;
+// the dialog only presents them and reports the user's choices.
+export global AccountImport {
+    in-out property <bool> open: false;
+    // choose | reading | review | importing | done | error
+    in-out property <string> stage: "choose";
+    // k9 | thunderbird
+    in property <string> source;
+    in property <[ImportProfileRow]> profiles;
+    in property <bool> folder-supported: false;
+    in property <[ImportAccountRow]> accounts;
+    in property <int> selected-count;
+    in property <int> local-folders;
+    in property <int> feeds;
+    in property <int> newsgroups;
+    // unreadable | too-large | unknown-format | malformed | unsupported-version
+    // | no-accounts | multiple-profiles | not-a-profile | network-profile
+    // | restore-failed | failed
+    in property <string> error-code;
+    in property <string> error-detail;
+    in property <int> imported;
+    in property <int> already-present;
+    // A restored backup also applied its theme, language, and preferences.
+    in property <bool> restored-preferences;
+    in property <[ImportFailureRow]> failures;
+    callback choose-file();
+    callback choose-folder();
+    callback choose-profile(int);
+    callback toggle(int, bool);
+    callback confirm();
+    callback back();
+    callback close();
+}
+
+// Wording for codes produced by the core migration planner and reader.
+global ImportText {
+    public pure function finding(code: string, detail: string, count: int) -> string {
+        if code == "missing-email" { return @tr("No valid email address was found."); }
+        if code == "missing-incoming-server" { return @tr("No incoming mail server is configured."); }
+        if code == "incoming-protocol-unsupported" { return @tr("The incoming server {} uses a protocol Flectar Mail does not support.", detail); }
+        if code == "missing-outgoing-server" { return @tr("No outgoing mail server is configured."); }
+        if code == "outgoing-protocol-unsupported" { return @tr("The outgoing server {} uses a protocol Flectar Mail does not support.", detail); }
+        if code == "unencrypted-incoming" { return @tr("The incoming server {} is not encrypted, so your password and mail cross the network unprotected.", detail); }
+        if code == "unencrypted-outgoing" { return @tr("The outgoing server {} is not encrypted, so your password and mail cross the network unprotected.", detail); }
+        if code == "unprotected-password" { return @tr("{} keeps your password off its unencrypted connection, but Flectar Mail would send it in the clear. Turn on SSL/TLS or STARTTLS for this server first.", detail); }
+        // Methods with a product name share one sentence; the others are worded.
+        if code == "incoming-sign-in-unsupported" && detail == "none" { return @tr("The incoming server connects without signing in, which Flectar Mail does not support."); }
+        if code == "incoming-sign-in-unsupported" && detail == "client certificate" { return @tr("The incoming server signs in with a client certificate, which Flectar Mail does not support."); }
+        if code == "incoming-sign-in-unsupported" { return @tr("The incoming server signs in with {}, which Flectar Mail does not support.", detail); }
+        if code == "outgoing-sign-in-unsupported" && detail == "none" { return @tr("The outgoing server sends mail without signing in, which Flectar Mail does not support."); }
+        if code == "outgoing-sign-in-unsupported" && detail == "client certificate" { return @tr("The outgoing server signs in with a client certificate, which Flectar Mail does not support."); }
+        if code == "outgoing-sign-in-unsupported" { return @tr("The outgoing server signs in with {}, which Flectar Mail does not support.", detail); }
+        if code == "separate-outgoing-login" { return @tr("The outgoing server signs in as {}. Flectar Mail uses one sign-in for both servers.", detail); }
+        if code == "missing-username" { return @tr("The incoming server has no user name."); }
+        if code == "invalid-server" { return @tr("The server settings for {} are not valid.", detail); }
+        if code == "duplicate-in-source" { return @tr("This address appears earlier in the file."); }
+        if code == "password-mechanism-changed" { return @tr("Your password will be sent over the encrypted connection instead of with CRAM-MD5."); }
+        if code == "microsoft-sign-in-replaces-password" { return @tr("You will sign in with Microsoft instead of a password."); }
+        if code == "google-sign-in-replaces-password" { return @tr("You will sign in with Google instead of a password."); }
+        if code == "oauth-login-unsupported" { return @tr("The account signs in as {}, which is not an email address. Add it with its own address instead.", detail); }
+        if code == "oauth-replaced-by-password" { return @tr("Flectar Mail cannot use browser sign-in for {}. Sign in with an app password.", detail); }
+        if code == "outgoing-server-replaced" { return @tr("The provider's standard outgoing server replaces {}.", detail); }
+        if code == "provider-sync-replaces-pop3" { return @tr("This account syncs with {} instead of downloading mail with POP3.", detail); }
+        if code == "removes-server-mail" && detail == "untilDownloaded" { return @tr("Mail is removed from the server once it's on this device."); }
+        if code == "removes-server-mail" && detail == "untilDeleted" { return @tr("Mail you delete here is removed from the server too."); }
+        if code == "removes-server-mail" { return @tr("Mail is removed from the server {} days after it's downloaded, or once deleted here.", detail == "sevenDays" ? 7 : detail == "fourteenDays" ? 14 : 30); }
+        if code == "server-mail-rule-approximated" { return @tr("No choice here matches how long the account kept mail on the server, so the closest one is used."); }
+        if code == "aliases-managed-by-provider" { return @tr("One other address is managed by Gmail and appears after you sign in." | "{n} other addresses are managed by Gmail and appear after you sign in." % count); }
+        if code == "aliases-skipped" { return @tr("One sending address was not imported because it is invalid or uses another outgoing server." | "{n} sending addresses were not imported because they are invalid or use another outgoing server." % count); }
+        if code == "signature-file-not-imported" { return @tr("A signature stored in a file outside the profile was not imported."); }
+        if code == "signature-too-large" { return @tr("A signature larger than 32 KB was not imported."); }
+        return code;
+    }
+
+    public pure function error(code: string, detail: string) -> string {
+        if code == "unreadable" { return @tr("The file could not be read: {}", detail); }
+        if code == "too-large" { return @tr("The settings file is too large."); }
+        if code == "unknown-format" { return @tr("This file is not a supported settings export. Choose a .k9s file, a Thunderbird profile export or prefs.js, or a Flectar Mail backup."); }
+        if code == "malformed" { return @tr("The settings file is damaged: {}", detail); }
+        if code == "unsupported-version" { return @tr("This settings format (version {}) is not supported.", detail); }
+        if code == "no-accounts" { return @tr("The settings contain no mail accounts."); }
+        if code == "multiple-profiles" { return @tr("This folder contains several Thunderbird profiles. Choose the profile folder inside it that you want to import."); }
+        if code == "not-a-profile" { return @tr("This folder is not a Thunderbird profile. Choose the folder that contains prefs.js."); }
+        if code == "network-profile" { return @tr("This Thunderbird profile is on a network location. Choose the profile folder itself to import it."); }
+        if code == "restore-failed" { return @tr("The backup could not be restored: {}", detail); }
+        return @tr("Import failed: {}", detail);
+    }
+
+    // Read problems concern the chosen source; others happen while writing.
+    public pure function error-title(code: string) -> string {
+        if code == "restore-failed" || code == "failed" { return @tr("Could not import accounts"); }
+        return @tr("Could not read the settings");
+    }
+}
+
+component FindingLine inherits HorizontalLayout {
+    in property <ImportFindingRow> finding;
+    spacing: 6px;
+
+    Image {
+        y: 1px;
+        width: 14px;
+        height: 14px;
+        source: root.finding.blocking ? @image-url("../icons/lucide/outline/alert.svg") : @image-url("../icons/lucide/outline/info.svg");
+        colorize: root.finding.blocking ? AppTheme.destructive : AppTheme.secondary;
+        image-fit: contain;
+        accessible-role: none;
+    }
+    Text {
+        horizontal-stretch: 1;
+        text: ImportText.finding(root.finding.code, root.finding.detail, root.finding.count);
+        color: root.finding.blocking ? AppTheme.destructive : AppTheme.secondary;
+        font-size: TypeScale.caption;
+        wrap: word-wrap;
+    }
+}
+
+component SecondaryActions inherits HorizontalLayout {
+    callback close();
+    spacing: 8px;
+
+    // Reading can be abandoned; its result is then ignored. Writing cannot.
+    if AccountImport.stage != "importing" : Button {
+        min-width: max(64px, self.content-width);
+        text: AccountImport.stage == "done" ? @tr("Close") : @tr("Cancel");
+        clicked => { root.close(); }
+    }
+    if AccountImport.stage == "review" || AccountImport.stage == "error" : Button {
+        min-width: max(64px, self.content-width);
+        text: @tr("Back");
+        clicked => { AccountImport.back(); }
+    }
+    if AccountImport.stage == "choose" && AccountImport.folder-supported : Button {
+        min-width: max(64px, self.content-width);
+        text: @tr("Choose folder…");
+        icon: @image-url("../icons/lucide/outline/file-directory.svg");
+        has-icon: true;
+        clicked => { AccountImport.choose-folder(); }
+    }
+}
+
+component PrimaryAction inherits HorizontalLayout {
+    callback open-accounts();
+
+    if AccountImport.stage == "choose" : Button {
+        min-width: max(64px, self.content-width);
+        text: @tr("Choose file…");
+        icon: @image-url("../icons/lucide/outline/file.svg");
+        has-icon: true;
+        primary: true;
+        clicked => { AccountImport.choose-file(); }
+    }
+    if AccountImport.stage == "review" : Button {
+        min-width: max(64px, self.content-width);
+        text: @tr("Import one account" | "Import {n} accounts" % AccountImport.selected-count);
+        primary: true;
+        enabled: AccountImport.selected-count > 0;
+        clicked => { AccountImport.confirm(); }
+    }
+    if AccountImport.stage == "done" && AccountImport.imported > 0 : Button {
+        min-width: max(64px, self.content-width);
+        text: @tr("Open accounts");
+        primary: true;
+        clicked => {
+            root.open-accounts();
+            AccountImport.close();
+        }
+    }
+}
+
+export component ImportDialog inherits Rectangle {
+    in property <bool> compact: false;
+    callback open-accounts();
+
+    background: #00000066;
+    accessible-role: groupbox;
+    accessible-label: @tr("Import accounts");
+
+    // The scrim does not dismiss: an in-progress choice ends explicitly.
+    TouchArea { }
+
+    function close() {
+        if AccountImport.stage != "importing" {
+            AccountImport.close();
+        }
+    }
+
+    // Each step replaces the controls, and with them any focused one, as does
+    // switching between the phone and desktop footers; focus returns to the
+    // dialog so Escape and Tab keep working.
+    private property <string> stage: AccountImport.stage;
+    changed stage => { key-scope.focus(); }
+    changed compact => { key-scope.focus(); }
+    init => { key-scope.focus(); }
+
+    // Tab never leaves the dialog for the controls behind it: focus moving
+    // back past the first control lands on the end marker, and focus moving
+    // on past the last one returns to the start.
+    FocusScope {
+        width: 0px;
+        height: 0px;
+        focus-gained(reason) => {
+            if reason == FocusReason.tab-navigation {
+                tab-end.focus();
+            }
+        }
+    }
+
+    // The scope wraps the card so Escape reaches it from any control inside.
+    // It takes focus only when the dialog gives it, not as a Tab stop.
+    key-scope := FocusScope {
+        focus-on-tab-navigation: false;
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.close();
+                return accept;
+            }
+            reject
+        }
+
+        card := Rectangle {
+            width: root.compact ? parent.width : min(600px, parent.width - 32px);
+            height: root.compact ? parent.height : min(640px, parent.height - 48px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: root.compact ? 0px : 12px;
+            border-width: root.compact ? 0px : 1px;
+            border-color: AppTheme.border;
+            background: AppTheme.surface;
+            drop-shadow-blur: 24px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: #00000055;
+
+            VerticalLayout {
+                padding: 22px;
+                padding-top: root.compact ? 28px : 22px;
+                spacing: 14px;
+
+                Text {
+                    text: AccountImport.stage == "review" ? @tr("Choose accounts to import")
+                        : AccountImport.stage == "done" ? @tr("Import complete")
+                        : AccountImport.stage == "error" ? ImportText.error-title(AccountImport.error-code)
+                        : @tr("Import accounts");
+                    color: AppTheme.title;
+                    font-size: TypeScale.heading;
+                    font-weight: 700;
+                    wrap: word-wrap;
+                    accessible-role: text;
+                }
+
+                // Source selection.
+                if AccountImport.stage == "choose" : VerticalLayout {
+                    spacing: 12px;
+                    vertical-stretch: 1;
+                    Text {
+                        text: @tr("Bring your account settings from Thunderbird, Thunderbird for Android, K-9 Mail, or a Flectar Mail backup. Passwords are never imported: you sign in to each account afterward.");
+                        color: AppTheme.secondary;
+                        font-size: TypeScale.secondary;
+                        wrap: word-wrap;
+                    }
+                    if AccountImport.profiles.length > 0 : Text {
+                        text: @tr("Thunderbird on this device");
+                        color: AppTheme.heading;
+                        font-size: TypeScale.secondary;
+                        font-weight: 600;
+                    }
+                    if AccountImport.profiles.length > 0 : ScrollView {
+                        // Several profiles scroll instead of pushing the buttons out.
+                        height: min(AccountImport.profiles.length, 3) * 64px - 8px;
+                        mouse-drag-pan-enabled: root.compact;
+                        VerticalLayout {
+                            spacing: 8px;
+                            for profile[index] in AccountImport.profiles : profile-key := FocusVisibleScope {
+                                min-height: 56px;
+                                accessible-role: button;
+                                accessible-label: @tr("Import from Thunderbird profile {}", profile.name);
+                                accessible-action-default => { AccountImport.choose-profile(index); }
+                                key-pressed(event) => {
+                                    if event.text == Key.Return || event.text == Key.Space {
+                                        AccountImport.choose-profile(index);
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                                Rectangle {
+                                    border-radius: 8px;
+                                    border-width: profile-key.focus-visible ? 2px : 1px;
+                                    border-color: profile-hit.has-hover || profile-key.focus-visible ? AppTheme.accent : AppTheme.border-subtle;
+                                    background: profile-hit.has-hover ? AppTheme.accent-pale : AppTheme.surface-raised;
+                                    HorizontalLayout {
+                                        padding: 10px;
+                                        padding-left: 14px;
+                                        spacing: 12px;
+                                        Image {
+                                            width: 18px;
+                                            source: @image-url("../icons/lucide/outline/file-directory.svg");
+                                            colorize: AppTheme.accent;
+                                            image-fit: contain;
+                                            accessible-role: none;
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: profile.is-default ? @tr("{} (default profile)", profile.name) : profile.name;
+                                                color: AppTheme.body;
+                                                font-size: TypeScale.body;
+                                                overflow: elide;
+                                            }
+                                            Text {
+                                                text: profile.path;
+                                                color: AppTheme.faint;
+                                                font-size: TypeScale.caption;
+                                                overflow: elide;
+                                            }
+                                        }
+                                        Image {
+                                            width: 16px;
+                                            source: @image-url("../icons/lucide/outline/chevron-right.svg");
+                                            colorize: AppTheme.muted;
+                                            image-fit: contain;
+                                            accessible-role: none;
+                                        }
+                                    }
+                                    profile-hit := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            profile-key.pointer-activated();
+                                            AccountImport.choose-profile(index);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Rectangle { vertical-stretch: 1; }
+                    Text {
+                        // Only desktops can choose a profile folder.
+                        text: AccountImport.folder-supported
+                            ? @tr("Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird profile exports (.zip), profile folders and prefs.js, and Flectar Mail backups (.json).")
+                            : @tr("Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird profile exports (.zip) and prefs.js, and Flectar Mail backups (.json).");
+                        color: AppTheme.faint;
+                        font-size: TypeScale.caption;
+                        wrap: word-wrap;
+                    }
+                }
+
+                // Spacers center the progress message in the dialog body.
+                if AccountImport.stage == "reading" || AccountImport.stage == "importing" : VerticalLayout {
+                    vertical-stretch: 1;
+                    Rectangle { vertical-stretch: 1; }
+                    Text {
+                        text: AccountImport.stage == "reading" ? @tr("Reading settings…") : @tr("Importing accounts…");
+                        color: AppTheme.secondary;
+                        font-size: TypeScale.body;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                        accessible-role: text;
+                    }
+                    Rectangle { vertical-stretch: 1; }
+                }
+
+                if AccountImport.stage == "error" : VerticalLayout {
+                    vertical-stretch: 1;
+                    Text {
+                        text: ImportText.error(AccountImport.error-code, AccountImport.error-detail);
+                        color: AppTheme.body;
+                        font-size: TypeScale.body;
+                        wrap: word-wrap;
+                        accessible-role: text;
+                    }
+                    Rectangle { vertical-stretch: 1; }
+                }
+
+                // Review: one row per source account.
+                if AccountImport.stage == "review" : VerticalLayout {
+                    spacing: 10px;
+                    vertical-stretch: 1;
+                    Text {
+                        text: AccountImport.source == "k9"
+                            ? @tr("From Thunderbird for Android or K-9 Mail. Existing accounts are never changed.")
+                            : @tr("From Thunderbird. Existing accounts are never changed.");
+                        color: AppTheme.secondary;
+                        font-size: TypeScale.secondary;
+                        wrap: word-wrap;
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        mouse-drag-pan-enabled: root.compact;
+                        VerticalLayout {
+                            spacing: 8px;
+                            for account[index] in AccountImport.accounts : Rectangle {
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: account.selected ? AppTheme.accent : AppTheme.border-subtle;
+                                background: account.status == "ready" ? AppTheme.surface-raised : AppTheme.surface;
+                                HorizontalLayout {
+                                    padding: 10px;
+                                    spacing: 8px;
+                                    SelectionCheckBox {
+                                        width: 32px;
+                                        height: 32px;
+                                        checked: account.selected;
+                                        enabled: account.status == "ready";
+                                        accessible-label: @tr("Import {}", account.email);
+                                        toggled(checked) => { AccountImport.toggle(index, checked); }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 3px;
+                                        horizontal-stretch: 1;
+                                        alignment: start;
+                                        Text {
+                                            text: account.email != "" ? account.email : account.label;
+                                            color: account.status == "ready" ? AppTheme.title : AppTheme.secondary;
+                                            font-size: TypeScale.body;
+                                            font-weight: 600;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: account.status == "already-added" ? @tr("Already in Flectar Mail")
+                                                : account.status == "unsupported" ? @tr("Cannot be imported")
+                                                : account.sign-in == "google" ? @tr("Sign in with Google after import")
+                                                : account.sign-in == "microsoft" ? @tr("Sign in with Microsoft after import")
+                                                : @tr("{} · enter your password after import", account.server);
+                                            color: account.status == "unsupported" ? AppTheme.destructive : AppTheme.secondary;
+                                            font-size: TypeScale.caption;
+                                            wrap: word-wrap;
+                                        }
+                                        if account.label != "" && account.label != account.email : Text {
+                                            text: @tr("Named “{}” in the other app", account.label);
+                                            color: AppTheme.faint;
+                                            font-size: TypeScale.caption;
+                                            overflow: elide;
+                                        }
+                                        for finding in account.findings : FindingLine { finding: finding; }
+                                    }
+                                }
+                            }
+                            if AccountImport.local-folders + AccountImport.feeds + AccountImport.newsgroups > 0 : Text {
+                                text: @tr("Local folders, feeds, and newsgroups are not imported.");
+                                color: AppTheme.faint;
+                                font-size: TypeScale.caption;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                if AccountImport.stage == "done" : VerticalLayout {
+                    spacing: 10px;
+                    vertical-stretch: 1;
+                    if AccountImport.imported > 0 : Text {
+                        text: @tr("Imported one account. Sign in to it to start syncing." | "Imported {n} accounts. Sign in to each one to start syncing." % AccountImport.imported);
+                        color: AppTheme.body;
+                        font-size: TypeScale.body;
+                        wrap: word-wrap;
+                    }
+                    if AccountImport.imported == 0 : Text {
+                        text: @tr("No accounts were imported.");
+                        color: AppTheme.body;
+                        font-size: TypeScale.body;
+                        wrap: word-wrap;
+                    }
+                    if AccountImport.already-present > 0 : Text {
+                        text: @tr("One account was already in Flectar Mail and was left unchanged." | "{n} accounts were already in Flectar Mail and were left unchanged." % AccountImport.already-present);
+                        color: AppTheme.secondary;
+                        font-size: TypeScale.secondary;
+                        wrap: word-wrap;
+                    }
+                    if AccountImport.restored-preferences : Text {
+                        text: @tr("The theme, language, and other preferences from the backup were applied.");
+                        color: AppTheme.secondary;
+                        font-size: TypeScale.secondary;
+                        wrap: word-wrap;
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        mouse-drag-pan-enabled: root.compact;
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 6px;
+                            for failure in AccountImport.failures : Text {
+                                text: @tr("{} could not be imported: {}", failure.email, failure.error);
+                                color: AppTheme.destructive;
+                                font-size: TypeScale.secondary;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                // Buttons are never narrower than their labels and share the rest
+                // of the row. Phones give the primary action its own row.
+                if !root.compact : HorizontalLayout {
+                    spacing: 8px;
+                    vertical-stretch: 0;
+                    SecondaryActions {
+                        horizontal-stretch: 2;
+                        close => { root.close(); }
+                    }
+                    PrimaryAction {
+                        horizontal-stretch: 1;
+                        open-accounts => { root.open-accounts(); }
+                    }
+                }
+                if root.compact : VerticalLayout {
+                    spacing: 8px;
+                    vertical-stretch: 0;
+                    PrimaryAction {
+                        open-accounts => { root.open-accounts(); }
+                    }
+                    SecondaryActions {
+                        close => { root.close(); }
+                    }
+                }
+            }
+        }
+
+        tab-end := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-gained(reason) => {
+                if reason == FocusReason.tab-navigation {
+                    key-scope.focus();
+                }
+            }
+        }
+    }
+
+    FocusScope {
+        width: 0px;
+        height: 0px;
+        focus-gained(reason) => {
+            if reason == FocusReason.tab-navigation {
+                key-scope.focus();
+            }
+        }
+    }
+}

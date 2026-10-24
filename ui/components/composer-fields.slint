@@ -72,6 +72,9 @@ export component ComposerFromRow inherits Rectangle {
     in property <color> selected-background;
     in property <color> title-color;
     callback changed(int);
+    // Account rows hold a name and an address that grow with the platform font.
+    private property <length> account-pitch: 14px + max(18px, account-name-probe.preferred-height)
+        + max(16px, account-email-probe.preferred-height);
 
     private property <int> highlighted-index: 0;
 
@@ -90,9 +93,9 @@ export component ComposerFromRow inherits Rectangle {
             height: 42px;
             background: root.background-color;
 
-            Text {
+            account-label := Text {
                 x: 12px;
-                width: 60px;
+                width: max(60px, self.preferred-width);
                 height: parent.height;
                 text: @tr("Account");
                 color: root.muted-color;
@@ -102,9 +105,9 @@ export component ComposerFromRow inherits Rectangle {
             }
 
             trigger := Rectangle {
-                x: 76px;
+                x: account-label.x + account-label.width + 4px;
                 y: 5px;
-                width: min(410px, parent.width - 88px);
+                width: min(410px, parent.width - self.x - 12px);
                 height: 32px;
                 border-radius: 7px;
                 border-width: 1px;
@@ -163,11 +166,14 @@ export component ComposerFromRow inherits Rectangle {
                 }
             }
 
+            account-name-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.secondary; font-weight: 600; }
+            account-email-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.caption; }
+
             account-popup := PopupWindow {
                 x: 50px;
                 y: 38px;
                 width: min(410px, root.width - 62px);
-                height: min(248px, max(52px, root.accounts.length * 48px + 8px));
+                height: max(52px, min(5, root.accounts.length) * root.account-pitch + 8px);
                 close-policy: close-on-click-outside;
                 forward-focus: account-list;
 
@@ -204,16 +210,16 @@ export component ComposerFromRow inherits Rectangle {
 
                         for account[index] in root.accounts : Rectangle {
                             x: 4px;
-                            y: 4px + index * 48px;
+                            y: 4px + index * root.account-pitch;
                             width: parent.width - 8px;
-                            height: 44px;
+                            height: root.account-pitch - 4px;
                             border-radius: 6px;
                             background: index == root.highlighted-index || account-row-hit.has-hover
                                 ? root.selected-background : transparent;
 
                             Avatar {
                                 x: 8px;
-                                y: 9px;
+                                y: (parent.height - self.height) / 2;
                                 size: 26px;
                                 source: account.avatar_small;
                                 has-source: account.has_avatar;
@@ -224,11 +230,11 @@ export component ComposerFromRow inherits Rectangle {
                                 avatar-border-color: root.frame-border-color;
                             }
 
-                            Text {
+                            account-name := Text {
                                 x: 43px;
                                 y: 5px;
                                 width: parent.width - 76px;
-                                height: 18px;
+                                height: max(18px, self.preferred-height);
                                 text: account.name;
                                 color: root.title-color;
                                 font-size: TypeScale.secondary;
@@ -238,9 +244,9 @@ export component ComposerFromRow inherits Rectangle {
 
                             Text {
                                 x: 43px;
-                                y: 22px;
+                                y: account-name.y + account-name.height - 1px;
                                 width: parent.width - 76px;
-                                height: 16px;
+                                height: max(16px, self.preferred-height);
                                 text: account.email;
                                 color: root.muted-color;
                                 font-size: TypeScale.caption;
@@ -290,6 +296,9 @@ export component ComposerRecipients inherits Rectangle {
     private property <bool> show-cc: root.cc != "";
     private property <bool> show-bcc: root.bcc != "";
     private property <bool> suggestions-dismissed: false;
+    // Suggestion rows hold a name and an address that grow with the platform font.
+    private property <length> suggestion-pitch: 13px + max(18px, suggestion-name-probe.preferred-height)
+        + max(15px, suggestion-email-probe.preferred-height);
 
     function move-contact-highlight(delta: int) {
         if (root.contacts.length == 0) {
@@ -324,7 +333,7 @@ export component ComposerRecipients inherits Rectangle {
                 width: parent.width;
                 label: @tr("To");
                 placeholder-text: @tr("name@example.com · separate with commas");
-                right-padding: 94px;
+                right-padding: parent.width - recipient-modes.x + 8px;
                 text <=> root.to;
                 background-color: root.background-color;
                 label-color: root.muted-color;
@@ -348,15 +357,15 @@ export component ComposerRecipients inherits Rectangle {
                 dismiss-suggestions => { root.suggestions-dismissed = true; }
             }
 
-            HorizontalBox {
-                x: parent.width - 86px;
+            recipient-modes := HorizontalBox {
+                x: parent.width - self.width - 10px;
                 y: 7px;
-                width: 76px;
+                width: cc-mode.width + bcc-mode.width + 2px;
                 height: 26px;
                 spacing: 2px;
 
-                ModeButton {
-                    width: 36px;
+                cc-mode := ModeButton {
+                    width: max(36px, self.label-width + 12px);
                     text: @tr("Cc");
                     selected: root.show-cc;
                     text-color: root.muted-color;
@@ -365,8 +374,8 @@ export component ComposerRecipients inherits Rectangle {
                     selected-background: root.accent-background;
                     clicked => { root.show-cc = !root.show-cc; }
                 }
-                ModeButton {
-                    width: 38px;
+                bcc-mode := ModeButton {
+                    width: max(38px, self.label-width + 12px);
                     text: @tr("Bcc");
                     selected: root.show-bcc;
                     text-color: root.muted-color;
@@ -405,17 +414,21 @@ export component ComposerRecipients inherits Rectangle {
                 focus-color: root.accent-color;
             }
 
+            suggestion-name-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.secondary; font-weight: 600; }
+            suggestion-email-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.caption; }
+
             contact-popup := PopupWindow {
                 x: 44px;
                 y: 37px;
                 width: min(430px, root.width - 56px);
-                height: min(284px, root.contacts.length * 46px + 8px);
+                height: min(6, root.contacts.length) * root.suggestion-pitch + 8px;
                 close-policy: close-on-click-outside;
                 forward-focus: to-row;
 
                 ComposerContactMenu {
                     width: parent.width;
                     height: parent.height;
+                    row-pitch: root.suggestion-pitch;
                     contacts: root.contacts;
                     highlighted-contact: root.highlighted-contact;
                     accent-background: root.accent-background;
@@ -446,9 +459,9 @@ export component ComposerSubject inherits Rectangle {
             height: 42px;
             background: root.background-color;
 
-            Text {
+            subject-label := Text {
                 x: 12px;
-                width: 46px;
+                width: max(46px, self.preferred-width);
                 height: parent.height;
                 text: @tr("Subject");
                 color: subject-input.has-focus ? root.accent-color : root.muted-color;
@@ -458,8 +471,8 @@ export component ComposerSubject inherits Rectangle {
             }
 
             Text {
-                x: 70px;
-                width: parent.width - 82px;
+                x: subject-label.x + subject-label.width + 12px;
+                width: parent.width - self.x - 12px;
                 height: parent.height;
                 visible: root.subject == "";
                 text: @tr("What is this email about?");
@@ -470,8 +483,8 @@ export component ComposerSubject inherits Rectangle {
             }
 
             subject-input := TextInput {
-                x: 70px;
-                width: parent.width - 82px;
+                x: subject-label.x + subject-label.width + 12px;
+                width: parent.width - self.x - 12px;
                 height: parent.height;
                 text <=> root.subject;
                 color: root.title-color;

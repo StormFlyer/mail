@@ -1,13 +1,14 @@
 use crate::error::Result;
-use crate::models::FolderInfo;
+use crate::models::{FolderInfo, MailProtocol};
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Folder {
     pub id: i64,
     pub account_id: i64,
     pub parent_id: Option<i64>,
-    pub imap_name: String,
+    pub path: String,
     pub delimiter: Option<String>,
     pub role: Option<String>,
     pub uidvalidity: Option<i64>,
@@ -43,7 +44,7 @@ fn from_row(row: &Row) -> rusqlite::Result<Folder> {
         id: row.get("id")?,
         account_id: row.get("account_id")?,
         parent_id: row.get("parent_id")?,
-        imap_name: row.get("imap_name")?,
+        path: row.get("path")?,
         delimiter: row.get("delimiter")?,
         role: row.get("role")?,
         uidvalidity: row.get("uidvalidity")?,
@@ -63,14 +64,14 @@ fn from_row(row: &Row) -> rusqlite::Result<Folder> {
 pub fn upsert(
     conn: &Connection,
     account_id: i64,
-    imap_name: &str,
+    path: &str,
     delimiter: Option<&str>,
     role: Option<&str>,
 ) -> Result<i64> {
     upsert_discovered(
         conn,
         account_id,
-        imap_name,
+        path,
         delimiter,
         role,
         true,
@@ -81,17 +82,17 @@ pub fn upsert(
 pub fn upsert_discovered(
     conn: &Connection,
     account_id: i64,
-    imap_name: &str,
+    path: &str,
     delimiter: Option<&str>,
     role: Option<&str>,
     selectable: bool,
     permissions: FolderPermissions,
 ) -> Result<i64> {
     conn.execute(
-        "INSERT INTO folders (account_id, imap_name, delimiter, role, selectable,
+        "INSERT INTO folders (account_id, path, delimiter, role, selectable,
                               can_create_children, can_rename, can_delete)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
-         ON CONFLICT(account_id, imap_name)
+         ON CONFLICT(account_id, path)
          DO UPDATE SET delimiter = excluded.delimiter, role = excluded.role,
                        selectable = excluded.selectable,
                        can_create_children = excluded.can_create_children,
@@ -99,7 +100,7 @@ pub fn upsert_discovered(
                        can_delete = excluded.can_delete, jmap_id = NULL",
         params![
             account_id,
-            imap_name,
+            path,
             delimiter,
             role,
             selectable,
@@ -109,8 +110,8 @@ pub fn upsert_discovered(
         ],
     )?;
     let id: i64 = conn.query_row(
-        "SELECT id FROM folders WHERE account_id = ?1 AND imap_name = ?2",
-        params![account_id, imap_name],
+        "SELECT id FROM folders WHERE account_id = ?1 AND path = ?2",
+        params![account_id, path],
         |r| r.get(0),
     )?;
     Ok(id)
@@ -119,7 +120,7 @@ pub fn upsert_discovered(
 pub fn list(conn: &Connection, account_id: Option<i64>) -> Result<Vec<Folder>> {
     let mut stmt = conn.prepare(
         "SELECT f.id AS id, f.account_id AS account_id, f.parent_id AS parent_id,
-                f.imap_name AS imap_name,
+                f.path AS path,
                 f.delimiter AS delimiter, f.role AS role, f.uidvalidity AS uidvalidity,
                 f.uidnext AS uidnext, f.highestmodseq AS highestmodseq,
                 f.last_seen_uid AS last_seen_uid, f.backfill_cursor AS backfill_cursor,
@@ -140,19 +141,28 @@ pub fn list(conn: &Connection, account_id: Option<i64>) -> Result<Vec<Folder>> {
 }
 
 pub fn list_info(conn: &Connection, account_id: Option<i64>) -> Result<Vec<FolderInfo>> {
+    let protocols = conn
+        .prepare("SELECT id, mail_protocol FROM accounts")?
+        .query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, MailProtocol>(1)?))
+        })?
+        .collect::<rusqlite::Result<HashMap<_, _>>>()?;
     Ok(list(conn, account_id)?
         .into_iter()
         .map(|f| FolderInfo {
             id: f.id,
             account_id: f.account_id,
             parent_id: f.parent_id,
-            display_name: if f.jmap_id.is_some() {
-                f.imap_name.clone()
-            } else {
-                crate::imap::decode_mailbox_name(&f.imap_name)
+            // IMAP names are modified UTF-7 on the wire; JMAP names and local
+            // POP3 folders are stored as shown.
+            display_name: match protocols.get(&f.account_id) {
+                Some(MailProtocol::Gmail | MailProtocol::Imap) => {
+                    crate::imap::decode_mailbox_name(&f.path)
+                }
+                Some(MailProtocol::Jmap | MailProtocol::Pop3) | None => f.path.clone(),
             },
             is_jmap: f.jmap_id.is_some(),
-            imap_name: f.imap_name,
+            path: f.path,
             delimiter: f.delimiter,
             role: f.role,
             selectable: f.selectable,
@@ -188,9 +198,9 @@ pub fn rename_tree(
     delimiter: &str,
 ) -> Result<()> {
     let mut stmt = conn.prepare(
-        "SELECT id, imap_name FROM folders
-         WHERE account_id = ?1 AND (imap_name = ?2 OR imap_name LIKE ?3 ESCAPE '\\')
-         ORDER BY LENGTH(imap_name)",
+        "SELECT id, path FROM folders
+         WHERE account_id = ?1 AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')
+         ORDER BY LENGTH(path)",
     )?;
     let pattern = subtree_pattern(old_prefix, delimiter);
     let rows = stmt
@@ -202,13 +212,46 @@ pub fn rename_tree(
     for (id, old_name) in rows {
         let suffix = old_name.strip_prefix(old_prefix).unwrap_or_default();
         conn.execute(
-            "UPDATE folders SET imap_name = ?2 WHERE id = ?1",
+            "UPDATE folders SET path = ?2 WHERE id = ?1",
             params![id, format!("{new_prefix}{suffix}")],
         )?;
     }
     Ok(())
 }
 
+/// A message in a folder tree.
+pub struct TreeMessage {
+    pub id: i64,
+    pub thread_id: Option<i64>,
+    pub raw_path: Option<String>,
+}
+
+/// Every message in a folder and its subfolders.
+pub fn messages_in_tree(
+    conn: &Connection,
+    account_id: i64,
+    prefix: &str,
+    delimiter: &str,
+) -> Result<Vec<TreeMessage>> {
+    let pattern = subtree_pattern(prefix, delimiter);
+    let mut stmt = conn.prepare(
+        "SELECT m.id, m.thread_id, m.raw_path
+         FROM messages m JOIN folders f ON f.id = m.folder_id
+         WHERE f.account_id = ?1 AND (f.path = ?2 OR f.path LIKE ?3 ESCAPE '\\')",
+    )?;
+    Ok(stmt
+        .query_map(params![account_id, prefix, pattern], |row| {
+            Ok(TreeMessage {
+                id: row.get(0)?,
+                thread_id: row.get(1)?,
+                raw_path: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Delete a folder and its subfolders. Their messages go first, with their
+/// search entries and files (see `crate::sync::delete_folder_tree`).
 pub fn delete_tree(
     conn: &Connection,
     account_id: i64,
@@ -216,39 +259,25 @@ pub fn delete_tree(
     delimiter: &str,
 ) -> Result<()> {
     let pattern = subtree_pattern(prefix, delimiter);
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT m.thread_id
-         FROM messages m JOIN folders f ON f.id = m.folder_id
-         WHERE f.account_id = ?1 AND (f.imap_name = ?2 OR f.imap_name LIKE ?3 ESCAPE '\\')
-           AND m.thread_id IS NOT NULL",
-    )?;
-    let thread_ids = stmt
-        .query_map(params![account_id, prefix, pattern], |row| {
-            row.get::<_, i64>(0)
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    drop(stmt);
-    conn.execute(
-        "DELETE FROM messages WHERE folder_id IN (
-           SELECT id FROM folders
-           WHERE account_id = ?1 AND (imap_name = ?2 OR imap_name LIKE ?3 ESCAPE '\\')
-         )",
-        params![account_id, prefix, pattern],
-    )?;
     conn.execute(
         "DELETE FROM folders
-         WHERE account_id = ?1 AND (imap_name = ?2 OR imap_name LIKE ?3 ESCAPE '\\')",
+         WHERE account_id = ?1 AND (path = ?2 OR path LIKE ?3 ESCAPE '\\')",
         params![account_id, prefix, pattern],
     )?;
-    for thread_id in thread_ids {
-        super::threads::recompute(conn, thread_id)?;
-    }
     Ok(())
+}
+
+pub fn path_exists(conn: &Connection, account_id: i64, path: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM folders WHERE account_id = ?1 AND path = ?2)",
+        params![account_id, path],
+        |row| row.get(0),
+    )?)
 }
 
 pub fn get(conn: &Connection, id: i64) -> Result<Option<Folder>> {
     let mut stmt = conn.prepare(
-        "SELECT id, account_id, parent_id, imap_name, delimiter, role, uidvalidity, uidnext,
+        "SELECT id, account_id, parent_id, path, delimiter, role, uidvalidity, uidnext,
                 highestmodseq, last_seen_uid, backfill_cursor, backfill_done, jmap_id, selectable,
                 can_create_children, can_rename, can_delete
          FROM folders WHERE id = ?1",
@@ -258,7 +287,7 @@ pub fn get(conn: &Connection, id: i64) -> Result<Option<Folder>> {
 
 pub fn by_role(conn: &Connection, account_id: i64, role: &str) -> Result<Option<Folder>> {
     let mut stmt = conn.prepare(
-        "SELECT id, account_id, parent_id, imap_name, delimiter, role, uidvalidity, uidnext,
+        "SELECT id, account_id, parent_id, path, delimiter, role, uidvalidity, uidnext,
                 highestmodseq, last_seen_uid, backfill_cursor, backfill_done, jmap_id, selectable,
                 can_create_children, can_rename, can_delete
          FROM folders
@@ -272,7 +301,7 @@ pub fn by_role(conn: &Connection, account_id: i64, role: &str) -> Result<Option<
 
 pub fn by_jmap_role(conn: &Connection, account_id: i64, role: &str) -> Result<Option<Folder>> {
     let mut stmt = conn.prepare(
-        "SELECT id, account_id, parent_id, imap_name, delimiter, role, uidvalidity, uidnext,
+        "SELECT id, account_id, parent_id, path, delimiter, role, uidvalidity, uidnext,
                 highestmodseq, last_seen_uid, backfill_cursor, backfill_done, jmap_id, selectable,
                 can_create_children, can_rename, can_delete
          FROM folders
@@ -286,7 +315,7 @@ pub fn by_jmap_role(conn: &Connection, account_id: i64, role: &str) -> Result<Op
 
 pub fn by_jmap_id(conn: &Connection, account_id: i64, jmap_id: &str) -> Result<Option<Folder>> {
     let mut stmt = conn.prepare(
-        "SELECT id, account_id, parent_id, imap_name, delimiter, role, uidvalidity, uidnext,
+        "SELECT id, account_id, parent_id, path, delimiter, role, uidvalidity, uidnext,
                 highestmodseq, last_seen_uid, backfill_cursor, backfill_done, jmap_id, selectable,
                 can_create_children, can_rename, can_delete
          FROM folders WHERE account_id = ?1 AND jmap_id = ?2 LIMIT 1",
@@ -334,14 +363,14 @@ pub fn upsert_jmap(
         if let Some(conflict_id) = conn
             .query_row(
                 "SELECT id FROM folders
-                 WHERE account_id=?1 AND imap_name=?2 AND id<>?3 AND jmap_id IS NULL",
+                 WHERE account_id=?1 AND path=?2 AND id<>?3 AND jmap_id IS NULL",
                 params![account_id, name, folder.id],
                 |row| row.get::<_, i64>(0),
             )
             .optional()?
         {
             conn.execute(
-                "UPDATE folders SET imap_name = imap_name || ' [removed ' || id || ']'
+                "UPDATE folders SET path = path || ' [removed ' || id || ']'
                  WHERE id=?1",
                 params![conflict_id],
             )?;
@@ -349,7 +378,7 @@ pub fn upsert_jmap(
         let name = unique_jmap_name(conn, account_id, name, jmap_id, Some(folder.id))?;
         conn.execute(
             "UPDATE folders
-             SET imap_name=?2, role=?3, selectable=1,
+             SET path=?2, role=?3, selectable=1,
                  can_create_children=0, can_rename=0, can_delete=0
              WHERE id=?1",
             params![folder.id, name, role],
@@ -358,10 +387,10 @@ pub fn upsert_jmap(
     }
     let name = unique_jmap_name(conn, account_id, name, jmap_id, None)?;
     conn.execute(
-        "INSERT INTO folders (account_id, imap_name, delimiter, role, jmap_id,
+        "INSERT INTO folders (account_id, path, delimiter, role, jmap_id,
                               backfill_done, can_create_children, can_rename, can_delete)
          VALUES (?1, ?2, '/', ?3, ?4, 1, 0, 0, 0)
-         ON CONFLICT(account_id, imap_name) DO UPDATE SET
+         ON CONFLICT(account_id, path) DO UPDATE SET
            role = excluded.role, jmap_id = excluded.jmap_id,
            backfill_done = 1, selectable = 1,
            can_create_children = 0, can_rename = 0, can_delete = 0",
@@ -374,6 +403,33 @@ pub fn upsert_jmap(
     )?)
 }
 
+/// Drops the folders of a JMAP account that no server mailbox stands for,
+/// left by an earlier server or protocol, once nothing is in them. The
+/// account's own drafts in such a folder first move to its folder of the same
+/// role on the server.
+pub fn drop_jmap_leftovers(conn: &Connection, account_id: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE messages SET uid = NULL, folder_id = (
+           SELECT linked.id FROM folders old
+           JOIN folders linked ON linked.account_id = old.account_id
+             AND linked.role = old.role AND linked.jmap_id IS NOT NULL
+           WHERE old.id = messages.folder_id
+           ORDER BY linked.id LIMIT 1)
+         WHERE account_id = ?1 AND folder_id IN (
+           SELECT old.id FROM folders old
+           JOIN folders linked ON linked.account_id = old.account_id
+             AND linked.role = old.role AND linked.jmap_id IS NOT NULL
+           WHERE old.account_id = ?1 AND old.jmap_id IS NULL)",
+        params![account_id],
+    )?;
+    conn.execute(
+        "DELETE FROM folders WHERE account_id = ?1 AND jmap_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.folder_id = folders.id)",
+        params![account_id],
+    )?;
+    Ok(())
+}
+
 fn unique_jmap_name(
     conn: &Connection,
     account_id: i64,
@@ -384,7 +440,7 @@ fn unique_jmap_name(
     let conflict: Option<Option<String>> = conn
         .query_row(
             "SELECT jmap_id FROM folders
-             WHERE account_id=?1 AND imap_name=?2 AND (?3 IS NULL OR id<>?3)",
+             WHERE account_id=?1 AND path=?2 AND (?3 IS NULL OR id<>?3)",
             params![account_id, proposed, exclude_id],
             |row| row.get(0),
         )
@@ -399,7 +455,7 @@ fn unique_jmap_name(
     while conn
         .query_row(
             "SELECT 1 FROM folders
-             WHERE account_id=?1 AND imap_name=?2 AND (?3 IS NULL OR id<>?3)",
+             WHERE account_id=?1 AND path=?2 AND (?3 IS NULL OR id<>?3)",
             params![account_id, candidate, exclude_id],
             |_| Ok(()),
         )
@@ -478,7 +534,7 @@ mod tests {
         let conn = testutil::conn();
         testutil::seed_account(&conn);
         conn.execute(
-            "INSERT INTO folders(id,account_id,imap_name,role,jmap_id,backfill_done)
+            "INSERT INTO folders(id,account_id,path,role,jmap_id,backfill_done)
              VALUES(2,1,'JMAP Inbox','inbox','remote-inbox',1)",
             [],
         )
@@ -599,8 +655,8 @@ mod tests {
             second
         );
         assert_ne!(
-            get(&conn, first).unwrap().unwrap().imap_name,
-            get(&conn, second).unwrap().unwrap().imap_name
+            get(&conn, first).unwrap().unwrap().path,
+            get(&conn, second).unwrap().unwrap().path
         );
     }
 
@@ -640,7 +696,7 @@ mod tests {
 
         rename_tree(&conn, 1, "Projects", "Work", "/").unwrap();
 
-        assert_eq!(get(&conn, parent).unwrap().unwrap().imap_name, "Work");
-        assert_eq!(get(&conn, child).unwrap().unwrap().imap_name, "Work/2026");
+        assert_eq!(get(&conn, parent).unwrap().unwrap().path, "Work");
+        assert_eq!(get(&conn, child).unwrap().unwrap().path, "Work/2026");
     }
 }

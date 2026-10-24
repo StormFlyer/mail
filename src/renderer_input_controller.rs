@@ -78,6 +78,7 @@ pub(super) fn register_renderer_input_callbacks(
     app: &AppWindow,
     renderer: &Rc<RefCell<GpuEmailRenderer>>,
     gpu: bool,
+    opener: ExternalUrlOpener,
 ) {
     let weak = app.as_weak();
     let appearance_renderer = renderer.clone();
@@ -136,7 +137,7 @@ pub(super) fn register_renderer_input_callbacks(
             }
             return;
         }
-        if let Err(error) = open_email_link(&url) {
+        if let Err(error) = open_email_link(&opener, &url) {
             app.set_render_status(UiMessage::detail("Could not open link: {}", error));
         }
     });

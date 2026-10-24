@@ -197,17 +197,18 @@ async fn fixture(behavior: Behavior) -> (Fixture, Option<Session>) {
                     email: "reader@example.test",
                     display_name: None,
                     avatar_url: None,
-                    provider: Provider::Imap,
+                    provider: Provider::Generic,
                     auth_kind: AuthKind::Password,
                     mail_protocol: MailProtocol::Imap,
                     username: "reader@example.test",
                     jmap_url: "",
                     jmap_account_id: None,
-                    imap_host: "127.0.0.1",
-                    imap_port: port,
+                    incoming_host: "127.0.0.1",
+                    incoming_port: port,
                     smtp_host: "127.0.0.1",
                     smtp_port: 465,
                 },
+                &crate::db::testutil::account_settings(),
             )?;
             let folder_id =
                 repo::folders::upsert(conn, id, "INBOX", Some("/"), Some(roles::INBOX))?;
@@ -220,7 +221,7 @@ async fn fixture(behavior: Behavior) -> (Fixture, Option<Session>) {
         .await
         .unwrap();
     config.settings.connection = MailConnectionSettings {
-        imap_security: ConnectionSecurity::Tls,
+        incoming_security: ConnectionSecurity::Tls,
         smtp_security: ConnectionSecurity::Tls,
         trusted_certificate_pem: CERT.into(),
     };
@@ -331,6 +332,64 @@ async fn headers_survive_parse_failure_and_open_reconnects_without_marking_seen(
 }
 
 #[tokio::test]
+async fn priority_fetch_bypasses_daily_backoff_and_clears_failures() {
+    let (f, mut session) = fixture(Behavior::Broken).await;
+    let failures: Vec<_> = f.ids.iter().map(|&id| (id, "decode".into())).collect();
+    for _ in 0..21 {
+        record_content_failure_details(&f.ctx, failures.clone())
+            .await
+            .unwrap();
+    }
+    let ids = f.ids.clone();
+    let folder_id = f.folder.id;
+    let account_id = f.config.id;
+    f.ctx
+        .db
+        .write(move |conn| {
+            assert!(
+                repo::messages::missing_bodies_page_since(conn, folder_id, 10, None, None)?
+                    .is_empty()
+            );
+            let failures = repo::sync_failures::due_content(conn, account_id, i64::MAX, 10)?;
+            assert_eq!(failures.len(), ids.len());
+            for failure in failures {
+                assert_eq!(failure.attempts, 21);
+                assert_eq!(failure.next_retry_at, Some(failure.updated_at + 86_400_000));
+            }
+            for id in ids {
+                assert!(repo::messages::begin_body_fetch(conn, id)?);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        fetch_bodies_batch(&f.ctx, &f.config, &mut session, &f.ids),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let ids = f.ids.clone();
+    f.ctx
+        .db
+        .read(move |conn| {
+            // Both selective content and the full-message compatibility
+            // fallback must clear the accumulated retry history on success.
+            for id in ids {
+                assert_eq!(
+                    repo::messages::get_row(conn, id)?.unwrap().body_state,
+                    "cached"
+                );
+                assert_eq!(repo::sync_failures::content_attempts(conn, id)?, 0);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn background_isolates_bad_uid_and_caches_both_siblings() {
     let (f, session) = fixture(Behavior::Broken).await;
     drop(session);
@@ -396,6 +455,20 @@ async fn background_isolates_bad_uid_and_caches_both_siblings() {
             .iter()
             .any(|(_, line)| line.contains("BODY.PEEK[]"))
     );
+    // A subsequent drain must respect the poison message's deadline without
+    // opening another connection or repeating the no-progress failure.
+    let command_count = f.commands.lock().unwrap().len();
+    let mut settings = f.config.settings.clone();
+    settings.mail_history = MailHistory::All;
+    let (_settings, mut rx) = watch::channel(settings);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        drain_missing_bodies(&f.ctx, &f.config, &mut rx),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(f.commands.lock().unwrap().len(), command_count);
 }
 
 #[tokio::test]

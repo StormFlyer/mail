@@ -109,6 +109,7 @@ class PackagingTests(unittest.TestCase):
             for name in (
                 "scripts/package-macos.sh",
                 "platform/macos/Info.plist.in",
+                "platform/macos/com.flectar.mail.login.plist",
                 "LICENSE",
                 "THIRD_PARTY_NOTICES.md",
                 "resources/fonts/google-sans-flex/OFL.txt",
@@ -154,6 +155,7 @@ class PackagingTests(unittest.TestCase):
 
             executable("sips", 'output="${@: -1}"\nmkdir -p "$(dirname "$output")"\n: > "$output"\n')
             executable("iconutil", 'output="${@: -1}"\n: > "$output"\n')
+            executable("plutil", 'test "$1" = -lint\ntest -f "$2"\n')
             executable(
                 "codesign",
                 'target="${@: -1}"\nprintf "%s\\n" "$*" >> "$CODESIGN_LOG"\n'
@@ -196,6 +198,9 @@ class PackagingTests(unittest.TestCase):
                     self.assertTrue((app / "Frameworks/libpdfium.dylib").is_file())
                     self.assertTrue((app / "Resources/Licenses/PDFium/build.json").is_file())
                     self.assertFalse((app / "MacOS/libpdfium.dylib").exists())
+                    self.assertTrue(
+                        (app / "Library/LaunchAgents/com.flectar.mail.login.plist").is_file()
+                    )
                     self.assertTrue((output_dir / f"flectar-mail-macos-{architecture}.zip").is_file())
                     self.assertTrue((output_dir / f"flectar-mail-macos-{architecture}.dmg").is_file())
                     signatures = codesign_log.read_text().splitlines()

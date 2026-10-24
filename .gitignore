@@ -14,6 +14,11 @@
 # Local OAuth application registrations (see .env.example)
 /.env
 
+# Android private signing keys (the public certificate fingerprint is tracked)
+*.keystore
+*.jks
+*.p12
+
 # Editor and operating-system files
 *~
 .vscode/
@@ -24,3 +29,10 @@
 # Temporary UI previews and local review captures
 /ui/.*.slint
 /settings-accounts-*.png
+
+# Candle and Slint's winit backend resolve through the application lockfiles.
+/crates/candle-core/Cargo.lock
+/crates/i-slint-backend-winit/Cargo.lock
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

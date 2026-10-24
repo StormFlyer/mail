@@ -48,6 +48,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 /// Window class that identifies the main window during creation.
 const CLASS_NAME: &str = "FlectarMailWindow";
+/// Winit's class for windows created without the attributes hook.
+const WINIT_CLASS_NAME: &str = "Window Class";
 const SUBCLASS_ID: usize = 0x464d_6169; // "FMai"
 /// Keep a maximized window off auto-hidden taskbars so the pointer can
 /// still reveal them, as Windows Terminal does.
@@ -91,6 +93,9 @@ struct State {
     pressed: Cell<Option<Control>>,
     tracking: Cell<bool>,
     sync_scheduled: Cell<bool>,
+    /// The hook was re-armed for a window Slint recreates after hiding it,
+    /// which carries winit's default class instead of [`CLASS_NAME`].
+    recreating: Cell<bool>,
     app: RefCell<Option<slint::Weak<AppWindow>>>,
 }
 
@@ -105,6 +110,7 @@ thread_local! {
         pressed: Cell::new(None),
         tracking: Cell::new(false),
         sync_scheduled: Cell::new(false),
+        recreating: Cell::new(false),
         app: RefCell::new(None),
     } };
 }
@@ -124,6 +130,23 @@ pub(super) fn prepare(startup: WindowFrame) {
             };
             state.hook.set(hook);
         }
+    });
+}
+
+/// Subclass the main window again when Slint recreates it on show. Hiding to
+/// the tray destroys the native window, which removes the subclass.
+pub(super) fn rearm() {
+    STATE.with(|state| {
+        if !state.hwnd.get().is_null() || !state.hook.get().is_null() {
+            return;
+        }
+        state.recreating.set(true);
+        // SAFETY: a thread-local CBT hook on the UI thread, removed once the
+        // recreated window has been subclassed.
+        let hook = unsafe {
+            SetWindowsHookExW(WH_CBT, Some(creation_hook), null_mut(), GetCurrentThreadId())
+        };
+        state.hook.set(hook);
     });
 }
 
@@ -206,6 +229,7 @@ unsafe extern "system" fn creation_hook(code: i32, wparam: WPARAM, lparam: LPARA
                     // SAFETY: hwnd is being created on this thread.
                     unsafe { SetWindowSubclass(hwnd, Some(subclass_proc), SUBCLASS_ID, 0) };
                     state.hwnd.set(hwnd);
+                    state.recreating.set(false);
                 }
             });
         }
@@ -218,7 +242,12 @@ fn is_main_window_class(hwnd: HWND) -> bool {
     let mut name = [0u16; 64];
     // SAFETY: the buffer length is passed alongside the buffer.
     let length = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), name.len() as i32) };
-    length > 0 && String::from_utf16_lossy(&name[..length as usize]) == CLASS_NAME
+    if length <= 0 {
+        return false;
+    }
+    let name = String::from_utf16_lossy(&name[..length as usize]);
+    name == CLASS_NAME
+        || (name == WINIT_CLASS_NAME && STATE.with(|state| state.recreating.get()))
 }
 
 unsafe extern "system" fn subclass_proc(

@@ -7,6 +7,7 @@ use crate::{
 };
 
 pub const MAX_SIGNATURE_BYTES: usize = 32 * 1024;
+pub(crate) const MAX_SIGNATURES_PER_ACCOUNT: usize = 20;
 
 pub fn plain_text(signature: &Signature) -> String {
     let mut text = mail_parser::decoders::html::html_to_text(&signature.html);
@@ -45,6 +46,14 @@ pub fn text_html(text: &str) -> String {
     html
 }
 
+/// No active HTML, images or remote requests in signature settings.
+pub(crate) fn sanitize_html(html: &str) -> String {
+    ammonia::Builder::default()
+        .rm_tags(&["img"])
+        .clean(html)
+        .to_string()
+}
+
 /// Insert above the quotation, preserving the standard `-- ` delimiter.
 pub fn insert(body: &str, signature: &str) -> String {
     let signature = signature.trim();
@@ -74,11 +83,7 @@ impl Core {
                 "Use a signature name of 1–100 bytes and a body under 32 KiB".into(),
             ));
         }
-        // No active HTML, images or remote requests in signature settings.
-        signature.html = ammonia::Builder::default()
-            .rm_tags(&["img"])
-            .clean(&signature.html)
-            .to_string();
+        signature.html = sanitize_html(&signature.html);
         if signature.id.is_empty() {
             signature.id = format!("sig-{:032x}", rand::random::<u128>());
         }
@@ -105,7 +110,7 @@ impl Core {
                         .iter()
                         .filter(|s| s.account_id == signature.account_id)
                         .count()
-                        >= 20
+                        >= MAX_SIGNATURES_PER_ACCOUNT
                     {
                         return Err(CoreError::Other(
                             "An account can have up to 20 signatures".into(),

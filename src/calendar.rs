@@ -1054,4 +1054,38 @@ mod tests {
         assert_eq!(calendar_color_index("#33b679", 9), 3);
         assert_eq!(calendar_color_index("not-a-color", 9), 1);
     }
+
+    /// Slint's software renderer panics when it paints a rectangle reaching
+    /// past ±32767 physical pixels (#35). Synced timed events can span weeks.
+    #[test]
+    fn week_view_paints_multi_week_timed_events() {
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+        slint::platform::set_platform(Box::new(Headless(window.clone()))).unwrap();
+        let app = AppWindow::new().unwrap();
+        app.window()
+            .dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor: 2.0 });
+        app.set_startup_ready(true);
+        app.set_startup_hydrated(true);
+        app.set_connected_accounts(slint::ModelRc::new(slint::VecModel::from(vec![
+            crate::AccountRow {
+                id: 1,
+                ..Default::default()
+            },
+        ])));
+        app.set_active_view("calendar".into());
+        let (width, height) = (2560, 1800);
+        app.window()
+            .set_size(slint::PhysicalSize::new(width, height));
+        app.show().unwrap();
+        let mut state = LocalCalendarState::new(date(8));
+        state.events = vec![event(1, 8, 540, 28 * 24 * 60, false)];
+        apply_calendar(&app, &state, date(8));
+        assert_eq!(app.get_calendar_view_mode(), "week");
+        let mut pixels = vec![slint::Rgb8Pixel::default(); (width * height) as usize];
+        window.draw_if_needed(|r| {
+            r.render(&mut pixels, width as usize);
+        });
+        app.hide().unwrap();
+    }
 }

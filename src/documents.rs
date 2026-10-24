@@ -39,9 +39,76 @@ impl Drop for DocumentRequestGuard {
         (std::mem::replace(&mut self.0, Box::new(|| {})))();
     }
 }
+/// How a desktop file dialog presents one request. Hosts whose system picker
+/// has no title or file-type filter ignore it.
+#[derive(Clone, Default)]
+pub struct DocumentDialog {
+    pub title: String,
+    /// Filter name and the extensions it offers.
+    pub filter: Option<(String, &'static [&'static str])>,
+}
+impl DocumentDialog {
+    pub fn titled(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            filter: None,
+        }
+    }
+}
 pub trait DocumentProvider: Send + Sync {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>>;
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool>;
+    fn import_with(&self, _dialog: DocumentDialog) -> DocumentFuture<Option<ImportedDocument>> {
+        self.import()
+    }
+    fn export_with(
+        &self,
+        path: PathBuf,
+        name: String,
+        _dialog: DocumentDialog,
+    ) -> DocumentFuture<bool> {
+        self.export(path, name)
+    }
+    /// Imports the documents for one user action (compose attachments). The
+    /// default opens a single-document picker once; hosts with a multi-select
+    /// picker override it. `limit` bounds how many copies a host makes;
+    /// hosts that return source paths need not apply it.
+    fn import_many(
+        &self,
+        _limit: usize,
+        dialog: DocumentDialog,
+    ) -> DocumentFuture<Vec<ImportedDocument>> {
+        let import = self.import_with(dialog);
+        Box::pin(async move { Ok(import.await?.into_iter().collect()) })
+    }
+}
+/// Runs one document request and hands its result to `on_ready` on the UI
+/// thread. Providers rely on Tokio timers and file I/O, so the request runs on
+/// the runtime while the event loop keeps going, which desktop dialogs need.
+/// Every picker and export goes through here, so a host that must keep the
+/// presentation thread idle while its picker covers the window changes only
+/// this function.
+pub(crate) fn run_request<T: Send + 'static>(
+    runtime: &tokio::runtime::Runtime,
+    request: DocumentFuture<T>,
+    on_ready: impl FnOnce(Result<T, String>) + 'static,
+) {
+    let request = runtime.spawn(request);
+    let abort = request.abort_handle();
+    let on_ready = std::rc::Rc::new(std::cell::Cell::new(Some(on_ready)));
+    let pending = std::rc::Rc::clone(&on_ready);
+    let spawned = slint::spawn_local(async move {
+        let result = request.await.unwrap_or_else(|error| Err(error.to_string()));
+        if let Some(on_ready) = pending.take() {
+            on_ready(result);
+        }
+    });
+    if let Err(error) = spawned {
+        abort.abort();
+        if let Some(on_ready) = on_ready.take() {
+            on_ready(Err(error.to_string()));
+        }
+    }
 }
 /// Desktop file dialogs. Mobile hosts inject their own provider through
 /// `PlatformContext::app_private`.
@@ -60,24 +127,56 @@ pub(crate) fn safe_name(name: &str) -> String {
 #[cfg(desktop)]
 struct DesktopDocuments;
 #[cfg(desktop)]
+impl DocumentDialog {
+    fn file_dialog(&self) -> rfd::AsyncFileDialog {
+        let dialog = rfd::AsyncFileDialog::new().set_title(&self.title);
+        match &self.filter {
+            Some((name, extensions)) => dialog.add_filter(name, extensions),
+            None => dialog,
+        }
+    }
+}
+#[cfg(desktop)]
 impl DocumentProvider for DesktopDocuments {
     fn import(&self) -> DocumentFuture<Option<ImportedDocument>> {
-        Box::pin(async {
-            Ok(rfd::AsyncFileDialog::new()
-                .set_title("Upload file")
+        self.import_with(DocumentDialog::titled("Upload file"))
+    }
+    fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
+        self.export_with(path, name, DocumentDialog::titled("Download file"))
+    }
+    fn import_with(&self, dialog: DocumentDialog) -> DocumentFuture<Option<ImportedDocument>> {
+        Box::pin(async move {
+            Ok(dialog
+                .file_dialog()
                 .pick_file()
                 .await
                 .map(|f| ImportedDocument::source(f.path().to_owned())))
         })
     }
-    fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
+    fn import_many(
+        &self,
+        _limit: usize,
+        dialog: DocumentDialog,
+    ) -> DocumentFuture<Vec<ImportedDocument>> {
         Box::pin(async move {
-            let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title("Download file")
-                .set_file_name(name)
-                .save_file()
+            Ok(dialog
+                .file_dialog()
+                .pick_files()
                 .await
-            else {
+                .unwrap_or_default()
+                .into_iter()
+                .map(|file| ImportedDocument::source(file.path().to_owned()))
+                .collect())
+        })
+    }
+    fn export_with(
+        &self,
+        path: PathBuf,
+        name: String,
+        dialog: DocumentDialog,
+    ) -> DocumentFuture<bool> {
+        Box::pin(async move {
+            let Some(file) = dialog.file_dialog().set_file_name(name).save_file().await else {
                 return Ok(false);
             };
             flectar_mail_core::files::save_cached_file(&path, file.path())
@@ -154,6 +253,60 @@ mod tests {
         assert!(!path.exists());
         assert_eq!(drops.load(Ordering::SeqCst), 1);
         assert_eq!(cancelled.load(Ordering::SeqCst), 1);
+    }
+
+    struct FakeDocuments {
+        directory: PathBuf,
+        imports: AtomicUsize,
+        cancel_after: usize,
+    }
+
+    impl DocumentProvider for FakeDocuments {
+        fn import(&self) -> DocumentFuture<Option<ImportedDocument>> {
+            let seen = self.imports.fetch_add(1, Ordering::SeqCst);
+            let cancel = seen >= self.cancel_after;
+            let path = self.directory.join(format!("import-{seen}"));
+            Box::pin(async move {
+                if cancel {
+                    return Ok(None);
+                }
+                std::fs::write(&path, b"attachment").unwrap();
+                Ok(Some(ImportedDocument::temporary(path, |path| {
+                    let _ = std::fs::remove_file(path);
+                })))
+            })
+        }
+        fn export(&self, _path: PathBuf, _name: String) -> DocumentFuture<bool> {
+            Box::pin(async { Ok(false) })
+        }
+    }
+
+    #[tokio::test]
+    async fn import_many_uses_one_picker_request() {
+        let directory = tempfile::tempdir().unwrap();
+        let provider = Arc::new(FakeDocuments {
+            directory: directory.path().to_owned(),
+            imports: AtomicUsize::new(0),
+            cancel_after: usize::MAX,
+        });
+        let documents = provider.import_many(20, DocumentDialog::default()).await.unwrap();
+        assert_eq!(documents.len(), 1);
+        assert_eq!(provider.imports.load(Ordering::SeqCst), 1);
+        drop(documents);
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn import_many_returns_empty_when_the_picker_is_cancelled() {
+        let directory = tempfile::tempdir().unwrap();
+        let provider = Arc::new(FakeDocuments {
+            directory: directory.path().to_owned(),
+            imports: AtomicUsize::new(0),
+            cancel_after: 0,
+        });
+        let documents = provider.import_many(20, DocumentDialog::default()).await.unwrap();
+        assert!(documents.is_empty());
+        assert_eq!(provider.imports.load(Ordering::SeqCst), 1);
     }
 
     #[test]

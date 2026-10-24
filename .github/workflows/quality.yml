@@ -87,12 +87,19 @@ jobs:
         run: |
           python3 scripts/verify-parley.py
           cargo test --manifest-path crates/parley/Cargo.toml --lib --locked --target-dir target/parley-tests
+      - name: Verify the Slint winit clipboard backport
+        run: python3 scripts/verify-slint-winit.py
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Test release validation and publication
         run: |
           python3 scripts/test-release.py
           python3 scripts/test-pdf-packaging.py
           python3 scripts/test-android-jni.py
           python3 scripts/test-android-oauth.py
+          python3 scripts/test-android-signing.py
       - name: Validate Android workspace lockfile
         run: cargo metadata --manifest-path platform/android/Cargo.toml --locked --format-version 1 > /dev/null
       - name: Reject unused direct dependencies
@@ -215,6 +222,10 @@ jobs:
           key: quality-embeddings
       - name: Lint the opt-in model runtime
         run: cargo clippy -p flectar-mail-core --all-targets --locked --features local-embeddings -- -D warnings
+      - name: Verify the Candle ZIP compatibility patch
+        run: python3 scripts/verify-candle.py
+      - name: Test embedding archive compatibility
+        run: cargo test -p flectar-mail-core --locked --features local-embeddings --test embedding_archives
       - name: Test the opt-in model runtime
         run: cargo test -p flectar-mail-core --lib --locked --features local-embeddings
 
@@ -233,14 +244,19 @@ jobs:
       - name: Install pinned cargo-audit
         run: cargo install cargo-audit --locked --version 0.22.2
       - name: Audit the locked dependency graph
-        # These four advisories are unmaintained notices in optional/build or
-        # Slint/Blitz typography dependencies. Deny every new warning while the
-        # upstream replacements are tracked explicitly here.
+        # The first four exceptions are unmaintained notices in optional/build
+        # or Slint/Blitz typography dependencies. The last three cover crates
+        # folded into zbus 6: remove them when Slint, ashpd, and ksni migrate
+        # from zbus 5. These are maintenance notices, not vulnerability waivers.
+        # Deny every other warning and all known vulnerabilities.
         run: |
           for lockfile in Cargo.lock platform/android/Cargo.lock; do
             cargo audit --file "$lockfile" --deny warnings \
               --ignore RUSTSEC-2025-0141 \
               --ignore RUSTSEC-2024-0436 \
               --ignore RUSTSEC-2026-0206 \
-              --ignore RUSTSEC-2026-0192
+              --ignore RUSTSEC-2026-0192 \
+              --ignore RUSTSEC-2026-0370 \
+              --ignore RUSTSEC-2026-0371 \
+              --ignore RUSTSEC-2026-0372
           done

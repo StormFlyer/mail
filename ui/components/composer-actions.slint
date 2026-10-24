@@ -84,18 +84,24 @@ export component ComposerAttachments inherits Rectangle {
     in property <color> raised-color;
     in property <color> subtle-border-color;
     callback remove-attachment(int);
+    // Chips hold a name and a detail line; both grow with the platform font.
+    private property <length> chip-growth: max(16px, attachment-name-probe.preferred-height)
+        + max(13px, attachment-detail-probe.preferred-height) - 29px;
 
             visible: root.attachments.length > 0;
-            height: root.attachments.length > 0 ? 62px : 0px;
+            height: root.attachments.length > 0 ? 62px + root.chip-growth : 0px;
             background: root.raised-color;
             border-width: 1px;
             border-color: root.subtle-border-color;
+
+            attachment-name-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.caption; font-weight: 600; }
+            attachment-detail-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.caption; }
 
             attachments-scroll := ScrollView {
                 x: 10px;
                 y: 8px;
                 width: parent.width - 20px;
-                height: 46px;
+                height: 46px + root.chip-growth;
                 content-width: max(self.visible-width, attachment-row.preferred-width);
                 content-height: self.visible-height;
                 horizontal-scrollbar-policy: as-needed;
@@ -103,12 +109,12 @@ export component ComposerAttachments inherits Rectangle {
                 mouse-drag-pan-enabled: root.compact;
 
                 attachment-row := HorizontalBox {
-                    height: 38px;
+                    height: 38px + root.chip-growth;
                     spacing: 7px;
 
                     for attachment[index] in root.attachments : Rectangle {
                         width: 194px;
-                        height: 36px;
+                        height: 36px + root.chip-growth;
                         border-radius: 7px;
                         border-width: 1px;
                         border-color: root.subtle-border-color;
@@ -125,11 +131,11 @@ export component ComposerAttachments inherits Rectangle {
                             accessible-role: none;
                         }
 
-                        Text {
+                        attachment-name := Text {
                             x: 32px;
                             y: 4px;
                             width: parent.width - 64px;
-                            height: 16px;
+                            height: max(16px, self.preferred-height);
                             text: attachment.name;
                             color: root.body-color;
                             font-size: TypeScale.caption;
@@ -139,9 +145,9 @@ export component ComposerAttachments inherits Rectangle {
 
                         Text {
                             x: 32px;
-                            y: 19px;
+                            y: attachment-name.y + attachment-name.height - 1px;
                             width: parent.width - 64px;
-                            height: 13px;
+                            height: max(13px, self.preferred-height);
                             text: attachment.detail;
                             color: root.muted-color;
                             font-size: TypeScale.caption;
@@ -150,7 +156,7 @@ export component ComposerAttachments inherits Rectangle {
 
                         IconButton {
                             x: parent.width - 29px;
-                            y: 4px;
+                            y: (parent.height - self.height) / 2;
                             width: 28px;
                             height: 28px;
                             icon: @image-url("../icons/lucide/outline/x.svg");
@@ -214,10 +220,10 @@ export component ComposerFooter inherits Rectangle {
                 background: root.subtle-border-color;
             }
 
-            Button {
+            send-button := Button {
                 x: root.compact ? 8px : 12px;
                 y: 10px;
-                width: root.compact ? 96px : 106px;
+                width: max(root.compact ? 96px : 106px, self.content-width);
                 height: 34px;
                 text: root.sending ? @tr("Sending…") : @tr("Send");
                 icon: @image-url("../icons/lucide/filled/paper-airplane.svg");
@@ -227,9 +233,9 @@ export component ComposerFooter inherits Rectangle {
                 clicked => { root.submit(true); }
             }
 
-            IconButton {
+            attach-button := IconButton {
                 visible: root.attachment-picker-supported;
-                x: root.compact ? 108px : 126px;
+                x: send-button.x + send-button.width + (root.compact ? 4px : 8px);
                 y: root.compact ? 5px : 11px;
                 width: root.compact ? 44px : 32px;
                 height: root.compact ? 44px : 32px;
@@ -242,8 +248,8 @@ export component ComposerFooter inherits Rectangle {
 
             Text {
                 visible: !root.compact && root.attachment-picker-supported;
-                x: 166px;
-                width: max(0px, parent.width - 410px);
+                x: attach-button.x + attach-button.width + 8px;
+                width: max(0px, save-draft.x - self.x - 42px);
                 height: parent.height;
                 text: root.attachment-summary == "" ? @tr("Attach files") : root.attachment-summary;
                 color: root.muted-color;
@@ -252,10 +258,10 @@ export component ComposerFooter inherits Rectangle {
                 overflow: elide;
             }
 
-            Button {
-                x: parent.width - (root.compact ? 158px : 202px);
+            save-draft := Button {
+                x: parent.width - (root.compact ? 54px : 90px) - self.width;
                 y: 11px;
-                width: root.compact ? 104px : 112px;
+                width: max(root.compact ? 104px : 112px, self.content-width);
                 height: 32px;
                 text: @tr("Save draft");
                 enabled: root.has-content;
@@ -307,36 +313,37 @@ export component LinkEditor inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         width: root.compact ? min(380px, parent.width - 32px) : 420px;
-        height: 202px;
+        height: link-field.y + 124px;
         border-radius: 10px;
         border-width: 1px;
         border-color: root.frame-border-color;
         background: root.background-color;
 
-        Text {
+        link-heading := Text {
             x: 20px;
             y: 18px;
             width: parent.width - 40px;
-            height: 24px;
+            height: max(24px, self.preferred-height);
             text: root.has-existing-link ? @tr("Edit link") : @tr("Add link");
             color: root.title-color;
             font-size: TypeScale.heading-small;
             font-weight: 700;
         }
 
-        Text {
+        link-note := Text {
             x: 20px;
-            y: 48px;
+            y: link-heading.y + link-heading.height + 6px;
             width: parent.width - 40px;
-            height: 20px;
+            height: max(20px, self.preferred-height);
             text: @tr("The selected text will open this address.");
             color: root.muted-color;
             font-size: TypeScale.secondary;
+            wrap: word-wrap;
         }
 
-        Rectangle {
+        link-field := Rectangle {
             x: 20px;
-            y: 78px;
+            y: link-note.y + link-note.height + 10px;
             width: parent.width - 40px;
             height: 38px;
             border-radius: 7px;
@@ -382,26 +389,26 @@ export component LinkEditor inherits Rectangle {
 
         if root.has-existing-link : Button {
             x: 20px;
-            y: 146px;
-            width: 104px;
+            y: link-field.y + 68px;
+            width: max(104px, self.content-width);
             height: 34px;
             text: @tr("Remove link");
             clicked => { root.remove(); }
         }
 
         Button {
-            x: parent.width - 188px;
-            y: 146px;
-            width: 78px;
+            x: link-apply.x - self.width - 8px;
+            y: link-apply.y;
+            width: max(78px, self.content-width);
             height: 34px;
             text: @tr("Cancel");
             clicked => { root.cancel(); }
         }
 
-        Button {
-            x: parent.width - 102px;
-            y: 146px;
-            width: 82px;
+        link-apply := Button {
+            x: parent.width - self.width - 20px;
+            y: link-field.y + 68px;
+            width: max(82px, self.content-width);
             height: 34px;
             text: @tr("Apply");
             primary: true;
@@ -428,30 +435,30 @@ export component DiscardConfirmation inherits Rectangle {
 
         Rectangle {
             x: (parent.width - self.width) / 2;
-            y: (parent.height - 164px) / 2;
+            y: (parent.height - self.height) / 2;
             width: root.compact ? min(360px, parent.width - 32px) : 360px;
-            height: 164px;
+            height: discard-message.y + discard-message.height + 75px;
             border-radius: 10px;
             border-width: 1px;
             border-color: root.frame-border-color;
             background: root.background-color;
 
-            Text {
+            discard-heading := Text {
                 x: 20px;
                 y: 20px;
                 width: parent.width - 40px;
-                height: 24px;
+                height: max(24px, self.preferred-height);
                 text: @tr("Discard this draft?");
                 color: root.title-color;
                 font-size: TypeScale.heading-small;
                 font-weight: 700;
             }
 
-            Text {
+            discard-message := Text {
                 x: 20px;
-                y: 51px;
+                y: discard-heading.y + discard-heading.height + 7px;
                 width: parent.width - 40px;
-                height: 38px;
+                height: max(38px, self.preferred-height);
                 text: @tr("The message and its attachments will be removed from this composer.");
                 color: root.secondary-color;
                 font-size: TypeScale.secondary;
@@ -459,18 +466,18 @@ export component DiscardConfirmation inherits Rectangle {
             }
 
             Button {
-                x: parent.width - 192px;
-                y: 108px;
-                width: 78px;
+                x: discard-button.x - self.width - 8px;
+                y: discard-button.y;
+                width: max(78px, self.content-width);
                 height: 34px;
                 text: @tr("Keep");
                 clicked => { root.keep(); }
             }
 
-            Button {
-                x: parent.width - 106px;
-                y: 108px;
-                width: 86px;
+            discard-button := Button {
+                x: parent.width - self.width - 20px;
+                y: discard-message.y + discard-message.height + 19px;
+                width: max(86px, self.content-width);
                 height: 34px;
                 text: @tr("Discard");
                 primary: true;

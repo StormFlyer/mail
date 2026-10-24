@@ -32,11 +32,16 @@ rm -rf "$app_dir"
 mkdir -p \
   "$app_dir/Contents/MacOS" \
   "$app_dir/Contents/Frameworks" \
+  "$app_dir/Contents/Library/LaunchAgents" \
   "$app_dir/Contents/Resources/Licenses/Flectar Mail" \
   "$app_dir/Contents/Resources/Licenses/Google Sans Flex" \
   "$app_dir/Contents/Resources/Licenses/Noto Emoji" \
   "$app_dir/Contents/Resources/Licenses/PDFium"
 cp "$binary_path" "$app_dir/Contents/MacOS/flectar-mail"
+# Registered with Login Items through SMAppService for "Start automatically".
+cp "$project_dir/platform/macos/com.flectar.mail.login.plist" \
+  "$app_dir/Contents/Library/LaunchAgents/com.flectar.mail.login.plist"
+plutil -lint "$app_dir/Contents/Library/LaunchAgents/com.flectar.mail.login.plist"
 
 python3 "$project_dir/scripts/stage-pdfium.py" \
   "$pdfium_target" "$app_dir/Contents/Frameworks" \

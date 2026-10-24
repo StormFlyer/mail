@@ -14,7 +14,8 @@ import { RenderingInfoDialog } from "../dialogs/rendering-info-dialog.slint";
 import { TypeScale } from "../typography.slint";
 import { AppTheme, LayoutMetrics, MailIconPalette, MotionSettings } from "../design-system.slint";
 import { MessageColors } from "../message-colors.slint";
-import { WindowControlsClearance } from "../window-chrome.slint";
+import { WindowChrome, WindowControlsClearance } from "../window-chrome.slint";
+import { Shortcuts } from "../shortcuts.slint";
 
 component ReaderControl inherits ToolbarIconButton {
     tooltip-above: true;
@@ -117,12 +118,21 @@ component MessageLoadingSkeleton inherits Rectangle {
     in property <color> base-color;
     in property <color> highlight-color;
     in property <color> text-color;
+    // The skeleton covers a body as tall as its rendered email. Only this
+    // visible window, in the skeleton's coordinates, is painted.
+    in property <length> paint-top: 0px;
+    in property <length> paint-bottom: self.height;
 
     visible: root.active || self.opacity > 0;
-    background: root.surface-color;
     clip: true;
     opacity: root.active ? 1 : 0;
     animate opacity { duration: 180ms; easing: ease-out; }
+
+    Rectangle {
+        y: clamp(root.paint-top, 0px, root.height);
+        height: clamp(root.paint-bottom, 0px, root.height) - self.y;
+        background: root.surface-color;
+    }
 
     LoadingSkeletonBlock {
         x: 18px;
@@ -207,9 +217,12 @@ component ThreadMessageHeader inherits Rectangle {
     in property <color> control-bg;
     in property <color> heading;
     in property <color> secondary-text;
+    // The pane positions every header from these, so it supplies them.
+    in property <length> sender-height: 23px;
+    in property <length> detail-height: 24px;
     callback open;
 
-    height: 64px;
+    height: 17px + root.sender-height + root.detail-height;
     border-radius: 8px;
     border-width: root.selected ? 0px : 1px;
     border-color: root.border;
@@ -226,7 +239,7 @@ component ThreadMessageHeader inherits Rectangle {
     Avatar {
         visible: root.show-avatar;
         x: 8px;
-        y: 13px;
+        y: (parent.height - self.height) / 2;
         size: 38px;
         source: root.favicon;
         has-source: root.has-favicon;
@@ -243,7 +256,7 @@ component ThreadMessageHeader inherits Rectangle {
         x: root.content-x;
         y: 7px;
         width: max(0px, parent.width - self.x - (root.sender-verification != "" ? 112px : 92px));
-        height: 23px;
+        height: root.sender-height;
         text: root.outgoing ? @tr("You") : root.sender;
         color: root.heading;
         font-size: TypeScale.body;
@@ -253,7 +266,7 @@ component ThreadMessageHeader inherits Rectangle {
     }
     if root.sender-verification != "" : Image {
         x: min(sender-label.x + sender-label.preferred-width + 6px, parent.width - 122px);
-        y: 10px;
+        y: sender-label.y + (sender-label.height - self.height) / 2;
         width: 17px;
         height: 17px;
         source: @image-url("../icons/lucide/outline/check-circle.svg");
@@ -271,7 +284,7 @@ component ThreadMessageHeader inherits Rectangle {
         x: parent.width - 82px;
         y: 7px;
         width: 70px;
-        height: 23px;
+        height: root.sender-height;
         text: root.time;
         color: root.secondary-text;
         font-size: TypeScale.caption;
@@ -281,9 +294,9 @@ component ThreadMessageHeader inherits Rectangle {
     }
     Text {
         x: root.content-x;
-        y: 31px;
+        y: sender-label.y + sender-label.height + 1px;
         width: max(0px, parent.width - self.x - 12px);
-        height: 24px;
+        height: root.detail-height;
         text: root.selected
             ? root.address + (root.to == "" ? "" : " · " + @tr("to {}", root.to))
             : root.body-pending ? @tr("Loading message…") : root.preview;
@@ -306,7 +319,9 @@ component ThreadMessageHeader inherits Rectangle {
     }
 }
 
-export component MailReadingPane inherits Rectangle {
+// A focus scope only so message shortcuts work from anywhere in the reader.
+export component MailReadingPane inherits FocusScope {
+    enabled: false;
     in property <bool> compact: false;
     in property <bool> full-width: false;
     private property <bool> attachment-menu-mode: root.height < 500px;
@@ -360,6 +375,8 @@ export component MailReadingPane inherits Rectangle {
         { id: "reply", title: @tr("Reply"), icon: @image-url("../icons/lucide/outline/reply.svg") },
         { id: "reply_all", title: @tr("Reply all"), icon: @image-url("../icons/lucide/outline/reply-all.svg") },
         { id: "forward", title: @tr("Forward"), icon: @image-url("../icons/lucide/outline/forward.svg") },
+        { id: "star", title: root.selected_starred ? @tr("Remove star") : @tr("Star message"), icon: root.selected_starred ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg") },
+        { id: "labels", title: @tr("Manage labels"), icon: root.selected-account-uses-labels ? @image-url("../icons/lucide/filled/tag.svg") : @image-url("../icons/lucide/filled/file-directory.svg") },
         { id: "openpgp", title: @tr("Decrypt / verify OpenPGP"), icon: @image-url("../icons/lucide/outline/lock.svg") },
         { id: "print", title: @tr("Print message"), icon: @image-url("../icons/lucide/outline/printer.svg") },
         { id: "browser", title: @tr("Open in browser"), icon: @image-url("../icons/lucide/outline/browser.svg") },
@@ -376,6 +393,8 @@ export component MailReadingPane inherits Rectangle {
         { id: "reply", title: @tr("Reply"), icon: @image-url("../icons/lucide/outline/reply.svg") },
         { id: "reply_all", title: @tr("Reply all"), icon: @image-url("../icons/lucide/outline/reply-all.svg") },
         { id: "forward", title: @tr("Forward"), icon: @image-url("../icons/lucide/outline/forward.svg") },
+        { id: "star", title: root.selected_starred ? @tr("Remove star") : @tr("Star message"), icon: root.selected_starred ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg") },
+        { id: "labels", title: @tr("Manage labels"), icon: root.selected-account-uses-labels ? @image-url("../icons/lucide/filled/tag.svg") : @image-url("../icons/lucide/filled/file-directory.svg") },
         { id: "openpgp", title: @tr("Decrypt / verify OpenPGP"), icon: @image-url("../icons/lucide/outline/lock.svg") },
         { id: "browser", title: @tr("Open in browser"), icon: @image-url("../icons/lucide/outline/browser.svg") },
         { id: "rendering_info", title: @tr("About email rendering"), icon: @image-url("../icons/lucide/outline/info.svg") },
@@ -391,13 +410,26 @@ export component MailReadingPane inherits Rectangle {
     // integrated window controls or a narrow pane leave too little room.
     private property <length> toolbar-room: 1000px;
     private property <length> toolbar-button: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-    private property <bool> show-navigation: root.toolbar-room >= 10 * root.toolbar-button + 9 * 6px;
+    private property <length> toolbar-spacing: 6px;
+    private property <length> toolbar-slot: root.toolbar-button + root.toolbar-spacing;
+    // Integrated caption buttons can leave room for only Close, Reply and
+    // More at the minimum window width. Keep all other actions in the menu.
+    private property <bool> show-label-action: root.toolbar-room >= 4 * root.toolbar-slot;
+    private property <bool> show-star-action: root.toolbar-room >= 5 * root.toolbar-slot;
+    // Reply stays available even in compact panes. Reserve space for the
+    // other compose actions before adding message management or navigation.
+    // Each count includes one gap per button (there is also a stretch spacer).
+    private property <bool> show-all-compose-actions: !root.compact
+        && root.toolbar-room >= 7 * root.toolbar-slot;
+    private property <int> compose-button-count: root.selected_is_draft ? 0
+        : root.show-all-compose-actions ? 3 : 1;
+    private property <bool> show-navigation: root.toolbar-room >= (10 + root.compose-button-count) * root.toolbar-slot;
     // Compact pages never show navigation or spam, so read is the only
     // secondary action there.
-    private property <int> secondary-button-count: root.compact ? 7 : 8;
+    private property <int> secondary-button-count: (root.compact ? 7 : 8) + root.compose-button-count;
     private property <bool> show-secondary-actions: root.toolbar-room
-        >= root.secondary-button-count * root.toolbar-button + (root.secondary-button-count - 1) * 6px;
-    private property <bool> show-primary-actions: root.toolbar-room >= 6 * root.toolbar-button + 5 * 6px;
+        >= root.secondary-button-count * root.toolbar-slot;
+    private property <bool> show-primary-actions: root.toolbar-room >= (6 + root.compose-button-count) * root.toolbar-slot;
     in-out property <bool> text_mode: false;
     in-out property <bool> source_mode: false;
     in-out property <bool> rendering_info_open: false;
@@ -418,7 +450,23 @@ export component MailReadingPane inherits Rectangle {
         email-surface.height - root.thread-header-height - root.renderer-controls-height
     );
     private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);
-    private property <length> attachment-section-height: MailAttachments.rows.length > 0 ? 34px + MailAttachments.rows.length * 48px : 0px;
+    // Slint's software renderer (CPU mode, Android) panics when it paints a
+    // rectangle past ±32767 physical pixels (#35). Surfaces that grow with the
+    // message paint only the visible scroll content, with a margin for cut edges.
+    // Remove this clamping once a Slint release fixes slint-ui/slint#14250.
+    private property <length> paint-margin: 32px;
+    private property <length> paint-left: -email-scroll.content-x - root.paint-margin;
+    private property <length> paint-right: -email-scroll.content-x + email-scroll.visible-width + root.paint-margin;
+    private property <length> paint-top: -email-scroll.content-y - root.paint-margin;
+    private property <length> paint-bottom: -email-scroll.content-y + email-scroll.visible-height + root.paint-margin;
+    // Attachment rows share one height so the document height stays exact.
+    private property <length> attachment-heading-line: max(20px, attachment-heading-probe.preferred-height);
+    private property <length> attachment-name-line: max(22px, attachment-name-probe.preferred-height);
+    private property <length> attachment-detail-line: max(17px, attachment-detail-probe.preferred-height);
+    private property <length> attachment-card-height: 5px + root.attachment-name-line + root.attachment-detail-line;
+    private property <length> attachment-section-height: MailAttachments.rows.length > 0
+        ? 14px + root.attachment-heading-line + MailAttachments.rows.length * (root.attachment-card-height + 4px)
+        : 0px;
     // Normal HTML uses its intrinsic rendered height. Alternate surfaces own
     // their scrolling. Fit their body and footer in the outer viewport when
     // possible so a short reader view cannot scroll its header away.
@@ -428,9 +476,18 @@ export component MailReadingPane inherits Rectangle {
             - root.message-actions-height - root.message-bottom-padding)
         : root.rendered-email-height;
     private property <length> attachment-flow-y: root.message-body-content-height;
-    private property <length> message-actions-height: root.compact ? 52px : 42px;
+    private property <length> message-actions-padding: root.compact ? 4px : 5px;
+    private property <length> message-actions-height: root.toolbar-button + 2 * root.message-actions-padding;
     private property <length> message-bottom-padding: root.compact ? 10px : 12px;
-    private property <length> thread-header-height: 64px;
+    // Header lines keep their 12px design and grow with the platform font.
+    private property <length> thread-sender-height: max(23px, thread-sender-probe.preferred-height);
+    private property <length> thread-detail-height: max(24px, thread-detail-probe.preferred-height);
+    private property <length> thread-header-height: 17px + root.thread-sender-height + root.thread-detail-height;
+    thread-sender-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.body; font-weight: 700; }
+    thread-detail-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.secondary; }
+    attachment-heading-probe := Text { visible: false; text: "Ag"; font-weight: 600; }
+    attachment-name-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.body; font-weight: 600; }
+    attachment-detail-probe := Text { visible: false; text: "Ag"; font-size: TypeScale.caption; }
     private property <length> thread-item-stride: root.thread-header-height + root.thread-item-gap;
     private property <int> accordion-message-count: max(1, root.thread-messages.length);
     private property <int> accordion-selected-index: min(max(0, root.selected-thread-index), root.accordion-message-count - 1);
@@ -485,6 +542,25 @@ export component MailReadingPane inherits Rectangle {
         else if root.text_mode { plain-text-editor.focus(); }
         else if EmailReader.reader-mode { reader-focus.focus(); }
         else { email-focus.focus(); }
+    }
+
+    // Message shortcuts act on the open conversation, as its toolbar does,
+    // but not behind a dialog the reader shows.
+    private property <bool> message-keys: root.has_selected && !root.rendering_info_open && !root.label-editor-open;
+    KeyBinding {
+        keys: Shortcuts.archive;
+        enabled: root.message-keys && !root.selected_is_draft;
+        activated => { root.message_action("archive"); }
+    }
+    KeyBinding {
+        keys: Shortcuts.spam;
+        enabled: root.message-keys && !root.selected_is_draft;
+        activated => { root.message_action("spam"); }
+    }
+    KeyBinding {
+        keys: Shortcuts.trash;
+        enabled: root.message-keys;
+        activated => { root.message_action(root.trash_view ? "delete_permanently" : "trash"); }
     }
 
     private property <bool> viewport-pending: false;
@@ -594,7 +670,7 @@ export component MailReadingPane inherits Rectangle {
 
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
-                background: root.surface-raised;
+                Rectangle { background: root.surface-raised; }
 
                 VerticalBox {
                     visible: root.has_selected;
@@ -606,7 +682,9 @@ export component MailReadingPane inherits Rectangle {
                         // centerline at y=32. Compact actions use the same
                         // centered 44px touch geometry as the other pages.
                         height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
-                        background: root.surface-raised;
+                        // Under the tab strip the toolbar shares the list's
+                        // surface, so the band below the tabs is one color.
+                        background: WindowChrome.top-bar ? root.surface : root.surface-raised;
                         private property <length> inset: root.compact ? 8px : 14px;
                         // Width left for buttons once integrated window
                         // controls are accounted for. Copied on change so the
@@ -622,7 +700,7 @@ export component MailReadingPane inherits Rectangle {
                             padding-left: max(parent.inset, toolbar-clearance.leading);
                             padding-right: max(parent.inset, toolbar-clearance.trailing);
                             padding-bottom: 0px;
-                            spacing: 6px;
+                            spacing: root.toolbar-spacing;
                             cross-axis-alignment: center;
                             ToolbarIconButton {
                                 visible: root.has_selected;
@@ -656,6 +734,34 @@ export component MailReadingPane inherits Rectangle {
                                 clicked => { root.select_email(root.next-email-id); }
                             }
                             Rectangle { horizontal-stretch: 1; }
+                            if !root.selected_is_draft : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                compact: root.compact;
+                                icon: @image-url("../icons/lucide/outline/reply.svg");
+                                icon-color: root.secondary-text;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Reply");
+                                accessible-id: "message-toolbar-reply-button";
+                                clicked => { root.compose_message_action("reply"); }
+                            }
+                            if !root.selected_is_draft && root.show-all-compose-actions : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                icon: @image-url("../icons/lucide/outline/reply-all.svg");
+                                icon-color: root.secondary-text;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Reply all");
+                                accessible-id: "message-toolbar-reply-all-button";
+                                clicked => { root.compose_message_action("reply_all"); }
+                            }
+                            if !root.selected_is_draft && root.show-all-compose-actions : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                icon: @image-url("../icons/lucide/outline/forward.svg");
+                                icon-color: root.secondary-text;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Forward");
+                                accessible-id: "message-toolbar-forward-button";
+                                clicked => { root.compose_message_action("forward"); }
+                            }
                             if root.show-primary-actions : ToolbarIconButton {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
@@ -667,8 +773,7 @@ export component MailReadingPane inherits Rectangle {
                                 tooltip-text: @tr("Archive message");
                                 clicked => { root.message_action("archive"); }
                             }
-                            ToolbarIconButton {
-                                visible: !root.selected_is_draft;
+                            if !root.selected_is_draft && root.show-star-action : ToolbarIconButton {
                                 interactive: root.has_selected;
                                 compact: root.compact;
                                 icon: root.selected_starred ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg");
@@ -710,9 +815,11 @@ export component MailReadingPane inherits Rectangle {
                             }
                             label-action := Rectangle {
                                 visible: !root.selected_is_draft;
-                                width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-                                height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-                                label-button := ToolbarIconButton {
+                                // Keep the popup anchor alive when the trigger
+                                // moves into More, without reserving a button.
+                                width: root.show-label-action ? root.toolbar-button : 0px;
+                                height: root.toolbar-button;
+                                if root.show-label-action : ToolbarIconButton {
                                     compact: root.compact;
                                     width: parent.width;
                                     height: parent.height;
@@ -733,7 +840,7 @@ export component MailReadingPane inherits Rectangle {
                                 }
 
                                 label-popup := PopupWindow {
-                                    x: root.compact ? -232px : -252px;
+                                    x: max(8px - label-action.absolute-position.x, parent.width - self.width);
                                     y: parent.height + 4px;
                                     width: 288px;
                                     height: 330px;
@@ -788,7 +895,7 @@ export component MailReadingPane inherits Rectangle {
 
                                                     for label[index] in root.mail-label-results : Rectangle {
                                                         width: label-list.visible-width;
-                                                        height: 42px;
+                                                        height: label-detail.y + label-detail.height + 4px;
                                                         border-radius: 6px;
                                                         background: label-hit.has-hover ? root.control-bg : transparent;
 
@@ -804,11 +911,11 @@ export component MailReadingPane inherits Rectangle {
                                                             image-fit: contain;
                                                             accessible-role: none;
                                                         }
-                                                        Text {
+                                                        label-name := Text {
                                                             x: 30px;
                                                             width: parent.width - 88px;
                                                             y: 3px;
-                                                            height: 20px;
+                                                            height: max(20px, self.preferred-height);
                                                             text: label.name;
                                                             color: root.heading;
                                                             font-size: TypeScale.body;
@@ -817,11 +924,11 @@ export component MailReadingPane inherits Rectangle {
                                                             overflow: elide;
                                                             vertical-alignment: center;
                                                         }
-                                                        Text {
+                                                        label-detail := Text {
                                                             x: 30px;
-                                                            y: 22px;
+                                                            y: label-name.y + label-name.height - 1px;
                                                             width: parent.width - 88px;
-                                                            height: 16px;
+                                                            height: max(16px, self.preferred-height);
                                                             text: label.is_auto ? @tr("Smart category") : label.account_name;
                                                             color: root.muted-text;
                                                             font-size: TypeScale.caption;
@@ -925,6 +1032,12 @@ export component MailReadingPane inherits Rectangle {
                                 activated(action) => {
                                     if action == "edit_draft" || action == "reply" || action == "reply_all" || action == "forward" {
                                         root.compose_message_action(action);
+                                    } else if action == "star" {
+                                        root.message_action(root.selected_starred ? "unstar" : "star");
+                                    } else if action == "labels" {
+                                        root.label-search-query = "";
+                                        root.search-mail-labels("");
+                                        label-popup.show();
                                     } else if action == "openpgp" {
                                         AccountMailPreferences.read-message();
                                     } else if action == "print" {
@@ -976,13 +1089,15 @@ export component MailReadingPane inherits Rectangle {
                             width: root.compact ? max(0px, root.window-width - 24px)
                                 : root.full-width ? max(0px, root.window-width - 48px)
                                 : max(0px, root.window-width - 734px);
-                            height: min(3, max(1, ceil(root.display-subject.character-count * 10.5px / max(1px, self.width)))) * (self.font-metrics.ascent - self.font-metrics.descent);
+                            // Up to three lines; longer subjects end in an ellipsis.
+                            height: min(self.preferred-height, 3 * (self.font-metrics.ascent - self.font-metrics.descent));
                             text: root.display-subject;
                             color: root.title-color;
                             font-size: root.compact ? TypeScale.title-small : TypeScale.title;
                             font-weight: 600;
                             letter-spacing: -0.3px;
                             wrap: word-wrap;
+                            overflow: elide;
                         }
 
                         Rectangle { height: 8px; }
@@ -1041,11 +1156,15 @@ export component MailReadingPane inherits Rectangle {
                                 // The expanded header and document share one card
                                 // boundary. Its fixed horizontal position keeps the
                                 // chrome aligned while a zoomed document scrolls.
+                                // The card is as tall as the rendered email, so it
+                                // is painted only within the visible window.
                                 Rectangle {
+                                    property <length> card-top: root.selected-header-y;
+                                    property <length> card-bottom: self.card-top + root.thread-header-height + root.expanded-message-height;
                                     x: -email-scroll.content-x + root.message-card-inset;
-                                    y: root.selected-header-y;
+                                    y: clamp(root.paint-top, self.card-top, self.card-bottom);
                                     width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
-                                    height: root.thread-header-height + root.expanded-message-height;
+                                    height: clamp(root.paint-bottom, self.card-top, self.card-bottom) - self.y;
                                     background: root.surface;
                                     border-radius: 8px;
                                     border-width: 1px;
@@ -1074,6 +1193,8 @@ export component MailReadingPane inherits Rectangle {
                                     control-bg: root.control-bg;
                                     heading: root.heading;
                                     secondary-text: root.secondary-text;
+                                    sender-height: root.thread-sender-height;
+                                    detail-height: root.thread-detail-height;
                                 }
 
                                 for row in root.thread-messages : ThreadMessageHeader {
@@ -1103,6 +1224,8 @@ export component MailReadingPane inherits Rectangle {
                                     control-bg: root.control-bg;
                                     heading: root.heading;
                                     secondary-text: root.secondary-text;
+                                    sender-height: root.thread-sender-height;
+                                    detail-height: root.thread-detail-height;
                                     open => { root.select_thread_message(row.index); }
                                 }
 
@@ -1174,6 +1297,8 @@ export component MailReadingPane inherits Rectangle {
                                     y: root.message-body-y;
                                     width: root.email-viewport-width;
                                     height: root.message-body-content-height;
+                                    paint-top: root.paint-top - self.y;
+                                    paint-bottom: root.paint-bottom - self.y;
                                     z: 50;
                                     active: EmailReader.body-pending;
                                     surface-color: root.surface;
@@ -1252,8 +1377,16 @@ export component MailReadingPane inherits Rectangle {
                                         visible: !root.text_mode && !root.source_mode && !EmailReader.reader-mode;
                                         x: missing.x * 1px; y: missing.y * 1px + (root.remote-images-blocked ? 60px : 0px);
                                         width: missing.width * 1px; height: missing.height * 1px;
-                                        background: root.control-bg; border-width: 1px; border-color: root.border;
                                         clip: true; accessible-role: image; accessible-label: missing.alt;
+                                        // Authored image sizes are unbounded; paint
+                                        // only the visible part of the placeholder.
+                                        Rectangle {
+                                            x: clamp(root.paint-left - email-context.x - parent.x, 0px, parent.width);
+                                            y: clamp(root.paint-top - email-context.y - parent.y, 0px, parent.height);
+                                            width: clamp(root.paint-right - email-context.x - parent.x, 0px, parent.width) - self.x;
+                                            height: clamp(root.paint-bottom - email-context.y - parent.y, 0px, parent.height) - self.y;
+                                            background: root.control-bg; border-width: 1px; border-color: root.border;
+                                        }
                                         Text {
                                             x: 4px; y: 2px; width: max(0px,parent.width - 8px); height: max(0px,parent.height - 4px);
                                             text: missing.alt != "" ? missing.alt : missing.state == "loading" ? @tr("Loading image…") : missing.state == "blocked" ? @tr("Blocked image") : missing.state == "limited" ? @tr("Image exceeds limits") : @tr("Image unavailable");
@@ -1323,12 +1456,16 @@ export component MailReadingPane inherits Rectangle {
                                             }
                                         }
 
+                                        KeyBinding {
+                                            keys: Shortcuts.find;
+                                            activated => { EmailReader.find-open = true; EmailReader.reader-mode = false; find-input.focus(); }
+                                        }
+                                        KeyBinding { keys: Shortcuts.zoom-in; activated => { EmailReader.command("zoom-in"); } }
+                                        KeyBinding { keys: Shortcuts.zoom-in-alternate; activated => { EmailReader.command("zoom-in"); } }
+                                        KeyBinding { keys: Shortcuts.zoom-out; activated => { EmailReader.command("zoom-out"); } }
+                                        KeyBinding { keys: Shortcuts.zoom-reset; activated => { EmailReader.command("zoom-reset"); } }
+                                        KeyBinding { keys: Shortcuts.caret-browsing; activated => { EmailReader.caret-mode = !EmailReader.caret-mode; } }
                                         key-pressed(event) => {
-                                            if (event.modifiers.control || event.modifiers.meta) && event.text == "f" { EmailReader.find-open = true; EmailReader.reader-mode = false; find-input.focus(); return accept; }
-                                            if (event.modifiers.control || event.modifiers.meta) && (event.text == "+" || event.text == "=") { EmailReader.command("zoom-in"); return accept; }
-                                            if (event.modifiers.control || event.modifiers.meta) && event.text == "-" { EmailReader.command("zoom-out"); return accept; }
-                                            if (event.modifiers.control || event.modifiers.meta) && event.text == "0" { EmailReader.command("zoom-reset"); return accept; }
-                                            if event.text == Key.F7 { EmailReader.caret-mode = !EmailReader.caret-mode; return accept; }
                                             if event.text == Key.Escape { EmailReader.command("clear-selection"); return accept; }
                                             if !event.modifiers.shift && !EmailReader.caret-mode {
                                                 if event.text == Key.LeftArrow { email-scroll.content-x = min(0px,email-scroll.content-x + 40px); return accept; }
@@ -1396,6 +1533,7 @@ export component MailReadingPane inherits Rectangle {
                                     if root.text_mode : Button {
                                         x: 16px;
                                         y: 16px;
+                                        width: parent.width - 32px;
                                         height: 30px;
                                         text: @tr("Show rendered email");
                                         clicked => { root.text_mode = false; }
@@ -1508,7 +1646,15 @@ export component MailReadingPane inherits Rectangle {
                                         if event.text == Key.Return || event.text == " " { root.open_email_link(link.url); return accept; }
                                         reject
                                     }
-                                    Rectangle { width: parent.width; height: parent.height; border-width: parent.has-focus ? 2px : 0px; border-color: root.accent; background: transparent; }
+                                    // A link can wrap the whole message; paint
+                                    // only the visible part of its focus ring.
+                                    Rectangle {
+                                        x: clamp(root.paint-left - parent.x, 0px, parent.width);
+                                        y: clamp(root.paint-top - parent.y, 0px, parent.height);
+                                        width: clamp(root.paint-right - parent.x, 0px, parent.width) - self.x;
+                                        height: clamp(root.paint-bottom - parent.y, 0px, parent.height) - self.y;
+                                        border-width: parent.has-focus ? 2px : 0px; border-color: root.accent; background: transparent;
+                                    }
                                 }
 
                                 // Attachments belong to the message document. They
@@ -1523,14 +1669,14 @@ export component MailReadingPane inherits Rectangle {
                                     padding-top: 8px;
                                     spacing: 6px;
                                     Text {
-                                        height: 20px;
+                                        height: root.attachment-heading-line;
                                         text: @tr("Attachments");
                                         color: root.heading;
                                         font-weight: 600;
                                     }
                                     for attachment in MailAttachments.rows : HorizontalBox {
                                         width: parent.width;
-                                        height: 48px;
+                                        height: root.attachment-card-height + 4px;
                                         padding: 0px;
                                         spacing: 8px;
                                         attachment-focus := FocusVisibleScope {
@@ -1544,7 +1690,7 @@ export component MailReadingPane inherits Rectangle {
                                             }
                                             Rectangle {
                                                 width: parent.width;
-                                                height: 44px;
+                                                height: root.attachment-card-height;
                                                 border-radius: 7px;
                                                 background: attachment-hit.has-hover || attachment-focus.focus-visible
                                                     ? root.accent-soft
@@ -1552,7 +1698,7 @@ export component MailReadingPane inherits Rectangle {
 
                                                 Rectangle {
                                                     x: 4px;
-                                                    y: 4px;
+                                                    y: (parent.height - self.height) / 2;
                                                     width: 36px;
                                                     height: 36px;
                                                     border-radius: 6px;
@@ -1584,7 +1730,7 @@ export component MailReadingPane inherits Rectangle {
                                                     x: 48px;
                                                     y: attachment.detail == "" ? 0px : 3px;
                                                     width: max(0px, parent.width - self.x - 6px);
-                                                    height: attachment.detail == "" ? parent.height : 22px;
+                                                    height: attachment.detail == "" ? parent.height : root.attachment-name-line;
                                                     text: attachment.name;
                                                     color: root.heading;
                                                     font-size: TypeScale.body;
@@ -1594,9 +1740,9 @@ export component MailReadingPane inherits Rectangle {
                                                 }
                                                 if attachment.detail != "" : Text {
                                                     x: 48px;
-                                                    y: 23px;
+                                                    y: 1px + root.attachment-name-line;
                                                     width: max(0px, parent.width - self.x - 6px);
-                                                    height: 17px;
+                                                    height: root.attachment-detail-line;
                                                     text: attachment.detail;
                                                     color: root.secondary-text;
                                                     font-size: TypeScale.caption;
@@ -1693,15 +1839,16 @@ export component MailReadingPane inherits Rectangle {
                                     background: root.surface;
 
                                     Rectangle {
+                                        y: 0px;
                                         width: parent.width;
                                         height: 1px;
                                         background: root.border-subtle;
                                     }
 
                                     HorizontalBox {
-                                        padding-top: root.compact ? 4px : 5px;
+                                        padding-top: root.message-actions-padding;
                                         padding-right: 10px;
-                                        padding-bottom: root.compact ? 4px : 5px;
+                                        padding-bottom: root.message-actions-padding;
                                         padding-left: 10px;
                                         spacing: 4px;
                                         alignment: start;
@@ -1789,7 +1936,9 @@ export component MailReadingPane inherits Rectangle {
                     y: 0px;
                     width: parent.width;
                     height: parent.height;
-                    background: root.surface-raised;
+                    // The raised canvas frames a message; under the tab strip
+                    // an empty reader shares the list's surface instead.
+                    background: WindowChrome.top-bar ? root.surface : root.surface-raised;
                     DetailEmptyState {
                         width: parent.width;
                         height: parent.height;
@@ -1841,10 +1990,10 @@ export component MailReadingPane inherits Rectangle {
                                 enabled: !root.label-editor-is-auto;
                             }
                             VerticalBox {
-                                height: 52px;
+                                height: 36px + label-color-heading.height;
                                 spacing: 6px;
-                                Text {
-                                    height: 16px;
+                                label-color-heading := Text {
+                                    height: max(16px, self.preferred-height);
                                     text: @tr("Color");
                                     color: root.muted-text;
                                     font-size: TypeScale.caption;

@@ -213,6 +213,10 @@ pub(crate) fn startup_presentation(path: &Path) -> StartupPresentation {
             .get("windowFrame")
             .and_then(serde_json::Value::as_str)
             .map(|frame| normalized_window_frame(frame).to_owned()),
+        close_to_tray: value
+            .get("closeToTray")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or_default(),
     }
 }
 
@@ -485,6 +489,34 @@ impl Db {
         db.call(db.write_tx.as_ref().unwrap(), f).await
     }
 
+    /// Run `f` in one transaction whose commit has reached stable storage when
+    /// this returns. The store normally commits with `synchronous=NORMAL`,
+    /// which a power loss can undo; this is for commits that let a server
+    /// drop its own copy of the data.
+    pub async fn write_durable<T, F>(&self, f: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&rusqlite::Transaction) -> Result<T> + Send + 'static,
+    {
+        self.write(move |conn| {
+            // The level can only change outside a transaction.
+            let previous: i64 = conn.pragma_query_value(None, "synchronous", |row| row.get(0))?;
+            conn.pragma_update(None, "synchronous", "FULL")?;
+            let result = conn.transaction().map_err(Into::into).and_then(|tx| {
+                let value = f(&tx)?;
+                tx.commit()?;
+                Ok(value)
+            });
+            // Once the commit stands, failing to restore the usual level only
+            // costs speed; reporting an error would misstate the commit.
+            if let Err(error) = conn.pragma_update(None, "synchronous", previous) {
+                tracing::warn!(%error, "could not restore the database sync level");
+            }
+            result
+        })
+        .await
+    }
+
     /// Run a read-only closure on the reader connection.
     pub async fn read<T, F>(&self, f: F) -> Result<T>
     where
@@ -516,17 +548,26 @@ pub(crate) mod testutil {
         c
     }
 
+    /// Settings of a test account that connects with TLS.
+    pub fn account_settings() -> crate::models::AccountSettings {
+        use crate::models::{AccountSettings, ConnectionSecurity, MailConnectionSettings};
+        AccountSettings::new(MailConnectionSettings::new(
+            ConnectionSecurity::Tls,
+            ConnectionSecurity::Tls,
+        ))
+    }
+
     /// Account 1 with an inbox folder 1, the minimum most repos need.
     pub fn seed_account(c: &Connection) {
         c.execute(
             "INSERT INTO accounts (id, email, provider, auth_kind, username,
-             imap_host, imap_port, smtp_host, smtp_port, created_at)
-             VALUES (1,'me@test.dev','imap','password','me','h',993,'h',587,0)",
+             incoming_host, incoming_port, smtp_host, smtp_port, created_at, mail_protocol, settings_json)
+             VALUES (1,'me@test.dev','generic','password','me','h',993,'h',587,0,'imap','{\"connection\":{\"incomingSecurity\":\"tls\",\"smtpSecurity\":\"tls\"}}')",
             [],
         )
         .unwrap();
         c.execute(
-            "INSERT INTO folders (id, account_id, imap_name, role) VALUES (1,1,'INBOX','inbox')",
+            "INSERT INTO folders (id, account_id, path, role) VALUES (1,1,'INBOX','inbox')",
             [],
         )
         .unwrap();
@@ -803,5 +844,29 @@ mod startup_preference_tests {
             startup_presentation(&path).window_frame.as_deref(),
             Some("system")
         );
+    }
+
+    #[test]
+    fn startup_close_to_tray_requires_an_explicit_boolean() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("mail.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO app_settings (key, value)
+             VALUES ('settings', '{\"closeToTray\": true}');",
+        )
+        .unwrap();
+        assert!(startup_presentation(&path).close_to_tray);
+
+        for value in [
+            "{}",
+            "{\"closeToTray\": \"true\"}",
+            "{\"closeToTray\": false}",
+        ] {
+            conn.execute("UPDATE app_settings SET value = ?1", [value])
+                .unwrap();
+            assert!(!startup_presentation(&path).close_to_tray, "{value}");
+        }
     }
 }

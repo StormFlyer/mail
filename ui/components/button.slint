@@ -14,6 +14,12 @@ export component Button inherits Rectangle {
     in property <bool> destructive: false;
     in property <bool> selected: false;
     in property <bool> enabled: true;
+    // A button that fills a fixed-width column may elide a label that does
+    // not fit there; other buttons are given room for the whole label.
+    in property <TextOverflow> label-overflow: clip;
+    // The width that shows the whole label, for buttons sized to it. The
+    // label row moves when pressed, so it does not size the button itself.
+    out property <length> content-width: label-row.preferred-width;
     out property <bool> focus-visible: keyboard.focus-visible;
     callback clicked;
 
@@ -44,7 +50,7 @@ export component Button inherits Rectangle {
         }
     }
 
-    HorizontalBox {
+    label-row := HorizontalBox {
         y: button-area.pressed ? 1px : 0px;
         animate y { duration: 140ms; easing: spring(0); }
         padding-left: 12px;
@@ -69,6 +75,7 @@ export component Button inherits Rectangle {
             font-weight: root.primary || root.destructive || root.selected ? 600 : 500;
             horizontal-alignment: center;
             vertical-alignment: center;
+            overflow: root.label-overflow;
         }
     }
 

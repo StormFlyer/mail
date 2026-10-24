@@ -92,10 +92,24 @@ def build(sources):
             "Close the box rim; separate solid lid; handle cutout."),
         "bell": Recipe("bell", group(solid(p("bell", 1)), line(p("bell", 0))),
             "Solid bell with the original clapper stroke."),
+        "building": Recipe("building-2", over(
+            solid(p("building-2", 3, append="H6V10Z")),
+            cut(solid(p("building-2", 4, append="Z")),
+                lines("building-2", 0, 1, width=1.5),
+                solid(p("building-2", 2, append="Z")))),
+            "Close the side wings and central tower; separate tower with window and doorway cutouts."),
         "calendar": Recipe("calendar-days", cut(calendar(), lines("calendar-days", *range(4, 10))),
             "Solid calendar; header seam and date cutouts; binding strokes."),
         "calendar-add": Recipe("calendar-plus", over(calendar(), lines("calendar-plus", 0, 2)),
             "Complete calendar body with separated exterior plus badge."),
+        "cloud": Recipe("cloud", solid(p("cloud", 0)),
+            "Original closed cloud silhouette for hosted services."),
+        "cloud-sync": Recipe("cloud-sync", over(
+            # Cloud-sync interrupts the lower contour around the arrows. The
+            # complete sibling cloud sits two units higher in this icon.
+            solid(p("cloud", 0, attrs={"transform": "translate(0 -2)"})),
+            lines("cloud-sync", 0, 1, 3, 4)),
+            "Complete solid cloud with separated original sync arrows in the foreground."),
         "compose": Recipe("square-pen", compose,
             "Solid square and pencil with transparent separation."),
         "contacts": Recipe("contact-round", group(

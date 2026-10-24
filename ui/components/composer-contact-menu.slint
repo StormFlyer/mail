@@ -12,9 +12,10 @@ export component ComposerContactMenu inherits Rectangle {
     in property <color> hover-color;
     in property <color> muted-color;
     in property <color> title-color;
+    in property <length> row-pitch: 46px;
     callback selected(int);
 
-    height: root.contacts.length * 46px + 8px;
+    height: root.contacts.length * root.row-pitch + 8px;
     border-radius: 8px;
     border-width: 1px;
     border-color: root.frame-border-color;
@@ -26,27 +27,27 @@ export component ComposerContactMenu inherits Rectangle {
 
     for contact[index] in root.contacts : Rectangle {
         x: 4px;
-        y: 4px + index * 46px;
+        y: 4px + index * root.row-pitch;
         width: parent.width - 8px;
-        height: 42px;
+        height: root.row-pitch - 4px;
         border-radius: 6px;
         background: index == root.highlighted-contact || contact-hit.has-hover
             ? root.hover-color : transparent;
 
         Avatar {
             x: 8px;
-            y: 8px;
+            y: (parent.height - self.height) / 2;
             size: 26px;
             fallback: contact.initials;
             background-color: root.accent-background;
             foreground-color: root.accent-color;
         }
 
-        Text {
+        suggestion-name := Text {
             x: 43px;
             y: 4px;
             width: parent.width - 54px;
-            height: 18px;
+            height: max(18px, self.preferred-height);
             text: contact.name == "" ? contact.email : contact.name;
             color: root.title-color;
             font-size: TypeScale.secondary;
@@ -56,9 +57,9 @@ export component ComposerContactMenu inherits Rectangle {
 
         Text {
             x: 43px;
-            y: 21px;
+            y: suggestion-name.y + suggestion-name.height - 1px;
             width: parent.width - 54px;
-            height: 15px;
+            height: max(15px, self.preferred-height);
             visible: contact.name != "";
             text: contact.email;
             color: root.muted-color;

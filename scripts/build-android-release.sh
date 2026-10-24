@@ -7,11 +7,15 @@ android_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 android_ndk="${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-}}"
 gradle_command="${GRADLE_CMD:-}"
 
+preview=false
+if [[ "${1:-}" == --preview && $# == 1 ]]; then
+  preview=true
+elif [[ $# != 0 ]]; then
+  printf 'Usage: %s [--preview]\n' "$0" >&2
+  exit 1
+fi
+
 required=(
-  FLECTAR_GOOGLE_ANDROID_CLIENT_ID
-  FLECTAR_MICROSOFT_ANDROID_CLIENT_ID
-  FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI
-  FLECTAR_ANDROID_VERSION_CODE
   FLECTAR_ANDROID_VERSION_NAME
   FLECTAR_ANDROID_KEYSTORE
   FLECTAR_ANDROID_KEYSTORE_PASSWORD
@@ -20,27 +24,33 @@ required=(
 )
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
-    printf 'Production Android build requires %s.\n' "$name" >&2
+    printf 'Published Android build requires %s.\n' "$name" >&2
     exit 1
   fi
 done
 
-if [[ ! -f "$FLECTAR_ANDROID_KEYSTORE" ]]; then
-  printf 'Production keystore not found: %s\n' "$FLECTAR_ANDROID_KEYSTORE" >&2
+version_code="$(python3 "$project_dir/scripts/android-version-code.py" "$FLECTAR_ANDROID_VERSION_NAME")"
+if [[ -n "${FLECTAR_ANDROID_VERSION_CODE:-}" && "$FLECTAR_ANDROID_VERSION_CODE" != "$version_code" ]]; then
+  printf 'FLECTAR_ANDROID_VERSION_CODE must match the shared release sequence (%s).\n' "$version_code" >&2
   exit 1
 fi
-python3 "$project_dir/scripts/verify-android-oauth.py" --require-all
-if [[ ! "$FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI" =~ ^msauth://com\.flectar\.mail/.+ ]]; then
-  printf 'Microsoft redirect must be msauth://com.flectar.mail/<signature-hash>.\n' >&2
-  exit 1
+export FLECTAR_ANDROID_VERSION_CODE="$version_code"
+bash "$project_dir/scripts/verify-android-keystore.sh" >/dev/null
+
+if [[ "$preview" == true ]]; then
+  if [[ "$FLECTAR_ANDROID_VERSION_NAME" != *-* ]]; then
+    printf 'Stable Android releases cannot use --preview.\n' >&2
+    exit 1
+  fi
+  python3 "$project_dir/scripts/verify-android-oauth.py"
+else
+  python3 "$project_dir/scripts/verify-android-oauth.py" --require-all
 fi
-if [[ ! "$FLECTAR_ANDROID_VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
-  printf 'FLECTAR_ANDROID_VERSION_CODE must be a positive Play version code.\n' >&2
-  exit 1
-fi
-if [[ ! "$FLECTAR_ANDROID_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-  printf 'FLECTAR_ANDROID_VERSION_NAME must be a release version such as 1.2.3.\n' >&2
-  exit 1
+if [[ "$preview" == false || -n "${FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI:-}" ]]; then
+  if [[ ! "${FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI:-}" =~ ^msauth://com\.flectar\.mail/.+ ]]; then
+    printf 'Microsoft redirect must be msauth://com.flectar.mail/<signature-hash>.\n' >&2
+    exit 1
+  fi
 fi
 if [[ -z "$android_sdk" || ! -d "$android_sdk" ]]; then
   printf 'Android SDK not found. Set ANDROID_HOME.\n' >&2
@@ -92,7 +102,7 @@ python3 "$project_dir/scripts/stage-pdfium.py" android-arm64 "$jni_dir" \
   -p "$project_dir/platform/android/gradle" \
   :app:assembleRelease :app:bundleRelease
 
-artifact_dir="$target_dir/android/production"
+artifact_dir="$target_dir/android/release"
 mkdir -p "$artifact_dir"
 cp "$target_dir/android/gradle/app/outputs/apk/release/app-release.apk" \
   "$artifact_dir/flectar-mail.apk"
@@ -105,16 +115,18 @@ if ! command -v jarsigner >/dev/null 2>&1 \
   exit 1
 fi
 
-actual_redirect="$(ANDROID_HOME="$android_sdk" "$project_dir/scripts/android-signing-identities.sh" \
-  "$artifact_dir/flectar-mail.apk" | sed -n 's/^Microsoft redirect URI: //p')"
-if [[ "$actual_redirect" != "$FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI" ]]; then
-  printf 'The Entra redirect does not match the APK signing certificate.\n' >&2
-  printf 'Configured: %s\nActual:     %s\n' \
-    "$FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI" "$actual_redirect" >&2
-  exit 1
+if [[ -n "${FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI:-}" ]]; then
+  actual_redirect="$(ANDROID_HOME="$android_sdk" "$project_dir/scripts/android-signing-identities.sh" \
+    "$artifact_dir/flectar-mail.apk" | sed -n 's/^Microsoft redirect URI: //p')"
+  if [[ "$actual_redirect" != "$FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI" ]]; then
+    printf 'The Entra redirect does not match the APK signing certificate.\n' >&2
+    printf 'Configured: %s\nActual:     %s\n' \
+      "$FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI" "$actual_redirect" >&2
+    exit 1
+  fi
 fi
 
 ANDROID_HOME="$android_sdk" "$project_dir/scripts/verify-android-apk.sh" \
   "$artifact_dir/flectar-mail.apk" production
-printf 'Production artifacts:\n  %s\n  %s\n' \
+printf 'Signed release artifacts:\n  %s\n  %s\n' \
   "$artifact_dir/flectar-mail.apk" "$artifact_dir/flectar-mail.aab"

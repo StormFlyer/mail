@@ -2,23 +2,26 @@
 
 use super::*;
 
+/// Account headings and standard mailboxes for fixture rows. Fixtures carry
+/// folder names rather than folder ids, so custom folders are not projected.
 #[cfg(test)]
 pub(super) fn fixture_mailboxes(messages: &[MailMessage]) -> Vec<MailboxEntry> {
-    const STANDARD_FOLDERS: [&str; 7] = [
-        "Inbox", "Starred", "Sent", "Archive", "Spam", "Trash", "Drafts",
-    ];
-
-    let mut accounts = Vec::new();
+    let mut accounts: Vec<(i64, &str)> = Vec::new();
     for message in messages {
-        if !accounts.contains(&message.account) {
-            accounts.push(message.account.clone());
+        if !accounts.iter().any(|(id, _)| *id == message.account_id) {
+            accounts.push((message.account_id, &message.account));
         }
     }
 
     let mut entries = Vec::new();
-    for account in accounts {
+    for (account_id, account) in accounts {
+        let account_messages = || {
+            messages
+                .iter()
+                .filter(move |message| message.account_id == account_id)
+        };
         entries.push(MailboxEntry {
-            account_id: 0,
+            account_id,
             folder_id: -1,
             parent_folder_id: -1,
             depth: 0,
@@ -28,22 +31,22 @@ pub(super) fn fixture_mailboxes(messages: &[MailMessage]) -> Vec<MailboxEntry> {
             can_create_children: true,
             can_rename: false,
             can_delete: false,
-            label: account.clone(),
-            scope: account.clone(),
-            context: account.clone(),
+            label: account.to_owned(),
+            scope: None,
+            context: account.to_owned(),
             detail: "Account folders".to_owned(),
-            avatar: avatar_initials(&account),
+            avatar: avatar_initials(account),
             is_account: true,
-            count: messages
-                .iter()
-                .filter(|message| message.account == account)
-                .count()
-                .to_string(),
+            count: account_messages().count().to_string(),
         });
 
-        for label in STANDARD_FOLDERS {
+        for mailbox in StandardMailbox::ALL {
+            let scope = Scope::Account {
+                account_id,
+                mailbox,
+            };
             entries.push(MailboxEntry {
-                account_id: 0,
+                account_id,
                 folder_id: -1,
                 parent_folder_id: -1,
                 depth: 0,
@@ -53,57 +56,14 @@ pub(super) fn fixture_mailboxes(messages: &[MailMessage]) -> Vec<MailboxEntry> {
                 can_create_children: false,
                 can_rename: false,
                 can_delete: false,
-                label: label.to_owned(),
-                scope: format!("{account} / {label}"),
-                context: account.clone(),
+                label: mailbox.label().to_owned(),
+                scope: Some(scope),
+                context: account.to_owned(),
                 detail: String::new(),
                 avatar: String::new(),
                 is_account: false,
-                count: messages
-                    .iter()
-                    .filter(|message| {
-                        message.account == account
-                            && if label == "Starred" {
-                                message.starred
-                            } else {
-                                message.folder == label
-                            }
-                    })
-                    .count()
-                    .to_string(),
-            });
-        }
-
-        let mut custom_folders = Vec::new();
-        for message in messages.iter().filter(|message| message.account == account) {
-            if !STANDARD_FOLDERS.contains(&message.folder.as_str())
-                && !custom_folders.contains(&message.folder)
-            {
-                custom_folders.push(message.folder.clone());
-            }
-        }
-        custom_folders.sort_by_key(|folder| folder.to_lowercase());
-        for folder in custom_folders {
-            entries.push(MailboxEntry {
-                account_id: 0,
-                folder_id: -1,
-                parent_folder_id: -1,
-                depth: 0,
-                has_children: false,
-                is_standard: false,
-                is_selectable: true,
-                can_create_children: true,
-                can_rename: true,
-                can_delete: true,
-                label: folder.clone(),
-                scope: format!("{account} / {folder}"),
-                context: account.clone(),
-                detail: String::new(),
-                avatar: String::new(),
-                is_account: false,
-                count: messages
-                    .iter()
-                    .filter(|message| message.account == account && message.folder == folder)
+                count: account_messages()
+                    .filter(|message| scope_matches(message, scope))
                     .count()
                     .to_string(),
             });
@@ -384,13 +344,13 @@ pub(super) fn apply_cpu_frame(app: &AppWindow, rendered: RenderedEmail) {
     }
 }
 
-pub(super) fn open_email_link(url: &str) -> Result<(), String> {
+pub(super) fn open_email_link(opener: &ExternalUrlOpener, url: &str) -> Result<(), String> {
     let Some((scheme, _)) = url.trim().split_once(':') else {
         return Err("only absolute links can be opened".into());
     };
     match scheme.to_ascii_lowercase().as_str() {
         "http" | "https" | "mailto" | "tel" => {
-            webbrowser::open(url.trim()).map_err(|error| error.to_string())?;
+            opener.open_external(url.trim())?;
             Ok(())
         }
         _ => Err("unsupported link type".into()),

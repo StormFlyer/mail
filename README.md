@@ -4,11 +4,11 @@
     Flectar Mail
   </h1>
   <p>
-    <strong>English</strong> · <a href="README.zh_Hans.md">简体中文</a>
+    <strong>English</strong> · <a href="README.es.md">Español</a> · <a href="README.zh_Hans.md">简体中文</a>
   </p>
   <div align="center">
     <h3>Email, made fast again</h3>
-    <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 90 MB of RAM.</p>
+    <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 80 MB of RAM.</p>
   </div>
   <p>
     <a href="https://flectar.com">Website</a> ·
@@ -41,14 +41,14 @@ fraction of the memory of a typical web-based mail client.
 
 - **Fast from the first click.** A native interface and local-first data path
   get you to your inbox without waiting on a browser runtime.
-- **As little as 90 MB of RAM.** Flectar Mail is deliberately designed to keep
+- **As little as 80 MB of RAM.** Flectar Mail is deliberately designed to keep
   memory use low, even with a full-featured inbox at your fingertips.
 - **Everything in one place.** Move between mail, calendars, and contacts
   without stitching together separate apps.
 - **Offline by design.** Your mailbox and calendar are stored locally, so your
   synced data remains useful without a connection.
 - **Works with your accounts.** Connect Gmail, Outlook and Microsoft 365, or
-  standards-based IMAP/SMTP, JMAP, CalDAV, and CardDAV services.
+  standards-based IMAP, POP3, SMTP, JMAP, CalDAV, and CardDAV services.
 - **Privacy-conscious defaults.** Remote images are blocked until you allow
   them, helping prevent tracking pixels from reporting when you read a message.
 - **Security by architecture.** Email content is never opened in a WebView.
@@ -85,7 +85,7 @@ S/MIME and mobile OpenPGP are not currently supported.
 > Some messages, especially those with complex or unusual markup and CSS, may
 > not render correctly yet.
 
-To keep the client fully native and memory usage around 90 MB, Flectar Mail
+To keep the client fully native and memory usage around 80 MB, Flectar Mail
 renders email HTML with [Blitz](https://github.com/DioxusLabs/blitz), a Rust
 HTML/CSS renderer from the Dioxus team, instead of embedding a browser or
 WebView.
@@ -128,11 +128,16 @@ inbox more room when you need it.
 ### 👥 Profiles and account colors
 
 Group related accounts into named profiles such as Work or Personal, then give
-each profile its own color. In Settings → Accounts → Profiles, you can assign
-accounts, override an individual account's color, and show the effective color
-along the left edge of every message. The markers make accounts easy to tell
-apart while working in the unified inbox; the example below uses purple for Work
-and orange for Support.
+each profile its own color. Create a profile from the profile menu at the start
+of the tab bar, or in Settings → Accounts → Profiles, and check the accounts
+that belong to it. Choose a profile in that menu to focus the mail view on its
+accounts: the unified inbox, search, counts, and sidebar show only their mail,
+while your tabs stay the same. **All accounts** shows everything again.
+
+You can also override an individual account's color and show the effective
+color along the left edge of every message. The markers make accounts easy to
+tell apart while working in the unified inbox; the example below uses purple
+for Work and orange for Support.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-profiles-dark.png">
@@ -162,15 +167,18 @@ layout, arrow keys highlight messages and **Enter** opens them; **Escape** or
 ### 🗂️ Tabs
 
 Keep several places open at once with browser-style tabs. Each tab remembers
-its own location: a mailbox, search, or open conversation, or the calendar,
-contacts, or files. Middle-click or Ctrl/⌘-click a message to open it in a
-background tab (add Shift to switch to it), or choose **Open in new tab** from
-its menu. Drag tabs to reorder them, middle-click a tab to close it, and pick
-up where you left off the next time you open Flectar Mail.
+its own place: a mailbox, search, or open conversation, the calendar,
+contacts, files, or Settings, along with how far you scrolled the list and the
+message you were reading. Middle-click or Ctrl/⌘-click a message to open it in
+a background tab (add Shift to switch to it), or choose **Open in new tab**
+from its menu. Drag tabs to reorder them, middle-click a tab to close it,
+right-click a tab to close the others or those to its right, and pick up where
+you left off the next time you open Flectar Mail.
 
-**Ctrl/⌘+T** opens a new tab and **Ctrl/⌘+W** closes the current one.
-**Ctrl+Tab** and **Ctrl+Shift+Tab** cycle through tabs, **Ctrl/⌘+1–8** jump to
-a tab, and **Ctrl/⌘+9** jumps to the last.
+**Ctrl/⌘+T** opens a new tab, **Ctrl/⌘+W** closes the current one, and
+**Ctrl/⌘+Shift+T** reopens the last tab you closed. **Ctrl+Tab** and
+**Ctrl+Shift+Tab** cycle through tabs, **Ctrl/⌘+1–8** jump to a tab, and
+**Ctrl/⌘+9** jumps to the last.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-tabs-dark.png">
@@ -350,6 +358,22 @@ snapshots or transfer connected-account setup and preferences through a backup.
 Passwords and OAuth tokens stay in the system keyring, so a restored device asks
 you to sign in again.
 
+POP3 accounts download mail to this device and leave it on the server unless
+you choose otherwise: each account can remove mail from the server after 7, 14,
+or 30 days, once you delete it here, or as soon as it's downloaded, but never
+before it's stored on this device. Their folders exist only on this device, so
+snapshots include that mail, and removing a POP3 account or deleting all data
+offers to export it first as mbox files, one per folder, which other mail apps
+can import.
+
+The same import also brings accounts over from Thunderbird (a profile folder,
+its Tools › Export archive, or `prefs.js`) and from Thunderbird for Android or
+K-9 Mail (`.k9s` settings exports). You review each account before anything is
+added: settings Flectar Mail can't reproduce, such as an Exchange server, are
+explained instead of changed silently, and POP3 accounts keep their rule for
+removing mail from the server. Existing accounts are never modified, and
+passwords are never imported.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-storage-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-storage-light.png">
@@ -379,11 +403,11 @@ Flectar Mail is currently in development and is not yet stable.
 >
 > Google and Microsoft OAuth verification is still in progress. Earlier GitHub
 > prereleases are intended for testers using their own OAuth registrations or
-> IMAP/JMAP accounts.
+> IMAP, POP3, or JMAP accounts.
 
 Builds without OAuth app keys keep Gmail and Outlook sign-in disabled. Use the
 **Sign-in settings** cog on the welcome screen to save your own Google or
-Microsoft app registration, or connect an IMAP/JMAP account. Custom keys are
+Microsoft app registration, or connect an IMAP, POP3, or JMAP account. Custom keys are
 shared with Settings and take precedence over bundled keys; clearing a custom
 client ID restores the defaults when available. Each provider enables separately
 once its configuration is saved.
@@ -392,11 +416,11 @@ When preview builds are published, download them from
 [GitHub Releases](https://github.com/flectar/mail/releases) and look for the
 **Pre-release** badge:
 
-- **Linux x64:** AppImage, Debian/Ubuntu `.deb`, Fedora `.rpm`, or a
+- **Linux x64:** AppImage, Debian/Ubuntu `.deb`, Fedora 43/44 `.rpm`, or a
   sideloaded Flatpak preview bundle
 - **Windows x64:** Setup `.exe` or portable ZIP
 - **macOS Apple silicon or Intel (macOS 14+):** DMG or application ZIP
-- **Android arm64 (Android 8.0+):** Experimental test APK in prereleases
+- **Android arm64 (Android 8.0+):** Signed APK; previews and stable releases share one app identity
 
 Windows previews are unsigned; macOS previews are ad-hoc signed and not
 notarized, so operating-system security prompts are expected. Install updates
@@ -405,19 +429,47 @@ manually.
 The Flatpak preview is provided as a standalone test bundle. It is not yet a
 Flathub package and therefore does not receive automatic Flathub updates. Its
 close-to-tray option is disabled until the tray backend can use a sandbox-safe
-D-Bus name.
+D-Bus name. Starting automatically at sign-in goes through the desktop's
+Background portal and opens the window, because there is no tray to start into.
 
 Install the downloaded Linux package with either
 `sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` or
 `flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak`. Launch the
 Flatpak with `flatpak run com.flectar.mail`.
 
+The RPM targets Fedora 43 and 44 on x86_64. Release builds use Fedora 43 as
+their compatibility baseline; the same RPM must pass installation, PDF
+rendering, X11 and Wayland startup, and removal checks in clean containers for
+both versions before publication. Other RPM-based distributions are not yet
+tested. If Discover reports a generic conflict, run the `dnf install` command
+above and include its dependency error in your bug report.
+
+The older `0.1.0-alpha.7` RPM was built on Fedora 44 and cannot install on
+Fedora 43 because it requires glibc 2.43. Its Flatpak bundle is an alternative
+while waiting for an RPM release built with the compatibility checks above.
+
 Each GitHub release includes `SHA256SUMS` and signed build-provenance
 attestations. With GitHub CLI installed, verify a download with
 `gh attestation verify <download> --repo flectar/mail`.
 
-Android APK updates require the same signing key; builds without a persistent
-test key may require uninstalling the previous app, which deletes local app data.
+Starting with alpha 8, Android alpha, beta, release-candidate, and stable builds
+use one package (`com.flectar.mail`) and one persistent signing identity. Later
+versions can update the app in place and retain local data. Alpha 6 and alpha 7
+used different keys and cannot update to this signing identity.
+
+Both Android release workflows use the `android-release` GitHub environment.
+They require the same keystore and password secrets, verify the public
+certificate against `platform/android/app-signing-certificate.sha256`, and
+derive Android version codes from the release version. A missing or different
+key blocks publication. **Do not generate a replacement key or change the
+pinned fingerprint for a routine release.** Password changes preserve the
+identity when the original private key and certificate are retained.
+
+See [Android signing setup and recovery](docs/android-signing.md) for the
+one-time migration command, required secrets, backups, and Play App Signing.
+
+Local developer builds can still generate a local test key. They only update
+installations signed with that same local key.
 
 You can also build Flectar Mail from source with the
 [Rust toolchain](https://rustup.rs/):
@@ -454,6 +506,20 @@ Getting started is easy:
 3. Translate strings directly through Weblate, no programming or GitHub experience required.
 
 Translations are synchronized with our GitHub repository and submitted as pull requests for review. Contributors can also receive GitHub attribution for their work.
+
+README translations are maintained in this repository. See
+[Contributing translations](CONTRIBUTING.md#translations) to add or update one.
+
+## ♿ Accessibility
+
+Flectar Mail includes keyboard navigation, light and dark themes, and flexible
+layouts. Accessibility work is ongoing. See [ACCESSIBILITY.md](ACCESSIBILITY.md)
+for current features, testing limitations, and how to report a barrier.
+
+## 🔒 Security
+
+To report a vulnerability privately, follow [SECURITY.md](SECURITY.md).
+Please keep vulnerability details out of public issues.
 
 ## 🌐 Open source, for everyone
 

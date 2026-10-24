@@ -7,6 +7,12 @@ repository = "https://github.com/flectar/mail"
 homepage = "https://flectar.com"
 publish = false
 
+# Exercise the vendored ZIP compatibility patch with the application's lockfile.
+[[test]]
+name = "embedding_archives"
+path = "../candle-core/tests/serialization_tests.rs"
+required-features = ["local-embeddings"]
+
 [features]
 # Keep the protocol/database core lean by default. Hosts that expose semantic
 # search opt in explicitly; mail-only applications should never compile or
@@ -32,7 +38,7 @@ chrono.workspace = true
 # email protocols
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
 jmap-client = { version = "0.4.2", default-features = false, features = ["async", "ring"] }
-lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder", "pool", "hostname"] }
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "hostname"] }
 # full_encoding pulls in encoding_rs so non-UTF-8 header/body charsets
 # (GB2312/GBK/Big5, Shift-JIS, EUC-KR, ...) decode correctly instead of
 # turning into U+FFFD replacement chars. Default features are empty in 0.11.
@@ -70,7 +76,7 @@ quick-xml = { version = "0.42", features = ["encoding"] }
 async-trait = "0.1"
 
 # misc
-ammonia = "4"
+ammonia = "4.1.8"
 deunicode = "1"
 rand = "0.9"
 regex = "1"
@@ -78,6 +84,8 @@ once_cell = "1"
 encoding_rs = "0.8"
 tempfile = "3"
 ring = "0.17"
+# Reads settings from Thunderbird profile exports; flate2 is already linked.
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Used only by build.rs, which cargo-machete does not scan.
 [package.metadata.cargo-machete]
@@ -87,6 +95,7 @@ ignored = ["cfg_aliases"]
 cfg_aliases = "0.2"
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Cargo cannot evaluate build.rs aliases; this is `rename_noreplace`.
