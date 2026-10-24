@@ -1203,7 +1203,8 @@ impl Core {
                 let transaction = conn.transaction()?;
                 let mut imported = 0usize;
                 for config in &configs {
-                    if repo::accounts::find_by_email(&transaction, config.email.trim())?.is_some() {
+                    if repo::accounts::find_by_mailbox(&transaction, config.email.trim())?.is_some()
+                    {
                         continue;
                     }
                     repo::accounts::insert_with_sync_state(
@@ -1484,9 +1485,19 @@ impl Core {
             .db
             .read({
                 let email = args.email.clone();
-                move |conn| repo::accounts::find_by_email(conn, &email)
+                move |conn| repo::accounts::find_by_mailbox(conn, &email)
             })
             .await?;
+        // A Gmail account is edited under the spelling it was added with:
+        // the update below would take another spelling for another user.
+        if let Some(existing) = &existing
+            && !existing.email.eq_ignore_ascii_case(&args.email)
+        {
+            return Err(CoreError::Auth(format!(
+                "{} is already added",
+                existing.email
+            )));
+        }
         // POP3 mail exists only on this device, so it can't move to or from
         // a protocol that keeps mail on the server.
         if let Some(existing) = &existing
@@ -1817,7 +1828,7 @@ impl Core {
             .db
             .read({
                 let email = email.clone();
-                move |conn| repo::accounts::find_by_email(conn, &email)
+                move |conn| repo::accounts::find_by_mailbox(conn, &email)
             })
             .await?;
         if let Some(existing) = existing {
@@ -10049,6 +10060,39 @@ mod account_backup_import_tests {
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].sync_state, "needs_reauth");
         assert_eq!(configs[0].incoming_host, "imap.example.com");
+    }
+
+    #[tokio::test]
+    async fn imported_gmail_configuration_merges_by_mailbox() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::start_mail_ui(Paths::for_tests(temp.path()))
+            .await
+            .unwrap();
+        let gmail = |email: &str| PortableAccountConfig {
+            provider: Provider::Gmail,
+            auth_kind: AuthKind::Oauth2,
+            mail_protocol: MailProtocol::Gmail,
+            ..portable_imap(email)
+        };
+
+        assert_eq!(
+            core.import_account_configs(vec![
+                gmail("jane.doe@gmail.com"),
+                gmail("JaneDoe@googlemail.com"),
+            ])
+            .await
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            core.import_account_configs(vec![gmail("janedoe@gmail.com")])
+                .await
+                .unwrap(),
+            0
+        );
+        let accounts = core.list_accounts().await.unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].email, "jane.doe@gmail.com");
     }
 }
 

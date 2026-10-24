@@ -1,4 +1,4 @@
-use crate::accounts::same_mailbox;
+use crate::accounts::{mailbox_key, same_mailbox};
 use crate::error::Result;
 use crate::models::*;
 use crate::pop3::Expire;
@@ -102,18 +102,31 @@ pub fn get(conn: &Connection, id: i64) -> Result<Option<Account>> {
     Ok(stmt.query_row(params![id], account_from_row).optional()?)
 }
 
-pub fn find_by_email(conn: &Connection, email: &str) -> Result<Option<Account>> {
-    let mut stmt = conn.prepare(
-        "SELECT a.id, a.email, a.display_name, a.avatar_url, a.provider, a.auth_kind,
-                a.mail_protocol, a.sync_state, a.sync_error, a.can_create_top_level_mailbox,
-                s.expire
-         FROM accounts a LEFT JOIN pop3_sync_state s ON s.account_id = a.id
-         WHERE a.email = ?1 COLLATE NOCASE
-         LIMIT 1",
-    )?;
-    Ok(stmt
-        .query_row(params![email], account_from_row)
-        .optional()?)
+/// The account whose address belongs to the same mailbox as `email`, in any
+/// spelling (see [`mailbox_key`]). An account stored with exactly this
+/// address wins over another spelling of it.
+pub fn find_by_mailbox(conn: &Connection, email: &str) -> Result<Option<Account>> {
+    let email = email.trim();
+    let key = mailbox_key(email);
+    let mut statement = conn.prepare("SELECT id, email FROM accounts ORDER BY id")?;
+    let accounts = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let id = accounts
+        .iter()
+        .find(|(_, stored)| stored.eq_ignore_ascii_case(email))
+        .or_else(|| {
+            accounts
+                .iter()
+                .find(|(_, stored)| mailbox_key(stored) == key)
+        })
+        .map(|(id, _)| *id);
+    match id {
+        Some(id) => get(conn, id),
+        None => Ok(None),
+    }
 }
 
 pub fn credential_setup_ids(conn: &Connection) -> Result<Vec<i64>> {
@@ -704,7 +717,7 @@ mod tests {
     }
 
     #[test]
-    fn find_by_email_is_case_insensitive_and_update_keeps_account_id() {
+    fn find_by_mailbox_is_case_insensitive_and_update_keeps_account_id() {
         let conn = crate::db::testutil::conn();
         let first = NewAccount {
             email: "me@test.dev",
@@ -731,7 +744,10 @@ mod tests {
             MailHistory::SixMonths
         );
 
-        assert_eq!(find_by_email(&conn, "ME@TEST.DEV").unwrap().unwrap().id, id);
+        assert_eq!(
+            find_by_mailbox(&conn, "ME@TEST.DEV").unwrap().unwrap().id,
+            id
+        );
 
         let updated = NewAccount {
             email: "me@test.dev",
@@ -795,7 +811,7 @@ mod tests {
         assert!(list(&conn).unwrap().is_empty());
         assert!(list_configs(&conn).unwrap().is_empty());
         assert_eq!(
-            find_by_email(&conn, "PENDING@test.dev")
+            find_by_mailbox(&conn, "PENDING@test.dev")
                 .unwrap()
                 .unwrap()
                 .id,
@@ -823,6 +839,24 @@ mod tests {
             smtp_host: "smtp.gmail.com",
             smtp_port: 465,
         }
+    }
+
+    #[test]
+    fn find_by_mailbox_matches_gmail_spellings_and_prefers_the_exact_address() {
+        let conn = crate::db::testutil::conn();
+        let imported = insert(&conn, &google("johndoe@gmail.com"), &settings()).unwrap();
+        let find = |email: &str| find_by_mailbox(&conn, email).unwrap().map(|found| found.id);
+        assert_eq!(find(" John.Doe@googlemail.com "), Some(imported));
+        assert_eq!(find("jane@gmail.com"), None);
+
+        // Older versions could add a second spelling of the same mailbox.
+        let added = insert(&conn, &google("john.doe@gmail.com"), &settings()).unwrap();
+        assert_eq!(find("JOHN.DOE@gmail.com"), Some(added));
+        assert_eq!(find("j.ohndoe@gmail.com"), Some(imported));
+
+        let workspace = insert(&conn, &google("jane.doe@example.com"), &settings()).unwrap();
+        assert_eq!(find("Jane.Doe@Example.com"), Some(workspace));
+        assert_eq!(find("janedoe@example.com"), None);
     }
 
     #[test]
