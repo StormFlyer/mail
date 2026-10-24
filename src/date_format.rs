@@ -4,11 +4,12 @@
 //! and CLDR-style patterns such as `MMM d, y`, so each language decides the
 //! order, punctuation and compactness of its dates instead of only naming the
 //! months. Controllers format through the formats loaded for the UI thread.
-//! They are reloaded whenever the language changes, and views registered
-//! with [`on_change`] then rebuild their date text.
+//! They are reloaded whenever the language or the time format changes, and
+//! views registered with [`on_change`] then rebuild their date text.
 
 use crate::{AppWindow, I18n};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
+use flectar_mail_core::models::TimeFormat;
 use slint::ComponentHandle;
 use std::{cell::RefCell, fmt::Write, rc::Rc, time::Duration};
 
@@ -17,6 +18,16 @@ use std::{cell::RefCell, fmt::Write, rc::Rc, time::Duration};
 pub(crate) enum HourCycle {
     Twelve,
     TwentyFour,
+}
+
+impl HourCycle {
+    pub(crate) fn for_preference(preference: TimeFormat) -> Self {
+        match preference {
+            TimeFormat::Automatic => regional_hour_cycle(time_locale().as_deref()),
+            TimeFormat::TwelveHour => Self::Twelve,
+            TimeFormat::TwentyFourHour => Self::TwentyFour,
+        }
+    }
 }
 
 /// How much of a date to show.
@@ -126,6 +137,55 @@ impl DateFormats {
         self.format(pattern, NaiveDate::MIN, hour, minute)
     }
 
+    /// Reads a time typed on either clock: "14:30", "14.30", "2:30 PM", or
+    /// this language's day period such as "午後0:30". Returns the hour and
+    /// minute.
+    pub(crate) fn parse_time(&self, text: &str) -> Option<(u32, u32)> {
+        let compact = |text: &str| {
+            text.chars()
+                .filter(|ch| !ch.is_whitespace())
+                .flat_map(char::to_lowercase)
+                .collect::<String>()
+        };
+        let text = compact(text);
+        let mut periods = [
+            (compact(&self.am), false),
+            (compact(&self.pm), true),
+            ("a.m.".to_owned(), false),
+            ("p.m.".to_owned(), true),
+            ("am".to_owned(), false),
+            ("pm".to_owned(), true),
+        ];
+        // Longer markers first, so "a.m." is not read as "am" with stray dots.
+        periods.sort_by_key(|(marker, _)| std::cmp::Reverse(marker.len()));
+        let (clock, pm) = periods
+            .iter()
+            .filter(|(marker, _)| !marker.is_empty())
+            .find_map(|(marker, pm)| {
+                let at = text.find(marker.as_str())?;
+                let clock = format!("{}{}", &text[..at], &text[at + marker.len()..]);
+                Some((clock, Some(*pm)))
+            })
+            .unwrap_or((text, None));
+        let clock = clock.trim_matches('.');
+        let separated = clock.split_once([':', '.']);
+        let (hour, minute) = separated.unwrap_or((clock, "0"));
+        let all_digits = |part: &str| {
+            (1..=2).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_digit())
+        };
+        if !all_digits(hour) || !all_digits(minute) || (pm.is_none() && separated.is_none()) {
+            return None;
+        }
+        let (hour, minute) = (hour.parse::<u32>().ok()?, minute.parse::<u32>().ok()?);
+        // A 12-hour clock may count from 0 ("午後0:05") or from 12 ("12:05 PM").
+        let hour = match pm {
+            Some(pm) if hour <= 12 => hour % 12 + if pm { 12 } else { 0 },
+            Some(_) => return None,
+            None => hour,
+        };
+        (hour < 24 && minute < 60).then_some((hour, minute))
+    }
+
     /// A whole hour, as calendar time rulers label them.
     pub(crate) fn hour(&self, hour: u32) -> String {
         match self.hour_cycle {
@@ -231,14 +291,13 @@ pub(crate) fn current() -> Rc<DateFormats> {
     CURRENT.with(|current| Rc::clone(&current.borrow()))
 }
 
-/// Loads the formats after the language changed. Views
+/// Loads the formats after the language or the time format changed. Views
 /// registered with [`on_change`] rebuild their text on the next event-loop
 /// turn, outside whatever state the caller is holding.
 pub(crate) fn reload(app: &AppWindow) {
-    let formats = DateFormats::load(
-        &app.global::<I18n>(),
-        regional_hour_cycle(time_locale().as_deref()),
-    );
+    let preference = TimeFormat::parse(&app.get_time_format()).unwrap_or_default();
+    let formats = DateFormats::load(&app.global::<I18n>(), HourCycle::for_preference(preference));
+    app.set_time_format_sample(formats.time(13, 30).into());
     let changed = CURRENT.with(|current| {
         let mut current = current.borrow_mut();
         let changed = **current != formats;
@@ -860,6 +919,51 @@ mod tests {
     }
 
     #[test]
+    fn typed_times_are_read_on_either_clock() {
+        let english = DateFormats::english(HourCycle::Twelve);
+        for (text, expected) in [
+            ("14:30", Some((14, 30))),
+            ("9:05", Some((9, 5))),
+            ("2:30 PM", Some((14, 30))),
+            ("2:30pm", Some((14, 30))),
+            ("12:15 a.m.", Some((0, 15))),
+            ("12 PM", Some((12, 0))),
+            ("2 pm", Some((14, 0))),
+            ("2:30 pm.", Some((14, 30))),
+            ("14.30", Some((14, 30))),
+            ("14", None),
+            ("13:00 PM", None),
+            ("24:00", None),
+            ("9:60", None),
+            ("noon", None),
+            ("", None),
+        ] {
+            assert_eq!(english.parse_time(text), expected, "{text:?}");
+        }
+
+        let chinese = DateFormats::from_vocabulary(
+            &Translation {
+                day_periods: Some(("上午", "下午")),
+                ..Default::default()
+            },
+            HourCycle::Twelve,
+        );
+        assert_eq!(chinese.parse_time("下午2:30"), Some((14, 30)));
+        assert_eq!(chinese.parse_time("下午0:05"), Some((12, 5)));
+        assert_eq!(chinese.parse_time("上午0:05"), Some((0, 5)));
+        assert_eq!(chinese.parse_time(&chinese.time(9, 30)), Some((9, 30)));
+        let spanish = DateFormats::from_vocabulary(
+            &Translation {
+                day_periods: Some(("a. m.", "p. m.")),
+                ..Default::default()
+            },
+            HourCycle::Twelve,
+        );
+        assert_eq!(spanish.parse_time("2:30 p. m."), Some((14, 30)));
+        assert_eq!(spanish.parse_time(&spanish.time(23, 59)), Some((23, 59)));
+    }
+
+    #[test]
     fn date_ranges_leave_out_the_shared_month_and_year() {
         let formats = DateFormats::english(HourCycle::TwentyFour);
 
@@ -946,6 +1050,15 @@ mod tests {
                 DateFormats::english(cycle)
             );
         }
+
+        app.set_time_format("12h".into());
+        reload(&app);
+        assert_eq!(current().time(13, 30), "1:30 PM");
+        assert_eq!(app.get_time_format_sample(), "1:30 PM");
+        app.set_time_format("24h".into());
+        reload(&app);
+        assert_eq!(current().time(13, 30), "13:30");
+        assert_eq!(app.get_time_format_sample(), "13:30");
     }
 
     /// Every translated pattern must parse, or its language silently falls

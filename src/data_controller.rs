@@ -440,6 +440,13 @@ pub(super) fn restore_account_backup(
             {
                 settings.language = language.to_owned();
             }
+            if let Some(format) = preferences
+                .get("timeFormat")
+                .and_then(|value| value.as_str())
+                .and_then(flectar_mail_core::models::TimeFormat::parse)
+            {
+                settings.time_format = format;
+            }
             if let Some(week_start) = preferences
                 .get("calendarWeekStart")
                 .and_then(|value| value.as_str())
@@ -581,6 +588,7 @@ pub(super) fn restore_account_backup(
     })();
 
     let (restore, settings, accounts, configs) = result?;
+    app.set_time_format(settings.time_format.as_str().into());
     apply_language(app, &settings.language);
     state.borrow_mut().account_presentation = AccountPresentationSettings::from_settings(&settings);
     // Imported profiles can change which accounts the mail view shows.
@@ -1205,6 +1213,7 @@ pub(super) fn register_data_management_callbacks(
                     "workspaceListPaneWidth": settings.workspace_list_pane_width,
                     "monochromeSidebarIcons": settings.monochrome_sidebar_icons,
                     "language": settings.language,
+                    "timeFormat": settings.time_format,
                     "calendarWeekStart": settings.calendar_week_start,
                     "loadRemoteImages": settings.load_remote_images,
                     "markReadOnOpen": settings.mark_read_on_open,

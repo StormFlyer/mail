@@ -2857,7 +2857,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         app.set_calendar_event_editing(false);
         app.set_calendar_event_title("".into());
         app.set_calendar_event_date(calendar.selected_date.format("%Y-%m-%d").to_string().into());
-        app.set_calendar_event_time("09:00".into());
+        app.set_calendar_event_time(date_format::current().time(9, 0).into());
         app.set_calendar_event_duration("60".into());
         app.set_calendar_event_color(0);
         app.set_calendar_editor_open(true);
@@ -2886,14 +2886,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         app.set_calendar_event_editing(true);
         app.set_calendar_event_title(event.title.into());
         app.set_calendar_event_date(event.date.format("%Y-%m-%d").to_string().into());
-        app.set_calendar_event_time(
-            format!(
-                "{:02}:{:02}",
-                event.start_minutes / 60,
-                event.start_minutes % 60
-            )
-            .into(),
-        );
+        let start = event.start_minutes.clamp(0, 24 * 60 - 1) as u32;
+        app.set_calendar_event_time(date_format::current().time(start / 60, start % 60).into());
         app.set_calendar_event_duration(event.duration_minutes.to_string().into());
         app.set_calendar_event_color(event.color_index);
         app.set_calendar_editor_open(true);
@@ -2961,12 +2955,16 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        let parsed = NaiveDate::parse_from_str(date.trim(), "%Y-%m-%d").and_then(|date| {
-            NaiveTime::parse_from_str(time.trim(), "%H:%M").map(|time| (date, time))
-        });
-        let Ok((date, time)) = parsed else {
-            app.set_sync_status(UiMessage::plain(
-                "Use YYYY-MM-DD and a 24-hour time such as 09:30.",
+        let formats = date_format::current();
+        let parsed = NaiveDate::parse_from_str(date.trim(), "%Y-%m-%d").ok().zip(
+            formats
+                .parse_time(&time)
+                .and_then(|(hour, minute)| NaiveTime::from_hms_opt(hour, minute, 0)),
+        );
+        let Some((date, time)) = parsed else {
+            app.set_sync_status(UiMessage::detail(
+                "Use YYYY-MM-DD for the date and a time such as {}.",
+                formats.time(9, 30),
             ));
             return;
         };

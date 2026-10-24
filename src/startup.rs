@@ -717,6 +717,7 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
     app.global::<MessageColors>()
         .set_preference(settings.message_appearance.as_str().into());
     refresh_oauth_availability(app);
+    app.set_time_format(settings.time_format.as_str().into());
     crate::apply_language(app, &settings.language);
     app.set_custom_oauth_configured(
         !settings.google_client_id.trim().is_empty() || !settings.ms_client_id.trim().is_empty(),

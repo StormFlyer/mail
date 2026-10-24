@@ -243,6 +243,9 @@ export global I18n {
         if (key == "Language updated for this session.") { return @tr("Language updated for this session."); }
         if (key == "Language preference saved.") { return @tr("Language preference saved."); }
         if (key == "Could not save language: {}") { return @tr("Could not save language: {}", argument); }
+        if (key == "Time format updated for this session.") { return @tr("Time format updated for this session."); }
+        if (key == "Time format preference saved.") { return @tr("Time format preference saved."); }
+        if (key == "Could not save time format: {}") { return @tr("Could not save time format: {}", argument); }
         if (key == "Sidebar icon style updated for this session.") { return @tr("Sidebar icon style updated for this session."); }
         if (key == "Sidebar icon preference saved.") { return @tr("Sidebar icon preference saved."); }
         if (key == "Could not save sidebar icon preference: {}") { return @tr("Could not save sidebar icon preference: {}", argument); }
@@ -398,7 +401,7 @@ export global I18n {
         if (key == "Could not delete event: {}") { return @tr("Could not delete event: {}", argument); }
         if (key == "Event deleted, but refresh failed: {}") { return @tr("Event deleted, but refresh failed: {}", argument); }
         if (key == "Event deleted.") { return @tr("Event deleted."); }
-        if (key == "Use YYYY-MM-DD and a 24-hour time such as 09:30.") { return @tr("Use YYYY-MM-DD and a 24-hour time such as 09:30."); }
+        if (key == "Use YYYY-MM-DD for the date and a time such as {}.") { return @tr("Use YYYY-MM-DD for the date and a time such as {}.", argument); }
         if (key == "Event duration must be a number of minutes.") { return @tr("Event duration must be a number of minutes."); }
         if (key == "Add a title and choose a duration from 15 to 1440 minutes.") { return @tr("Add a title and choose a duration from 15 to 1440 minutes."); }
         if (key == "That local time does not exist in the current time zone.") { return @tr("That local time does not exist in the current time zone."); }
@@ -620,6 +623,7 @@ export component AppWindow inherits Window {
     callback save_workspace_layout(string);
     callback save_workspace_list_pane_width(length);
     callback save_language(string);
+    callback save_time_format(string);
     callback save_sidebar_icon_style(bool);
     callback save_notification_settings(bool, bool, string);
     callback save_sync_interval(int);
@@ -943,6 +947,9 @@ export component AppWindow inherits Window {
     in-out property <string> workspace_layout: "default";
     in-out property <length> workspace_list_pane_width: LayoutMetrics.list-pane-width;
     in-out property <string> language_mode: "system";
+    // "automatic" follows the regional clock; "12h" and "24h" fix it.
+    in-out property <string> time_format: "automatic";
+    in property <string> time_format_sample: "13:30";
     in-out property <bool> monochrome_sidebar_icons: false;
     in-out property <bool> notifications_enabled: true;
     in-out property <bool> notification_sound_enabled: true;
@@ -1782,6 +1789,7 @@ export component AppWindow inherits Window {
             calendar_event_title <=> root.calendar_event_title;
             calendar_event_date <=> root.calendar_event_date;
             calendar_event_time <=> root.calendar_event_time;
+            time-placeholder: root.time_format_sample;
             calendar_event_duration <=> root.calendar_event_duration;
             calendar_event_color <=> root.calendar_event_color;
             calendar-save-event(title, date, time, duration, color) => {
@@ -1850,6 +1858,8 @@ export component AppWindow inherits Window {
             show_account_markers <=> root.show_account_markers;
             workspace_layout <=> root.workspace_layout;
             language_mode <=> root.language_mode;
+            time_format <=> root.time_format;
+            time_format_sample: root.time_format_sample;
             monochrome_sidebar_icons <=> root.monochrome_sidebar_icons;
             notifications_enabled <=> root.notifications_enabled;
             notification_sound_enabled <=> root.notification_sound_enabled;
@@ -1944,6 +1954,7 @@ export component AppWindow inherits Window {
             }
             save_workspace_layout(mode) => { root.save_workspace_layout(mode); }
             save_language(language) => { root.save_language(language); }
+            save_time_format(format) => { root.save_time_format(format); }
             save_sidebar_icon_style(monochrome) => { root.save_sidebar_icon_style(monochrome); }
             save_notification_settings(enabled, sound-enabled, scope) => {
                 root.save_notification_settings(enabled, sound-enabled, scope);
