@@ -398,7 +398,12 @@ mod tests {
             ["account_id", "starred_count"]
         );
 
-        for forbidden in ["calendar_events", "calendars", "caldav_config"] {
+        for forbidden in [
+            "calendar_events",
+            "calendars",
+            "caldav_config",
+            "calendar_connections",
+        ] {
             assert!(!application_tables(&conn).contains(forbidden));
         }
         let seeded: i64 = conn

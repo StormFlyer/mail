@@ -721,15 +721,18 @@ impl Core {
                     core.spawn_actor(cfg).await;
                 }
                 events::sync_diagnostic("startup_workers", None, "ready");
-                // Calendar sync tasks for accounts with a connected CalDAV server.
-                if core.paths.calendar_db_file().exists()
-                    && let Ok(cal_accounts) = core
+                // Calendar sync tasks for accounts with a syncing calendar
+                // connection, once older CalDAV passwords have moved to theirs.
+                if core.paths.calendar_db_file().exists() {
+                    core.move_calendar_secrets().await;
+                    if let Ok(cal_accounts) = core
                         .calendar_db
-                        .read(|conn| repo::caldav::all_configs(conn))
+                        .read(|conn| repo::caldav::accounts_with_enabled_connections(conn))
                         .await
-                {
-                    for cfg in cal_accounts {
-                        core.spawn_cal_task(cfg.account_id).await;
+                    {
+                        for account_id in cal_accounts {
+                            core.spawn_cal_task(account_id).await;
+                        }
                     }
                 }
                 if let Ok(card_accounts) = core
@@ -945,6 +948,106 @@ impl Core {
             account_id,
         );
         self.cal_handles.write().await.insert(account_id, handle);
+    }
+
+    /// Keep the account's calendar task running exactly while one of its
+    /// connections syncs. Runs after a change was saved, so a failed read
+    /// leaves the task as it is rather than failing that change.
+    async fn refresh_cal_task(&self, account_id: i64) {
+        let syncing = self
+            .calendar_db
+            .read(move |conn| {
+                Ok(repo::caldav::account_connections(conn, account_id)?
+                    .iter()
+                    .any(|connection| connection.enabled))
+            })
+            .await;
+        match syncing {
+            Ok(false) => {
+                self.cal_handles.write().await.remove(&account_id);
+            }
+            Ok(true) => {
+                if !self.cal_handles.read().await.contains_key(&account_id) {
+                    self.spawn_cal_task(account_id).await;
+                }
+            }
+            Err(error) => tracing::warn!(account_id, "reading calendar connections: {error}"),
+        }
+    }
+
+    /// Move CalDAV passwords saved before an account could sync several
+    /// servers to their connections. A locked keyring leaves the rest for the
+    /// connection's first sync.
+    async fn move_calendar_secrets(&self) {
+        let pending = match self
+            .calendar_db
+            .read(|conn| repo::caldav::pending_secret_moves(conn))
+            .await
+        {
+            Ok(pending) => pending,
+            Err(error) => {
+                tracing::warn!("listing calendar passwords to move: {error}");
+                return;
+            }
+        };
+        for (connection_id, account_id) in pending {
+            if let Err(error) = caldav::task::move_secret(
+                &self.calendar_db,
+                self.credentials.clone(),
+                connection_id,
+                account_id,
+            )
+            .await
+            {
+                tracing::warn!(connection_id, "moving calendar password: {error}");
+            }
+        }
+    }
+
+    /// Delete a CalDAV connection's password, including one still waiting
+    /// under its account from before connections had their own.
+    async fn delete_connection_password(
+        &self,
+        connection: &repo::caldav::ConnectionConfig,
+    ) -> Result<()> {
+        if connection.kind != CalendarConnectionKind::Generic {
+            return Ok(());
+        }
+        let connection_id = connection.id;
+        let account_id = connection.account_id;
+        credentials::delete_async(
+            self.credentials.clone(),
+            account_id,
+            Slot::CaldavPassword(connection_id),
+        )
+        .await?;
+        let pending = self
+            .calendar_db
+            .read(move |conn| repo::caldav::secret_move_pending(conn, connection_id))
+            .await?;
+        if pending {
+            credentials::delete_async(
+                self.credentials.clone(),
+                account_id,
+                Slot::AccountCaldavPassword,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Delete the passwords of every CalDAV connection of an account. The
+    /// keyring cannot list entries, so they are found through their
+    /// connections, before those go.
+    async fn delete_calendar_passwords(&self, account_id: i64) -> Result<()> {
+        let connections = self
+            .calendar_db
+            .read(move |conn| repo::caldav::account_connections(conn, account_id))
+            .await?;
+        for connection in &connections {
+            self.delete_connection_password(connection).await?;
+        }
+        Ok(())
     }
 
     async fn spawn_card_task(&self, account_id: i64) {
@@ -1598,14 +1701,7 @@ impl Core {
         if connect_calendar {
             match provider {
                 Provider::Gmail => {
-                    self.connect_calendar(ConnectCalendarArgs {
-                        account_id: account.id,
-                        kind: "google".into(),
-                        url: None,
-                        username: None,
-                        password: None,
-                    })
-                    .await?;
+                    self.attach_google_calendar(account.id).await?;
                 }
                 Provider::Microsoft => {
                     // The initial consent already included Calendars.ReadWrite;
@@ -1889,7 +1985,7 @@ impl Core {
                     rusqlite::params![account_id],
                 )?;
                 tx.execute(
-                    "DELETE FROM caldav_config WHERE account_id = ?1",
+                    "DELETE FROM calendar_connections WHERE account_id = ?1",
                     rusqlite::params![account_id],
                 )?;
                 tx.commit()?;
@@ -1979,6 +2075,7 @@ impl Core {
             handle.abort();
         }
         self.tokens.forget_account(account_id).await;
+        self.delete_calendar_passwords(account_id).await?;
         self.purge_calendar_account(account_id).await?;
         self.files_db
             .write(move |conn| {
@@ -2072,7 +2169,7 @@ impl Core {
                 let mut statement = conn.prepare(
                     "SELECT account_id FROM calendar_events WHERE account_id != 0
                      UNION SELECT account_id FROM calendars WHERE account_id != 0
-                     UNION SELECT account_id FROM caldav_config WHERE account_id != 0
+                     UNION SELECT account_id FROM calendar_connections WHERE account_id != 0
                      UNION SELECT account_id FROM pending_actions WHERE account_id != 0",
                 )?;
                 Ok(statement
@@ -2083,6 +2180,9 @@ impl Core {
         for account_id in calendar_accounts {
             if !valid_accounts.contains(&account_id) {
                 tracing::warn!(account_id, "removing orphaned calendar account data");
+                if let Err(error) = self.delete_calendar_passwords(account_id).await {
+                    tracing::warn!(account_id, "orphaned calendar passwords stay: {error}");
+                }
                 self.purge_calendar_account(account_id).await?;
                 self.files_db
                     .write(move |conn| {
@@ -2280,7 +2380,7 @@ impl Core {
                     "DELETE FROM pending_actions;
                      DELETE FROM calendar_events;
                      DELETE FROM calendars;
-                     DELETE FROM caldav_config;",
+                     DELETE FROM calendar_connections;",
                 )?;
                 Ok(())
             })
@@ -5255,18 +5355,17 @@ impl Core {
         // Teams and Outlook show. Best-effort: a Graph failure (e.g. the
         // account predates the calendar consent) must not fail event creation,
         // which already succeeded locally. Skipped when the account has a
-        // connected calendar: the sync task's push already writes it (and a
-        // second direct POST would duplicate the event in Outlook).
+        // calendar connection: the sync task pushes the event to its calendar
+        // (and a second direct POST would duplicate the event in Outlook).
         if account
             .as_ref()
             .is_some_and(|account| account.provider == Provider::Microsoft)
         {
-            let has_cal_config = self
+            let has_connection = self
                 .calendar_db
-                .read(move |conn| repo::caldav::get_config(conn, account_id))
-                .await?
-                .is_some();
-            if !has_cal_config && let Err(e) = self.push_event_to_graph(account_id, &args).await {
+                .read(move |conn| repo::caldav::account_has_connections(conn, account_id))
+                .await?;
+            if !has_connection && let Err(e) = self.push_event_to_graph(account_id, &args).await {
                 tracing::warn!(error = %e, "graph: could not sync event to Outlook calendar");
             }
         }
@@ -5591,175 +5690,244 @@ impl Core {
         Ok(())
     }
 
-    /// Connect a calendar server to an account. Generic servers store the app
-    /// password in the keyring; Google reuses the account's OAuth tokens (the
-    /// caller must have completed the calendar-scope re-consent first).
-    /// Discovery doubles as the connection test - nothing persists on failure.
-    pub async fn connect_calendar(&self, args: ConnectCalendarArgs) -> Result<Vec<Calendar>> {
+    /// Add a CalDAV server to an account, or change one of its CalDAV
+    /// connections. The address is a server's, or one calendar's own address
+    /// such as a shared mailbox's calendar reached with the account's sign-in.
+    /// Events created in its calendars use the account's address as
+    /// organizer. Discovery doubles as the connection test, so nothing
+    /// persists on failure, and calendars another connection of the account
+    /// already syncs stay with it. The app password goes to the keyring; an
+    /// empty one keeps the saved password of the connection being changed.
+    pub async fn connect_caldav(&self, args: ConnectCaldavArgs) -> Result<CalendarConnection> {
         let account_id = args.account_id;
-        let kind = if args.kind == "google" {
-            "google"
-        } else {
-            "generic"
-        };
-        let base_url = match kind {
-            "google" => {
-                let calendar_id = self
-                    .db
-                    .read(move |conn| {
-                        Ok(repo::accounts::get(conn, account_id)?.map(|account| account.email))
-                    })
+        self.db
+            .read(move |conn| repo::accounts::get(conn, account_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound("account".into()))?;
+        let existing = match args.connection_id {
+            Some(connection_id) => Some(
+                self.calendar_db
+                    .read(move |conn| repo::caldav::get_connection(conn, connection_id))
                     .await?
-                    .ok_or_else(|| CoreError::NotFound("account".into()))?;
-                caldav::google_calendar_url(&calendar_id)?
-            }
-            _ => {
-                let url = args
-                    .url
-                    .clone()
-                    .filter(|u| !u.trim().is_empty())
-                    .ok_or_else(|| CoreError::CalDav("server URL is required".into()))?;
-                let mut url = url.trim().to_string();
-                if !url.contains("://") {
-                    url = format!("https://{url}");
-                }
-                url
-            }
-        };
-
-        let submitted_password = args.password.clone().filter(|p| !p.is_empty());
-
-        // Build auth without persisting anything yet. An empty password on an
-        // existing generic connection means "keep the current app password",
-        // so settings can be edited without exposing or re-entering it.
-        let auth = match kind {
-            "google" => caldav::DavAuth::Bearer(
-                self.tokens
-                    .access_token(account_id, Provider::Gmail)
-                    .await?,
+                    .filter(|connection| {
+                        connection.account_id == account_id
+                            && connection.kind == CalendarConnectionKind::Generic
+                    })
+                    .ok_or_else(|| CoreError::NotFound("calendar connection".into()))?,
             ),
-            _ => {
-                let user = args.username.clone().unwrap_or_default();
-                credentials::check_available_async(self.credentials.clone()).await?;
-                let pass = match submitted_password.clone() {
-                    Some(password) => password,
-                    None => {
-                        let has_existing_generic_config = self
-                            .calendar_db
-                            .read(move |conn| {
-                                Ok(repo::caldav::get_config(conn, account_id)?
-                                    .is_some_and(|config| config.kind == "generic"))
-                            })
-                            .await?;
-                        if !has_existing_generic_config {
-                            return Err(CoreError::CalDav("password is required".into()));
-                        }
-                        credentials::load_async(
-                            self.credentials.clone(),
-                            account_id,
-                            Slot::CaldavPassword,
-                        )
-                        .await?
-                    }
-                };
-                caldav::DavAuth::Basic(user, pass)
-            }
+            None => None,
         };
-        let google_access_token = match &auth {
-            caldav::DavAuth::Bearer(token) if kind == "google" => Some(token.clone()),
-            _ => None,
-        };
-        let transport = caldav::HttpTransport::new(auth, &base_url)?;
-        let (discovery, google_calendars) = if kind == "google" {
-            // Validate the primary DAV collection so a disabled CalDAV API is
-            // reported immediately. Calendar API metadata then supplies every
-            // secondary/shared/special calendar id; CalDAV itself only knows
-            // about the one id embedded in its collection URL.
-            let primary =
-                caldav::discovery::discover_known_collection(&transport, &base_url).await?;
-            let access_token = google_access_token.as_deref().ok_or_else(|| {
-                CoreError::CalDav("Google calendar authentication was not initialized".into())
-            })?;
-            let listed = googlecal::list_calendars(access_token).await?;
-            if listed.is_empty() {
-                return Err(CoreError::CalDav("no Google calendars found".into()));
-            }
-            (primary, Some(listed))
+        let url = args.url.trim();
+        if url.is_empty() {
+            return Err(CoreError::CalDav("server URL is required".into()));
+        }
+        let url = if url.contains("://") {
+            url.to_owned()
         } else {
-            (
-                caldav::discovery::discover(&transport, &base_url).await?,
-                None,
-            )
+            format!("https://{url}")
+        };
+        let username = args.username.trim().to_owned();
+        let submitted_password = args.password.filter(|password| !password.is_empty());
+
+        credentials::check_available_async(self.credentials.clone()).await?;
+        let password = match (&submitted_password, &existing) {
+            (Some(password), _) => password.clone(),
+            (None, Some(connection)) => {
+                caldav::task::connection_password(
+                    &self.calendar_db,
+                    self.credentials.clone(),
+                    connection,
+                )
+                .await?
+            }
+            (None, None) => return Err(CoreError::CalDav("password is required".into())),
         };
 
-        // Persist: keyring first, then config + collections.
-        if kind == "generic"
-            && let Some(pass) = submitted_password
-        {
-            credentials::store_async(
-                self.credentials.clone(),
-                account_id,
-                Slot::CaldavPassword,
-                pass,
-            )
-            .await?;
+        let transport =
+            caldav::HttpTransport::new(caldav::DavAuth::Basic(username.clone(), password), &url)?;
+        // Google answers for one calendar at its own address without always
+        // naming it a calendar collection.
+        let discovery = if caldav::google_calendar_id(&url).is_some() {
+            caldav::discovery::discover_known_collection(&transport, &url).await?
+        } else {
+            caldav::discovery::discover(&transport, &url).await?
+        };
+
+        let editing = existing.as_ref().map(|connection| connection.id);
+        let taken: HashSet<String> = self
+            .calendar_db
+            .read(move |conn| repo::caldav::list_calendars(conn, Some(account_id)))
+            .await?
+            .into_iter()
+            .filter(|calendar| Some(calendar.connection_id) != editing)
+            .map(|calendar| caldav::collection_identity(&calendar.url))
+            .collect();
+        let calendars: Vec<caldav::discovery::DiscoveredCalendar> = discovery
+            .calendars
+            .into_iter()
+            .filter(|calendar| !taken.contains(&caldav::collection_identity(&calendar.url)))
+            .collect();
+        if calendars.is_empty() {
+            return Err(CoreError::CalDav(
+                "this account already syncs these calendars".into(),
+            ));
         }
-        let cfg = repo::caldav::CaldavConfig {
+
+        let mut connection = repo::caldav::ConnectionConfig {
+            id: editing.unwrap_or_default(),
             account_id,
-            kind: kind.to_string(),
-            base_url,
-            username: args.username.clone(),
-            principal_url: discovery.principal_url.clone(),
-            home_set_url: Some(discovery.home_set_url.clone()),
+            kind: CalendarConnectionKind::Generic,
+            base_url: url,
+            username,
+            principal_url: discovery.principal_url,
+            home_set_url: Some(discovery.home_set_url),
             enabled: true,
             last_error: None,
         };
-        let calendars = discovery.calendars.clone();
+        let connection_id = match editing {
+            Some(connection_id) => {
+                if let Some(password) = submitted_password {
+                    caldav::task::save_password(
+                        &self.calendar_db,
+                        self.credentials.clone(),
+                        connection_id,
+                        account_id,
+                        password,
+                    )
+                    .await?;
+                }
+                self.calendar_db
+                    .write(move |conn| {
+                        let tx = conn.transaction()?;
+                        repo::caldav::update_connection(&tx, &connection)?;
+                        store_discovered_calendars(&tx, &connection, &calendars)?;
+                        tx.commit()?;
+                        Ok(())
+                    })
+                    .await?;
+                connection_id
+            }
+            None => {
+                // A new connection waits, paused, until its password is saved.
+                connection.enabled = false;
+                let connection_id = self
+                    .calendar_db
+                    .write(move |conn| {
+                        let tx = conn.transaction()?;
+                        connection.id = repo::caldav::insert_connection(&tx, &connection)?;
+                        store_discovered_calendars(&tx, &connection, &calendars)?;
+                        tx.commit()?;
+                        Ok(connection.id)
+                    })
+                    .await?;
+                let saved = caldav::task::save_password(
+                    &self.calendar_db,
+                    self.credentials.clone(),
+                    connection_id,
+                    account_id,
+                    submitted_password.unwrap_or_default(),
+                )
+                .await;
+                if let Err(error) = saved {
+                    self.calendar_db
+                        .write(move |conn| {
+                            let tx = conn.transaction()?;
+                            repo::caldav::remove_connection(&tx, connection_id)?;
+                            repo::caldav::ensure_default_calendar(&tx, account_id, None)?;
+                            tx.commit()?;
+                            Ok(())
+                        })
+                        .await?;
+                    return Err(error);
+                }
+                self.calendar_db
+                    .write(move |conn| {
+                        repo::caldav::set_connection_enabled(conn, connection_id, true).map(|_| ())
+                    })
+                    .await?;
+                connection_id
+            }
+        };
+
+        self.refresh_cal_task(account_id).await;
+        self.nudge_cal(Some(account_id)).await;
+        self.bus.emit(CoreEvent::CalendarUpdated { account_id });
+        self.calendar_connection(connection_id).await
+    }
+
+    async fn calendar_connection(&self, connection_id: i64) -> Result<CalendarConnection> {
+        self.calendar_db
+            .read(|conn| repo::caldav::list_connections(conn))
+            .await?
+            .into_iter()
+            .find(|connection| connection.id == connection_id)
+            .ok_or_else(|| CoreError::NotFound("calendar connection".into()))
+    }
+
+    /// Sync the account's Google calendars over CalDAV with its own OAuth
+    /// tokens; the caller must have completed the calendar-scope consent.
+    /// The primary collection is checked first so a disabled CalDAV API is
+    /// reported immediately; Calendar API metadata then supplies every
+    /// secondary, shared and special calendar id, since CalDAV itself only
+    /// knows the one id embedded in its collection URL.
+    async fn attach_google_calendar(&self, account_id: i64) -> Result<Vec<Calendar>> {
+        let email = self
+            .db
+            .read(move |conn| Ok(repo::accounts::get(conn, account_id)?.map(|a| a.email)))
+            .await?
+            .ok_or_else(|| CoreError::NotFound("account".into()))?;
+        let base_url = caldav::google_calendar_url(&email)?;
+        let token = self
+            .tokens
+            .access_token(account_id, Provider::Gmail)
+            .await?;
+        let transport =
+            caldav::HttpTransport::new(caldav::DavAuth::Bearer(token.clone()), &base_url)?;
+        caldav::discovery::discover_known_collection(&transport, &base_url).await?;
+        let listed = googlecal::list_calendars(&token).await?;
+        if listed.is_empty() {
+            return Err(CoreError::CalDav("no Google calendars found".into()));
+        }
+
         let out = self
             .calendar_db
             .write(move |conn| {
                 let tx = conn.transaction()?;
-                repo::caldav::upsert_config(&tx, &cfg)?;
-                if let Some(google_calendars) = &google_calendars {
-                    googlecal::reconcile_calendars(&tx, account_id, google_calendars)?;
-                } else {
-                    let calendar_urls = calendars
-                        .iter()
-                        .map(|calendar| calendar.url.clone())
-                        .collect::<HashSet<_>>();
-                    let mut first_id = None;
-                    for c in &calendars {
-                        let id = repo::caldav::upsert_calendar(
-                            &tx,
+                let mut connection = match repo::caldav::provider_connection(
+                    &tx,
+                    account_id,
+                    CalendarConnectionKind::Google,
+                )? {
+                    Some(connection) => connection,
+                    None => {
+                        let mut connection = repo::caldav::ConnectionConfig {
+                            id: 0,
                             account_id,
-                            &c.url,
-                            c.display_name.as_deref(),
-                            c.color.as_deref(),
-                            false,
-                        )?;
-                        first_id.get_or_insert(id);
+                            kind: CalendarConnectionKind::Google,
+                            base_url: base_url.clone(),
+                            username: String::new(),
+                            principal_url: None,
+                            home_set_url: None,
+                            enabled: true,
+                            last_error: None,
+                        };
+                        connection.id = repo::caldav::insert_connection(&tx, &connection)?;
+                        connection
                     }
-                    repo::caldav::retain_calendars(&tx, account_id, &calendar_urls)?;
-                    if let Some(id) = first_id {
-                        // Keep an existing default if one is set; else first wins.
-                        let has_default: i64 = tx.query_row(
-                            "SELECT COUNT(*) FROM calendars WHERE account_id = ?1 AND is_default = 1",
-                            rusqlite::params![account_id],
-                            |r| r.get(0),
-                        )?;
-                        if has_default == 0 {
-                            repo::caldav::set_default_calendar(&tx, account_id, id)?;
-                        }
-                    }
-                }
-                let list = repo::caldav::list_calendars(&tx, Some(account_id))?;
+                };
+                connection.home_set_url = Some(base_url.clone());
+                connection.base_url = base_url;
+                connection.enabled = true;
+                repo::caldav::update_connection(&tx, &connection)?;
+                let calendars = googlecal::reconcile_calendars(&tx, &connection, &listed)?;
                 tx.commit()?;
-                Ok(list)
+                Ok(calendars)
             })
             .await?;
 
-        self.spawn_cal_task(account_id).await;
+        self.refresh_cal_task(account_id).await;
         self.nudge_cal(Some(account_id)).await;
+        self.bus.emit(CoreEvent::CalendarUpdated { account_id });
         Ok(out)
     }
 
@@ -5813,14 +5981,7 @@ impl Core {
             )
             .await?;
 
-        self.connect_calendar(ConnectCalendarArgs {
-            account_id,
-            kind: "google".into(),
-            url: None,
-            username: None,
-            password: None,
-        })
-        .await
+        self.attach_google_calendar(account_id).await
     }
 
     /// Mint a Graph token for one extra scope, widening consent in the
@@ -5914,8 +6075,8 @@ impl Core {
     /// Microsoft calendar connection: Outlook / Microsoft 365 has no CalDAV
     /// endpoint, so the calendar syncs via Graph. Widens consent to
     /// `Calendars.ReadWrite` when needed, lists the account's calendars and
-    /// persists them under a "microsoft"-kind config; the shared calendar
-    /// task then pulls via calendarView delta.
+    /// persists them under the account's Microsoft connection; the account's
+    /// calendar task then pulls via calendarView delta.
     pub async fn connect_microsoft_calendar(
         &self,
         account_id: i64,
@@ -5929,74 +6090,89 @@ impl Core {
             return Err(CoreError::CalDav("no calendars found".into()));
         }
 
-        let cfg = repo::caldav::CaldavConfig {
-            account_id,
-            kind: "microsoft".to_string(),
-            base_url: graph::GRAPH_BASE.to_string(),
-            username: None,
-            principal_url: None,
-            home_set_url: None,
-            enabled: true,
-            last_error: None,
-        };
         let out = self
             .calendar_db
             .write(move |conn| {
                 let tx = conn.transaction()?;
-                repo::caldav::upsert_config(&tx, &cfg)?;
+                let mut connection = match repo::caldav::provider_connection(
+                    &tx,
+                    account_id,
+                    CalendarConnectionKind::Microsoft,
+                )? {
+                    Some(connection) => connection,
+                    None => {
+                        let mut connection = repo::caldav::ConnectionConfig {
+                            id: 0,
+                            account_id,
+                            kind: CalendarConnectionKind::Microsoft,
+                            base_url: graph::GRAPH_BASE.to_string(),
+                            username: String::new(),
+                            principal_url: None,
+                            home_set_url: None,
+                            enabled: true,
+                            last_error: None,
+                        };
+                        connection.id = repo::caldav::insert_connection(&tx, &connection)?;
+                        connection
+                    }
+                };
+                connection.enabled = true;
+                repo::caldav::update_connection(&tx, &connection)?;
+                let mut listed = HashSet::new();
                 let mut default_id = None;
-                let mut first_id = None;
                 for c in &discovered {
                     let id = repo::caldav::upsert_calendar(
                         &tx,
-                        account_id,
+                        &connection,
                         &c.id,
                         c.name.as_deref(),
                         c.hex_color.as_deref(),
                         !c.can_edit,
                     )?;
-                    first_id.get_or_insert(id);
                     if c.is_default {
                         default_id.get_or_insert(id);
                     }
+                    listed.insert(c.id.clone());
                 }
-                if let Some(id) = default_id.or(first_id) {
-                    // Keep an existing default if one is set; else Outlook's
-                    // default calendar (or the first) wins.
-                    let has_default: i64 = tx.query_row(
-                        "SELECT COUNT(*) FROM calendars WHERE account_id = ?1 AND is_default = 1",
-                        rusqlite::params![account_id],
-                        |r| r.get(0),
-                    )?;
-                    if has_default == 0 {
-                        repo::caldav::set_default_calendar(&tx, account_id, id)?;
-                    }
-                }
-                let list = repo::caldav::list_calendars(&tx, Some(account_id))?;
+                repo::caldav::retain_calendars(&tx, connection.id, &listed)?;
+                // Keep an existing default if one is set; else Outlook's
+                // default calendar (or the first writable one) wins.
+                repo::caldav::ensure_default_calendar(&tx, account_id, default_id)?;
+                let list = repo::caldav::connection_calendars(&tx, connection.id)?;
                 tx.commit()?;
                 Ok(list)
             })
             .await?;
 
-        self.spawn_cal_task(account_id).await;
+        self.refresh_cal_task(account_id).await;
         self.nudge_cal(Some(account_id)).await;
+        self.bus.emit(CoreEvent::CalendarUpdated { account_id });
         Ok(out)
     }
 
-    /// Disconnect the calendar server: events stay locally, sync bookkeeping
-    /// is cleared, credentials removed.
-    pub async fn disconnect_calendar(&self, account_id: i64) -> Result<()> {
-        self.cal_handles.write().await.remove(&account_id);
+    /// Stop syncing a calendar connection and forget its calendars here (see
+    /// `repo::caldav::forget_calendar` for the events that stay). Nothing
+    /// changes on the server. The password goes first: a connection that
+    /// outlives it only asks for a new one, while a password outliving its
+    /// connection could never be found again.
+    pub async fn remove_calendar_connection(&self, connection_id: i64) -> Result<()> {
+        let connection = self
+            .calendar_db
+            .read(move |conn| repo::caldav::get_connection(conn, connection_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound("calendar connection".into()))?;
+        let account_id = connection.account_id;
+        self.delete_connection_password(&connection).await?;
         self.calendar_db
-            .write(move |conn| repo::caldav::delete_config(conn, account_id))
+            .write(move |conn| {
+                let tx = conn.transaction()?;
+                repo::caldav::remove_connection(&tx, connection_id)?;
+                repo::caldav::ensure_default_calendar(&tx, account_id, None)?;
+                tx.commit()?;
+                Ok(())
+            })
             .await?;
-        let _ = credentials::store_async(
-            self.credentials.clone(),
-            account_id,
-            Slot::CaldavPassword,
-            String::new(),
-        )
-        .await;
+        self.refresh_cal_task(account_id).await;
         self.bus.emit(CoreEvent::CalendarUpdated { account_id });
         Ok(())
     }
@@ -6009,39 +6185,29 @@ impl Core {
 
     pub async fn list_calendar_connections(&self) -> Result<Vec<CalendarConnection>> {
         self.calendar_db
-            .read(|conn| {
-                Ok(repo::caldav::list_configs(conn)?
-                    .into_iter()
-                    .map(|cfg| CalendarConnection {
-                        account_id: cfg.account_id,
-                        kind: cfg.kind,
-                        base_url: cfg.base_url,
-                        username: cfg.username.unwrap_or_default(),
-                        enabled: cfg.enabled,
-                        last_error: cfg.last_error,
-                    })
-                    .collect())
-            })
+            .read(|conn| repo::caldav::list_connections(conn))
             .await
     }
 
-    /// Pause/resume a connected calendar without deleting local events,
+    /// Pause/resume one calendar connection without deleting local events,
     /// discovered collections, sync tokens, or credentials.
-    pub async fn set_account_calendar_enabled(&self, account_id: i64, enabled: bool) -> Result<()> {
-        let found = self
+    pub async fn set_calendar_connection_enabled(
+        &self,
+        connection_id: i64,
+        enabled: bool,
+    ) -> Result<()> {
+        let account_id = self
             .calendar_db
-            .write(move |conn| repo::caldav::set_config_enabled(conn, account_id, enabled))
+            .write(move |conn| {
+                let connection = repo::caldav::get_connection(conn, connection_id)?
+                    .ok_or_else(|| CoreError::NotFound("calendar connection".into()))?;
+                repo::caldav::set_connection_enabled(conn, connection_id, enabled)?;
+                Ok(connection.account_id)
+            })
             .await?;
-        if !found {
-            return Err(CoreError::NotFound("calendar connection".into()));
-        }
+        self.refresh_cal_task(account_id).await;
         if enabled {
-            if !self.cal_handles.read().await.contains_key(&account_id) {
-                self.spawn_cal_task(account_id).await;
-            }
             self.nudge_cal(Some(account_id)).await;
-        } else {
-            self.cal_handles.write().await.remove(&account_id);
         }
         self.bus.emit(CoreEvent::CalendarUpdated { account_id });
         Ok(())
@@ -6115,13 +6281,14 @@ impl Core {
         self.nudge_cal(account_id).await;
     }
 
-    /// Queue a CalDAV write for the account's calendar task, when the account
-    /// has one configured. No-op otherwise (purely local calendars).
+    /// Queue a calendar write for the account's calendar task, when the
+    /// account has a calendar connection. No-op otherwise (purely local
+    /// calendars).
     async fn enqueue_cal_push(&self, event_id: i64, account_id: i64, kind: &str) -> Result<()> {
         let kind = kind.to_string();
         self.calendar_db
             .write(move |conn| {
-                if repo::caldav::get_config(conn, account_id)?.is_none() {
+                if !repo::caldav::account_has_connections(conn, account_id)? {
                     return Ok(());
                 }
                 // Dirty guards the row against being clobbered by a pull that
@@ -8255,6 +8422,31 @@ pub(crate) async fn remove_staged_attachment(root: &std::path::Path, path: &str)
     }
 }
 
+/// Store what a CalDAV discovery found for `connection`: its collections
+/// are exactly these now, and the account keeps or gains a default calendar.
+fn store_discovered_calendars(
+    conn: &rusqlite::Connection,
+    connection: &repo::caldav::ConnectionConfig,
+    calendars: &[caldav::discovery::DiscoveredCalendar],
+) -> Result<()> {
+    let mut urls = HashSet::new();
+    let mut first = None;
+    for calendar in calendars {
+        let id = repo::caldav::upsert_calendar(
+            conn,
+            connection,
+            &calendar.url,
+            calendar.display_name.as_deref(),
+            calendar.color.as_deref(),
+            false,
+        )?;
+        first.get_or_insert(id);
+        urls.insert(calendar.url.clone());
+    }
+    repo::caldav::retain_calendars(conn, connection.id, &urls)?;
+    repo::caldav::ensure_default_calendar(conn, connection.account_id, first)
+}
+
 /// Plain-text body for an outgoing invite email (the ICS carries the real
 /// event; this is what non-calendar clients show).
 fn invite_body_text(args: &CreateEventArgs) -> String {
@@ -9635,8 +9827,13 @@ mod thread_read_tests {
         core.calendar_db
             .write(|conn| {
                 conn.execute(
-                    "INSERT INTO calendars (id, account_id, url, display_name)
-                     VALUES (1, 1, 'local://primary', 'Primary')",
+                    "INSERT INTO calendar_connections (id, account_id, kind, base_url)
+                     VALUES (1, 1, 'generic', 'https://dav.example.test/')",
+                    [],
+                )?;
+                conn.execute(
+                    "INSERT INTO calendars (id, account_id, connection_id, url, display_name)
+                     VALUES (1, 1, 1, 'local://primary', 'Primary')",
                     [],
                 )?;
                 conn.execute(
@@ -9696,7 +9893,15 @@ mod thread_read_tests {
             })
             .await
             .unwrap();
-        assert_eq!(calendar_contract, (1, 1, false, "ok".to_owned()));
+        assert_eq!(
+            calendar_contract,
+            (
+                crate::db::calendar_migrations::LATEST_VERSION,
+                1,
+                false,
+                "ok".to_owned()
+            )
+        );
     }
 }
 
@@ -10087,5 +10292,354 @@ mod move_undo_tests {
             .unwrap();
         assert_eq!(folder, 1);
         assert_eq!(mailboxes(&conn, message_id), [1]);
+    }
+}
+
+#[cfg(test)]
+mod calendar_connection_tests {
+    use super::*;
+    use base64::Engine;
+    use std::sync::Mutex;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// A loopback CalDAV server with one calendar collection per path, each
+    /// accepting only its own credentials. It stores uploaded events and
+    /// records every request as (method, path, credentials).
+    #[derive(Default)]
+    struct DavServer {
+        // (collection path, display name, "user:password")
+        collections: Mutex<Vec<(String, String, String)>>,
+        requests: Mutex<Vec<(String, String, Option<String>)>>,
+    }
+
+    impl DavServer {
+        fn set_secret(&self, collection: &str, secret: &str) {
+            for entry in self.collections.lock().unwrap().iter_mut() {
+                if entry.0 == collection {
+                    entry.2 = secret.to_owned();
+                }
+            }
+        }
+
+        fn uploads(&self) -> Vec<(String, Option<String>)> {
+            self.requests
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(method, _, _)| method == "PUT")
+                .map(|(_, path, credentials)| (path.clone(), credentials.clone()))
+                .collect()
+        }
+
+        fn respond(&self, method: &str, path: &str, credentials: Option<&str>) -> String {
+            self.requests.lock().unwrap().push((
+                method.to_owned(),
+                path.to_owned(),
+                credentials.map(str::to_owned),
+            ));
+            let collections = self.collections.lock().unwrap();
+            let Some((collection, name, secret)) = collections
+                .iter()
+                .find(|(collection, _, _)| {
+                    path.trim_end_matches('/') == collection.trim_end_matches('/')
+                        || path.starts_with(collection.as_str())
+                })
+                .cloned()
+            else {
+                return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".into();
+            };
+            drop(collections);
+            if credentials != Some(secret.as_str()) {
+                return "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n".into();
+            }
+            let body = match method {
+                "PUT" => {
+                    return "HTTP/1.1 201 Created\r\nETag: \"1\"\r\nContent-Length: 0\r\n\r\n"
+                        .into();
+                }
+                "PROPFIND" => format!(
+                    r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response><d:href>{collection}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:displayname>{name}</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#
+                ),
+                _ => r#"<d:multistatus xmlns:d="DAV:"></d:multistatus>"#.to_owned(),
+            };
+            format!(
+                "HTTP/1.1 207 Multi-Status\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
+        }
+    }
+
+    async fn dav_server(collections: &[(&str, &str, &str)]) -> (String, Arc<DavServer>) {
+        let server = Arc::new(DavServer::default());
+        *server.collections.lock().unwrap() = collections
+            .iter()
+            .map(|(path, name, secret)| {
+                ((*path).to_owned(), (*name).to_owned(), (*secret).to_owned())
+            })
+            .collect();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let shared = server.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    return;
+                };
+                let server = shared.clone();
+                tokio::spawn(async move {
+                    let mut buffer = Vec::new();
+                    loop {
+                        let head_end = loop {
+                            if let Some(end) =
+                                buffer.windows(4).position(|window| window == b"\r\n\r\n")
+                            {
+                                break end + 4;
+                            }
+                            let mut chunk = [0u8; 4096];
+                            match stream.read(&mut chunk).await {
+                                Ok(0) | Err(_) => return,
+                                Ok(read) => buffer.extend_from_slice(&chunk[..read]),
+                            }
+                        };
+                        let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
+                        let header = |name: &str| {
+                            head.lines().find_map(|line| {
+                                let (key, value) = line.split_once(':')?;
+                                key.eq_ignore_ascii_case(name)
+                                    .then(|| value.trim().to_owned())
+                            })
+                        };
+                        let length: usize = header("content-length")
+                            .and_then(|value| value.parse().ok())
+                            .unwrap_or(0);
+                        while buffer.len() < head_end + length {
+                            let mut chunk = [0u8; 4096];
+                            match stream.read(&mut chunk).await {
+                                Ok(0) | Err(_) => return,
+                                Ok(read) => buffer.extend_from_slice(&chunk[..read]),
+                            }
+                        }
+                        buffer.drain(..head_end + length);
+                        let mut request_line = head.lines().next().unwrap_or_default().split(' ');
+                        let method = request_line.next().unwrap_or_default().to_owned();
+                        let path = request_line.next().unwrap_or_default().to_owned();
+                        let credentials = header("authorization")
+                            .and_then(|value| value.strip_prefix("Basic ").map(str::to_owned))
+                            .and_then(|value| {
+                                base64::engine::general_purpose::STANDARD.decode(value).ok()
+                            })
+                            .map(|bytes| String::from_utf8_lossy(&bytes).to_string());
+                        let response = server.respond(&method, &path, credentials.as_deref());
+                        if stream.write_all(response.as_bytes()).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        (format!("http://{address}"), server)
+    }
+
+    async fn start_test_core(paths: &Paths) -> Core {
+        let core = Core::start_mail_ui_with_credentials(
+            paths.clone(),
+            Arc::new(credentials::DevelopmentFileCredentialStore::new(
+                paths.data_dir.join("test-credentials.json"),
+            )),
+        )
+        .await
+        .unwrap();
+        core.db
+            .write(|conn| {
+                db::testutil::seed_account(conn);
+                Ok(())
+            })
+            .await
+            .unwrap();
+        core
+    }
+
+    fn caldav(connection_id: Option<i64>, url: &str, password: Option<&str>) -> ConnectCaldavArgs {
+        ConnectCaldavArgs {
+            account_id: 1,
+            connection_id,
+            url: url.to_owned(),
+            username: " me ".to_owned(),
+            password: password.map(str::to_owned),
+        }
+    }
+
+    /// Wait for the account's calendar task to reach a state.
+    async fn eventually(mut done: impl AsyncFnMut() -> bool) {
+        for _ in 0..200 {
+            if done().await {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        panic!("the calendar task never reached the expected state");
+    }
+
+    #[tokio::test]
+    async fn an_account_adds_changes_and_removes_several_caldav_servers() {
+        let (server, dav) = dav_server(&[
+            ("/dav/own/", "Me", "me:own-password"),
+            ("/dav/shared/", "Team", "me:shared-password"),
+            ("/dav/third/", "Third", "me:third-password"),
+        ])
+        .await;
+        let temp = tempfile::tempdir().unwrap();
+        let paths = Paths::for_tests(temp.path());
+        let core = start_test_core(&paths).await;
+
+        let own = core
+            .connect_caldav(caldav(
+                None,
+                &format!("{server}/dav/own/"),
+                Some("own-password"),
+            ))
+            .await
+            .unwrap();
+        let shared = core
+            .connect_caldav(caldav(
+                None,
+                &format!("{server}/dav/shared/"),
+                Some("shared-password"),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            (own.calendars.clone(), shared.calendars.clone()),
+            (vec!["Me".to_owned()], vec!["Team".to_owned()])
+        );
+        assert_eq!(shared.username, "me");
+        assert!(own.enabled && shared.enabled);
+        assert!(core.cal_handles.read().await.contains_key(&1));
+
+        // One calendar syncs through one connection per account, however
+        // its address is written.
+        let duplicate = core
+            .connect_caldav(caldav(
+                None,
+                &format!("{server}/dav/shared"),
+                Some("shared-password"),
+            ))
+            .await
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(duplicate.contains("already syncs"), "{duplicate}");
+        // A wrong password never creates a connection.
+        assert!(matches!(
+            core.connect_caldav(caldav(None, &format!("{server}/dav/third/"), Some("wrong")))
+                .await,
+            Err(CoreError::NeedsReauth)
+        ));
+        assert_eq!(core.list_calendar_connections().await.unwrap().len(), 2);
+
+        // Changing a connection without a new password keeps the saved one;
+        // the server accepts nothing else.
+        let changed = core
+            .connect_caldav(caldav(
+                Some(shared.id),
+                &format!("{server}/dav/shared/"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(changed.id, shared.id);
+        // A connection belongs to its account and its kind of server.
+        assert!(
+            core.connect_caldav(ConnectCaldavArgs {
+                account_id: 2,
+                ..caldav(Some(shared.id), &format!("{server}/dav/shared/"), None)
+            })
+            .await
+            .is_err()
+        );
+
+        let calendars = core.list_calendars(Some(1)).await.unwrap();
+        let default = calendars
+            .iter()
+            .find(|calendar| calendar.is_default)
+            .unwrap();
+        assert_eq!(default.connection_id, own.id);
+        let team = calendars
+            .iter()
+            .find(|calendar| calendar.connection_id == shared.id)
+            .unwrap()
+            .id;
+
+        // An event created in the shared calendar goes to that server only,
+        // signed in as that connection.
+        core.create_event(CreateEventArgs {
+            account_id: 1,
+            calendar_id: Some(team),
+            summary: "Front desk rota".into(),
+            description: None,
+            location: None,
+            join_url: None,
+            starts_at: 1_800_000_000_000,
+            ends_at: 1_800_003_600_000,
+            all_day: false,
+            attendees: Vec::new(),
+        })
+        .await
+        .unwrap();
+        eventually(async || !dav.uploads().is_empty()).await;
+        let uploads = dav.uploads();
+        assert_eq!(uploads.len(), 1);
+        assert!(uploads[0].0.starts_with("/dav/shared/"), "{uploads:?}");
+        assert_eq!(uploads[0].1.as_deref(), Some("me:shared-password"));
+
+        // A server that stops accepting its password marks only its own
+        // connection; the other keeps syncing.
+        dav.set_secret("/dav/shared/", "me:rotated");
+        core.calendar_sync_now(Some(1)).await;
+        eventually(async || {
+            let connections = core.list_calendar_connections().await.unwrap();
+            connections
+                .iter()
+                .any(|c| c.id == shared.id && c.last_error.as_deref() == Some("needs_reauth"))
+        })
+        .await;
+        let connections = core.list_calendar_connections().await.unwrap();
+        let own_state = connections.iter().find(|c| c.id == own.id).unwrap();
+        assert_eq!(own_state.last_error, None);
+
+        core.remove_calendar_connection(own.id).await.unwrap();
+        let calendars = core.list_calendars(Some(1)).await.unwrap();
+        assert_eq!(calendars.len(), 1);
+        assert!(calendars[0].is_default, "the account keeps a default");
+        assert!(
+            credentials::load_async(core.credentials.clone(), 1, Slot::CaldavPassword(own.id))
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            credentials::load_async(core.credentials.clone(), 1, Slot::CaldavPassword(shared.id))
+                .await
+                .unwrap(),
+            "shared-password"
+        );
+
+        core.set_calendar_connection_enabled(shared.id, false)
+            .await
+            .unwrap();
+        assert!(!core.cal_handles.read().await.contains_key(&1));
+        core.set_calendar_connection_enabled(shared.id, true)
+            .await
+            .unwrap();
+        assert!(core.cal_handles.read().await.contains_key(&1));
+
+        // Removing the account takes the connection passwords along, which
+        // the system keyring could not list by itself.
+        core.remove_account(1).await.unwrap();
+        assert!(core.list_calendar_connections().await.unwrap().is_empty());
+        assert!(
+            credentials::load_async(core.credentials.clone(), 1, Slot::CaldavPassword(shared.id))
+                .await
+                .is_err()
+        );
     }
 }
