@@ -14,7 +14,9 @@ import { CopyableDiagnostic } from "../components/copyable-diagnostic.slint";
 import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
 import { OnScreenSurface } from "../components/on-screen-surface.slint";
 import { ProviderButton } from "../components/provider-button.slint";
-import { FormField, SettingsCard, SettingsLinkRow, SettingsNavItem, SettingsSelectRow, SettingsSwitchRow, ShortcutRow } from "../components/settings-components.slint";
+import { FormField, SettingsCard, SettingsLinkRow, SettingsNavItem, SettingsSelectRow, SettingsSwitchRow, ShortcutRow, ShortcutSection } from "../components/settings-components.slint";
+import { Shortcuts } from "../shortcuts.slint";
+import { TabsUi } from "../components/workspace-navigation.slint";
 import { AccountProfilePicker, ProfileColorChoice, ProfileMemberChoice, ProfilePalette } from "../components/profile-controls.slint";
 import { RuntimeColorPicker, ThemeEditor } from "../components/theme-editor.slint";
 import { TypeScale } from "../typography.slint";
@@ -682,7 +684,7 @@ export component SettingsDialog inherits Rectangle {
             : section == "Notifications"
             ? @tr("notifications alerts sounds desktop new mail")
             : section == "Shortcuts"
-            ? @tr("shortcuts keyboard compose search archive spam trash")
+            ? @tr("shortcuts keyboard keys compose search archive spam junk trash delete navigation messages reading find zoom caret tabs")
             : section == "Data"
             ? @tr("storage data usage mail attachments files databases backup snapshot import export delete")
             : section == "Services"
@@ -2207,14 +2209,35 @@ export component SettingsDialog inherits Rectangle {
                         VerticalBox { x: root.compact ? 16px : max(24px, (shortcuts-scroll.visible-width - 920px) / 2); width: root.compact ? shortcuts-scroll.visible-width - 32px : min(920px, shortcuts-scroll.visible-width - 48px); padding-top: root.compact ? LayoutMetrics.compact-header-height + 16px : 28px; padding-bottom: 32px; spacing: 10px;
                             SettingsPageTitle { label: @tr("Keyboard shortcuts"); title-color: root.title-color; }
                             Text { height: max(20px, self.preferred-height); text: @tr("Move through mail without leaving the keyboard."); color: root.secondary-text; font-size: TypeScale.secondary; vertical-alignment: center; wrap: word-wrap; }
-                            Rectangle { height: max(236px, self.preferred-height); vertical-stretch: 0; background: root.surface; border-radius: 8px; border-width: 1px; border-color: root.border-subtle; VerticalBox { padding-top: 12px; padding-right: 18px; padding-bottom: 12px; padding-left: 18px; spacing: 0px;
-                                Text { height: max(20px, self.preferred-height); text: @tr("Mail"); color: root.heading; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
-                                ShortcutRow { title: @tr("Compose a new message"); shortcut: @tr("C"); title-color: root.body-text; shortcut-color: root.accent; key-background: root.accent-soft; key-border: root.border-subtle; }
-                                ShortcutRow { title: @tr("Search mail"); shortcut: @tr("/"); title-color: root.body-text; shortcut-color: root.accent; key-background: root.accent-soft; key-border: root.border-subtle; }
-                                ShortcutRow { title: @tr("Archive selected message"); shortcut: @tr("E"); title-color: root.body-text; shortcut-color: root.accent; key-background: root.accent-soft; key-border: root.border-subtle; }
-                                ShortcutRow { title: @tr("Mark as spam"); shortcut: @tr("!"); title-color: root.body-text; shortcut-color: root.accent; key-background: root.accent-soft; key-border: root.border-subtle; }
-                                ShortcutRow { title: @tr("Move to trash"); shortcut: @tr("#"); title-color: root.body-text; shortcut-color: root.accent; key-background: root.accent-soft; key-border: root.border-subtle; }
-                            } }
+                            ShortcutSection { vertical-stretch: 0; title: @tr("Mail"); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading;
+                                ShortcutRow { title: @tr("Compose a new message"); keys: [Shortcuts.compose]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Search mail"); keys: [Shortcuts.search, Shortcuts.search-alternate]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Archive"); keys: [Shortcuts.archive]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Move to spam"); keys: [Shortcuts.spam]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Move to trash"); keys: [Shortcuts.trash]; title-color: root.body-text; separator-color: root.faint-text; }
+                            }
+                            ShortcutSection { vertical-stretch: 0; title: @tr("Navigation"); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading;
+                                ShortcutRow { title: @tr("Move between messages"); keys: [Shortcuts.previous-message, Shortcuts.next-message]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Open message"); keys: [Shortcuts.open-message]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Select message"); keys: [Shortcuts.select-message]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Switch between list and message"); keys: [Shortcuts.switch-pane]; title-color: root.body-text; separator-color: root.faint-text; }
+                            }
+                            ShortcutSection { vertical-stretch: 0; title: @tr("Reading"); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading;
+                                ShortcutRow { title: @tr("Find in message"); keys: [Shortcuts.find]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Zoom in"); keys: [Shortcuts.zoom-in]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Zoom out"); keys: [Shortcuts.zoom-out]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Reset zoom"); keys: [Shortcuts.zoom-reset]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Caret browsing"); keys: [Shortcuts.caret-browsing]; title-color: root.body-text; separator-color: root.faint-text; }
+                            }
+                            if TabsUi.enabled : ShortcutSection { vertical-stretch: 0; title: @tr("Tabs"); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading;
+                                ShortcutRow { title: @tr("New tab"); keys: [Shortcuts.new-tab]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Close tab"); keys: [Shortcuts.close-tab]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Reopen closed tab"); keys: [Shortcuts.reopen-tab]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Next tab"); keys: [Shortcuts.next-tab]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Previous tab"); keys: [Shortcuts.previous-tab]; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Go to tab 1–8"); keys: [Shortcuts.first-tab, Shortcuts.eighth-tab]; separator: "–"; title-color: root.body-text; separator-color: root.faint-text; }
+                                ShortcutRow { title: @tr("Go to last tab"); keys: [Shortcuts.last-tab]; title-color: root.body-text; separator-color: root.faint-text; }
+                            }
                         }
                     }
 
