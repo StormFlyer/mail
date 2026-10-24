@@ -36,6 +36,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/017_jmap_attachment_listing.sql")),
     Migration::Plain(include_str!("migrations/018_jmap_full_sync_progress.sql")),
     Migration::Plain(include_str!("migrations/019_clean_snippets.sql")),
+    Migration::Plain(include_str!("migrations/020_server_relink.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -545,6 +546,51 @@ mod tests {
             })
             .unwrap();
         assert_eq!(progress, 0);
+    }
+
+    #[test]
+    fn relink_upgrade_flags_imap_mail_without_a_uid() {
+        let mut conn = staged(19);
+        seed_mail_graph(&conn);
+        conn.execute_batch(
+            "INSERT INTO accounts (
+               id, email, provider, auth_kind, mail_protocol, username, incoming_host,
+               incoming_port, smtp_host, smtp_port, created_at, settings_json
+             ) VALUES (2, 'jmap@test.dev', 'generic', 'password', 'jmap', 'me', 'h', 993,
+                       'h', 587, 0, '{}');
+             INSERT INTO messages (id, account_id, thread_id, folder_id, subject, date,
+                                   is_outgoing)
+             VALUES (2, 1, 1, 1, 'Left by a switch from JMAP', 1, 0),
+                    (3, 1, 1, 1, 'Sent from this device', 1, 1),
+                    (4, 1, 1, 1, 'Draft', 1, 0),
+                    (5, 2, NULL, NULL, 'JMAP mail', 1, 0);
+             INSERT INTO drafts_meta (message_id) VALUES (4);",
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+        let waiting = conn
+            .prepare(
+                "SELECT id FROM messages INDEXED BY idx_messages_relink_pending
+                 WHERE account_id IN (1, 2) AND relink_pending = 1",
+            )
+            .unwrap()
+            .query_map([], |row| row.get::<_, i64>(0))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(waiting, [2]);
+        let missing: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM folders WHERE missing_on_server = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(missing, 0);
+        assert!(
+            conn.execute("UPDATE folders SET missing_on_server = 2 WHERE id = 2", [])
+                .is_err()
+        );
     }
 
     #[test]
