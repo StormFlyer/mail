@@ -783,15 +783,7 @@
       "time": "9:41 AM",
       "unread": true,
       "starred": true,
-      "has_attachments": true,
-      "attachment": {
-        "id": "101",
-        "stem": "Traffic report, week 43",
-        "extension": ".pdf",
-        "kind": "pdf",
-        "previewable": true
-      },
-      "attachment_total": 1,
+      "has_attachments": false,
       "has_replied": true,
       "label_summary": "Reports · Marketing",
       "labels": [
@@ -817,9 +809,9 @@
       "has_attachments": true,
       "attachment": {
         "id": "102",
-        "stem": "dependabot-alerts",
-        "extension": ".csv",
-        "kind": "spreadsheet",
+        "stem": "Security report",
+        "extension": ".pdf",
+        "kind": "pdf",
         "previewable": true
       },
       "attachment_total": 1,
