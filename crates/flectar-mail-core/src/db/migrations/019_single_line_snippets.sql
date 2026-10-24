@@ -1,0 +1,3 @@
+-- Server-provided previews were stored with their line breaks, which the
+-- single-line mail list drew over the sender and subject. The conversion
+-- after this step rewrites stored snippets the way new ones are made.

@@ -1034,6 +1034,9 @@ async fn persist_emails(
                 let to = addresses(email.to());
                 let cc = addresses(email.cc());
                 let bcc = addresses(email.bcc());
+                // Servers may keep the body's line breaks in `preview`, which
+                // the single-line mail list would stack over the row above.
+                let snippet = crate::mime::make_snippet(email.preview().unwrap_or_default());
                 let blob_id = Some(
                     email
                         .blob_id()
@@ -1140,7 +1143,7 @@ async fn persist_emails(
                             is_automated as i64,
                             email.has_attachment() as i64,
                             size,
-                            email.preview().unwrap_or_default(),
+                            snippet,
                             blob_id,
                             pending_mailboxes as i64,
                             pending_keywords as i64,
@@ -1187,7 +1190,7 @@ async fn persist_emails(
                         is_automated,
                         has_attachments: email.has_attachment(),
                         size: Some(size),
-                        snippet: email.preview().unwrap_or_default().to_owned(),
+                        snippet,
                         references,
                         list_unsubscribe: None,
                         list_unsubscribe_post: None,

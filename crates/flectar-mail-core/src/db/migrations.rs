@@ -35,6 +35,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/016_pop3.sql")),
     Migration::Plain(include_str!("migrations/017_jmap_attachment_listing.sql")),
     Migration::Plain(include_str!("migrations/018_jmap_full_sync_progress.sql")),
+    Migration::Plain(include_str!("migrations/019_single_line_snippets.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -43,8 +44,28 @@ pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 fn convert(conn: &Connection, version: i64) -> Result<()> {
     match version {
         13 => super::repo::contact_entries::migrate(conn),
+        19 => single_line_snippets(conn),
         _ => Ok(()),
     }
+}
+
+/// Rewrites stored snippets the way new ones are made. SQLite calls back into
+/// `make_snippet`, so rows stream through without being loaded at once and
+/// only the ones that change are written.
+fn single_line_snippets(conn: &Connection) -> Result<()> {
+    use rusqlite::functions::FunctionFlags;
+    conn.create_scalar_function(
+        "make_snippet",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| Ok(crate::mime::make_snippet(&ctx.get::<String>(0)?)),
+    )?;
+    let converted = conn.execute_batch(
+        "UPDATE messages SET snippet = make_snippet(snippet) WHERE snippet <> make_snippet(snippet);
+         UPDATE threads SET snippet = make_snippet(snippet) WHERE snippet <> make_snippet(snippet);",
+    );
+    conn.remove_function("make_snippet", 1)?;
+    Ok(converted?)
 }
 
 pub fn run(conn: &mut Connection) -> Result<()> {
@@ -384,6 +405,37 @@ mod tests {
         conn.execute("UPDATE messages SET body_state = 'cached' WHERE id = 1", [])
             .unwrap();
         assert_eq!(queued(&conn), 0);
+    }
+
+    #[test]
+    fn snippet_upgrade_puts_stored_previews_on_one_line() {
+        let mut conn = staged(18);
+        seed_mail_graph(&conn);
+        conn.execute(
+            "UPDATE messages SET snippet = '\nDear Partner,\r\n\n  As reported' WHERE id = 1",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE threads SET snippet = 'View this post\non the web' WHERE id = 1",
+            [],
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+        let snippets: (String, String) = conn
+            .query_row(
+                "SELECT m.snippet, t.snippet FROM messages m JOIN threads t ON t.id = m.thread_id",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            snippets,
+            (
+                "Dear Partner, As reported".into(),
+                "View this post on the web".into()
+            )
+        );
     }
 
     #[test]

@@ -608,6 +608,28 @@ async fn first_sync_publishes_pages_and_retries_without_duplicates() {
 }
 
 #[tokio::test]
+async fn previews_are_stored_on_one_line() {
+    let (_dir, ctx, config) = fixture().await;
+    let mut message = email("multi-line", "remote-conversation");
+    message["preview"] = json!("\nDear Partner,\r\n\n  As previously reported");
+    let (connected, task) = server(vec![message], None, None).await;
+    run_sync(&ctx, &config, &connected).await.unwrap();
+    task.abort();
+    let snippet: String = ctx
+        .db
+        .read(|conn| {
+            Ok(conn.query_row(
+                "SELECT snippet FROM messages WHERE jmap_id = 'multi-line'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(snippet, "Dear Partner, As previously reported");
+}
+
+#[tokio::test]
 async fn destroyed_only_sync_removes_empty_conversation() {
     let (_dir, ctx, config) = fixture().await;
     seed_snoozed_thread(&ctx, now_ms() + 86_400_000).await;
