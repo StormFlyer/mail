@@ -333,6 +333,11 @@ export component WorkspaceSearchToolbar inherits Rectangle {
         }
     }
 
+    public function focus-search() {
+        search-edit.focus();
+        search-edit.select-all();
+    }
+
     clearance := WindowControlsClearance { width: parent.width; height: parent.height; }
 
     HorizontalBox {
