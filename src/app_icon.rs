@@ -464,6 +464,15 @@ mod tests {
         let chosen = Rc::new(Cell::new(None));
         let target = Rc::clone(&chosen);
         global.on_choose(move |variant| target.set(Some(variant)));
+        // Settings belongs to the mailbox shell, which needs an account.
+        app.set_startup_ready(true);
+        app.set_startup_hydrated(true);
+        app.set_connected_accounts(slint::ModelRc::new(slint::VecModel::from(vec![
+            crate::AccountRow {
+                id: 1,
+                ..Default::default()
+            },
+        ])));
         app.set_settings_tab("General".into());
         app.set_settings_open(true);
         app.show().unwrap();
