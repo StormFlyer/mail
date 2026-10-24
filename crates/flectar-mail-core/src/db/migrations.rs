@@ -35,7 +35,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration::Plain(include_str!("migrations/016_pop3.sql")),
     Migration::Plain(include_str!("migrations/017_jmap_attachment_listing.sql")),
     Migration::Plain(include_str!("migrations/018_jmap_full_sync_progress.sql")),
-    Migration::Plain(include_str!("migrations/019_single_line_snippets.sql")),
+    Migration::Plain(include_str!("migrations/019_clean_snippets.sql")),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -44,27 +44,55 @@ pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 fn convert(conn: &Connection, version: i64) -> Result<()> {
     match version {
         13 => super::repo::contact_entries::migrate(conn),
-        19 => single_line_snippets(conn),
+        19 => clean_snippets(conn),
         _ => Ok(()),
     }
 }
 
 /// Rewrites stored snippets the way new ones are made. SQLite calls back into
-/// `make_snippet`, so rows stream through without being loaded at once and
-/// only the ones that change are written.
-fn single_line_snippets(conn: &Connection) -> Result<()> {
+/// the snippet builders, so rows stream through without being loaded at once
+/// and only the ones that change are written.
+///
+/// A Gmail snippet holding `&` may still be HTML-escaped. Every path that
+/// stores a body-derived snippet also stores the body, so a message with a
+/// body takes its snippet from it again, and one without can only hold
+/// Gmail's snippet, which is safe to decode.
+fn clean_snippets(conn: &Connection) -> Result<()> {
     use rusqlite::functions::FunctionFlags;
-    conn.create_scalar_function(
-        "make_snippet",
-        1,
-        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
-        |ctx| Ok(crate::mime::make_snippet(&ctx.get::<String>(0)?)),
-    )?;
+    let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
+    conn.create_scalar_function("make_snippet", 1, flags, |ctx| {
+        Ok(crate::mime::make_snippet(&ctx.get::<String>(0)?))
+    })?;
+    conn.create_scalar_function("make_html_snippet", 1, flags, |ctx| {
+        Ok(crate::mime::make_html_snippet(&ctx.get::<String>(0)?))
+    })?;
+    conn.create_scalar_function("make_body_snippet", 2, flags, |ctx| {
+        Ok(crate::mime::make_body_snippet(
+            ctx.get::<Option<String>>(0)?.as_deref(),
+            ctx.get::<Option<String>>(1)?.as_deref(),
+        ))
+    })?;
     let converted = conn.execute_batch(
-        "UPDATE messages SET snippet = make_snippet(snippet) WHERE snippet <> make_snippet(snippet);
+        "UPDATE messages SET snippet = COALESCE(
+           NULLIF((SELECT make_body_snippet(b.text_body, b.html_body)
+                   FROM message_bodies b WHERE b.message_id = messages.id), ''),
+           make_html_snippet(snippet))
+         WHERE snippet LIKE '%&%'
+           AND account_id IN (SELECT id FROM accounts WHERE mail_protocol = 'gmail');
+         UPDATE threads SET snippet = COALESCE(
+           (SELECT snippet FROM messages WHERE thread_id = threads.id ORDER BY date DESC LIMIT 1), '')
+         WHERE snippet LIKE '%&%'
+           AND account_id IN (SELECT id FROM accounts WHERE mail_protocol = 'gmail');
+         UPDATE messages SET snippet = make_snippet(snippet) WHERE snippet <> make_snippet(snippet);
          UPDATE threads SET snippet = make_snippet(snippet) WHERE snippet <> make_snippet(snippet);",
     );
-    conn.remove_function("make_snippet", 1)?;
+    for (name, arguments) in [
+        ("make_snippet", 1),
+        ("make_html_snippet", 1),
+        ("make_body_snippet", 2),
+    ] {
+        conn.remove_function(name, arguments)?;
+    }
     Ok(converted?)
 }
 
@@ -435,6 +463,54 @@ mod tests {
                 "Dear Partner, As reported".into(),
                 "View this post on the web".into()
             )
+        );
+    }
+
+    #[test]
+    fn snippet_upgrade_decodes_only_escaped_gmail_snippets() {
+        let mut conn = staged(18);
+        seed_mail_graph(&conn);
+        conn.execute_batch(
+            "UPDATE messages SET snippet = 'Fish &amp; chips' WHERE id = 1;
+             INSERT INTO accounts (
+               id, email, provider, auth_kind, mail_protocol, username, incoming_host,
+               incoming_port, smtp_host, smtp_port, created_at, settings_json
+             ) VALUES (2, 'me@gmail.test', 'gmail', 'oauth2', 'gmail', 'me', 'h', 993,
+                       'h', 587, 0, '{}');
+             INSERT INTO folders (id, account_id, path, role) VALUES (3, 2, 'INBOX', 'inbox');
+             INSERT INTO threads (id, account_id, snippet)
+             VALUES (2, 2, 'Tom & Jerry <tj@example.com>'), (3, 2, 'It&#39;s here');
+             INSERT INTO messages (
+               id, account_id, thread_id, folder_id, subject, from_addr, to_json, cc_json,
+               date, snippet
+             ) VALUES
+               (2, 2, 2, 3, 'Hydrated', 'a@test.dev', '[]', '[]', 1,
+                'Tom & Jerry <tj@example.com>'),
+               (3, 2, 3, 3, 'Headers only', 'a@test.dev', '[]', '[]', 1, 'It&#39;s here');
+             INSERT INTO message_bodies (message_id, text_body)
+             VALUES (2, 'Tom & Jerry <tj@example.com>');",
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+        let snippets = |table: &str| -> Vec<String> {
+            conn.prepare(&format!("SELECT snippet FROM {table} ORDER BY id"))
+                .unwrap()
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
+        };
+        assert_eq!(
+            snippets("messages"),
+            [
+                "Fish &amp; chips",
+                "Tom & Jerry <tj@example.com>",
+                "It's here"
+            ]
+        );
+        assert_eq!(
+            snippets("threads"),
+            ["", "Tom & Jerry <tj@example.com>", "It's here"]
         );
     }
 
