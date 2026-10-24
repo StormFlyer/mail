@@ -8477,7 +8477,9 @@ fn apply_thread_action(
             for (id, f, u, _r, _s, role) in &msgs {
                 let movable = match kind {
                     ActionKind::Archive => role == roles::INBOX || role == roles::DRAFTS,
-                    _ => role != target_role && !role.is_empty(),
+                    // Mail in folders without a role, such as the user's
+                    // own, moves too.
+                    _ => role != target_role,
                 };
                 if movable && f.is_some() {
                     let aid = enqueue_move(
@@ -8807,6 +8809,33 @@ mod move_action_validation_tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn trash_and_spam_take_mail_from_custom_folders() {
+        let mut conn = db::testutil::conn();
+        db::testutil::seed_account(&conn);
+        conn.execute(
+            "INSERT INTO folders (id, account_id, path, role)
+             VALUES (2, 1, 'Trash', 'trash'), (3, 1, 'Junk', 'spam'), (4, 1, 'Projects', NULL)",
+            [],
+        )
+        .unwrap();
+        for (kind, target) in [(ActionKind::Trash, 2), (ActionKind::Spam, 3)] {
+            let (thread_id, message_id) =
+                db::testutil::seed_message(&conn, "sender@test.dev", "filed away", false);
+            conn.execute(
+                "UPDATE messages SET folder_id = 4 WHERE id = ?1",
+                [message_id],
+            )
+            .unwrap();
+
+            let actions = apply_thread_action(&mut conn, thread_id, kind, None).unwrap();
+
+            assert_eq!(actions.len(), 1);
+            let row = repo::messages::get_row(&conn, message_id).unwrap().unwrap();
+            assert_eq!(row.folder_id, Some(target));
+        }
     }
 
     #[test]
