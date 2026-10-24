@@ -407,32 +407,13 @@ export component MailListPane inherits FocusScope {
     changed search_query => { root.reset-pagination(); }
     changed search_filter => { root.reset-pagination(); }
 
-    pure function month-name(month: int) -> string {
-        if month == 1 { return @tr("January"); }
-        if month == 2 { return @tr("February"); }
-        if month == 3 { return @tr("March"); }
-        if month == 4 { return @tr("April"); }
-        if month == 5 { return @tr("May"); }
-        if month == 6 { return @tr("June"); }
-        if month == 7 { return @tr("July"); }
-        if month == 8 { return @tr("August"); }
-        if month == 9 { return @tr("September"); }
-        if month == 10 { return @tr("October"); }
-        if month == 11 { return @tr("November"); }
-        if month == 12 { return @tr("December"); }
-        return @tr("Earlier");
-    }
-
-    pure function group-title(kind: string, month: int, year: int) -> string {
+    pure function group-title(kind: string) -> string {
         if kind == "today" { return @tr("Today"); }
         if kind == "yesterday" { return @tr("Yesterday"); }
         if kind == "this-week" { return @tr("This week"); }
         if kind == "last-week" { return @tr("Last week"); }
         if kind == "this-month" { return @tr("This month"); }
         if kind == "last-month" { return @tr("Last month"); }
-        if kind == "month" {
-            return year == 0 ? root.month-name(month) : @tr("{} {}", root.month-name(month), year);
-        }
         return @tr("Earlier");
     }
 
@@ -1063,7 +1044,7 @@ export component MailListPane inherits FocusScope {
                                 if entry.is_header : MailGroupHeader {
                                     width: parent.width;
                                     height: parent.height;
-                                    title: root.group-title(entry.group_kind, entry.group_month, entry.group_year);
+                                    title: root.group-title(entry.group_kind);
                                     group-key: entry.group_key;
                                     message-count: entry.group_count;
                                     expanded: entry.expanded;

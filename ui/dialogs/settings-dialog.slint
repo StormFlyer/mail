@@ -477,6 +477,8 @@ export component SettingsDialog inherits Rectangle {
     in-out property <bool> show_account_markers: false;
     in-out property <string> workspace_layout: "default";
     in-out property <string> language_mode: "system";
+    in-out property <string> time_format: "automatic";
+    in property <string> time_format_sample: "13:30";
     in-out property <bool> monochrome_sidebar_icons: false;
     in-out property <bool> notifications_enabled: true;
     in-out property <bool> notification_sound_enabled: true;
@@ -572,6 +574,7 @@ export component SettingsDialog inherits Rectangle {
     callback save_account_markers_visibility(bool);
     callback save_workspace_layout(string);
     callback save_language(string);
+    callback save_time_format(string);
     callback save_sidebar_icon_style(bool);
     callback save_notification_settings(bool, bool, string);
     callback save_sync_interval(int);
@@ -649,6 +652,11 @@ export component SettingsDialog inherits Rectangle {
         @tr("Simplified Chinese"),
         @tr("Russian"),
     ];
+    private property <[string]> time-format-options: [
+        @tr("Automatic"),
+        @tr("12-hour"),
+        @tr("24-hour"),
+    ];
     private property <int> sync-interval-index: root.sync_interval_minutes <= 1 ? 0
         : root.sync_interval_minutes <= 5 ? 1 : 2;
     private property <int> notification-index: !root.notifications_enabled ? 0
@@ -658,6 +666,8 @@ export component SettingsDialog inherits Rectangle {
         : root.language_mode == "tr" ? 3
         : root.language_mode == "zh_Hans" ? 4
         : root.language_mode == "ru" ? 5 : 0;
+    private property <int> time-format-index: root.time_format == "12h" ? 1
+        : root.time_format == "24h" ? 2 : 0;
 
     pure function settings-icon-color(section: string) -> color {
         if root.monochrome_sidebar_icons {
@@ -676,7 +686,7 @@ export component SettingsDialog inherits Rectangle {
     pure function settings-section-visible(section: string) -> bool {
         if root.settings-search-query == "" { return true; }
         let terms = section == "General"
-            ? @tr("general theme appearance palette language workspace layout window frameless title bar renderer privacy remote images sync group messages date inbox tray background startup sign in login")
+            ? @tr("general theme appearance palette language time clock 12-hour 24-hour workspace layout window frameless title bar renderer privacy remote images sync group messages date inbox tray background startup sign in login")
             : section == "Accounts"
             ? @tr("accounts profiles personal work colors providers gmail outlook imap pop3 jmap caldav carddav mail history server oauth security signatures")
             : section == "Contacts"
@@ -734,6 +744,11 @@ export component SettingsDialog inherits Rectangle {
             : index == 4 ? "zh_Hans"
             : index == 5 ? "ru" : "system";
         root.save_language(root.language_mode);
+    }
+
+    function select-time-format(index: int) {
+        root.time_format = index == 1 ? "12h" : index == 2 ? "24h" : "automatic";
+        root.save_time_format(root.time_format);
     }
 
     function update-settings-search(value: string) {
@@ -1132,7 +1147,7 @@ export component SettingsDialog inherits Rectangle {
                                     padding-bottom: 15px;
                                     padding-left: 20px;
                                     spacing: 5px;
-                                    Text { text: @tr("Language"); color: root.heading; font-size: TypeScale.subtitle; font-weight: 700; wrap: word-wrap; }
+                                    Text { text: @tr("Language and time"); color: root.heading; font-size: TypeScale.subtitle; font-weight: 700; wrap: word-wrap; }
                                     SettingsSelectRow {
                                         compact: root.compact;
                                         title: @tr("Display language");
@@ -1142,6 +1157,17 @@ export component SettingsDialog inherits Rectangle {
                                         title-color: root.body-text;
                                         description-color: root.faint-text;
                                         selected(index, value) => { root.select-language(index); }
+                                    }
+                                    Rectangle { height: 1px; background: root.border-subtle; }
+                                    SettingsSelectRow {
+                                        compact: root.compact;
+                                        title: @tr("Time format");
+                                        description: root.time_format == "automatic" ? @tr("Follow your region, for example {}.", root.time_format_sample) : @tr("Times appear as {}.", root.time_format_sample);
+                                        choices: root.time-format-options;
+                                        selected-index: root.time-format-index;
+                                        title-color: root.body-text;
+                                        description-color: root.faint-text;
+                                        selected(index, value) => { root.select-time-format(index); }
                                     }
                                 }
                             }

@@ -37,7 +37,8 @@ use tokio::io::AsyncReadExt;
 
 // Version 4 keys account mailboxes by id instead of display name. Version 5
 // stores the provider and mail protocol names of the current account model.
-const WARM_START_FORMAT_VERSION: u32 = 5;
+// Version 6 keeps message dates as timestamps instead of English text.
+const WARM_START_FORMAT_VERSION: u32 = 6;
 const MAX_WARM_START_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_WARM_START_ACCOUNTS: usize = 64;
 const MAX_WARM_START_MESSAGES: usize = 25;
@@ -57,8 +58,6 @@ pub(crate) struct WarmStartMessage {
     pub(crate) initials: String,
     pub(crate) subject: String,
     pub(crate) preview: String,
-    pub(crate) time: String,
-    #[serde(default)]
     pub(crate) date_ms: i64,
     pub(crate) label: String,
     pub(crate) unread: bool,
@@ -87,7 +86,6 @@ impl From<&mail::MailMessage> for WarmStartMessage {
             initials: message.initials.clone(),
             subject: message.subject.clone(),
             preview: message.preview.clone(),
-            time: message.time.clone(),
             date_ms: message.date_ms,
             label: message.label.clone(),
             unread: message.unread,
@@ -115,7 +113,6 @@ impl From<WarmStartMessage> for mail::MailMessage {
             initials: message.initials,
             subject: message.subject,
             preview: message.preview,
-            time: message.time,
             date_ms: message.date_ms,
             to: String::new(),
             label: message.label,
@@ -720,6 +717,7 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
     app.global::<MessageColors>()
         .set_preference(settings.message_appearance.as_str().into());
     refresh_oauth_availability(app);
+    app.set_time_format(settings.time_format.as_str().into());
     crate::apply_language(app, &settings.language);
     app.set_custom_oauth_configured(
         !settings.google_client_id.trim().is_empty() || !settings.ms_client_id.trim().is_empty(),
@@ -1119,7 +1117,6 @@ mod warm_start_tests {
             initials: "S".into(),
             subject: "Cached subject".into(),
             preview: "Cached preview".into(),
-            time: "Today".into(),
             date_ms: 1_700_000_000_000,
             to: "secret-recipient@example.com".into(),
             label: "UNREAD".into(),
@@ -1253,7 +1250,7 @@ mod warm_start_tests {
     #[test]
     fn benchmark_warm_cache_fixture_matches_the_current_format() {
         let snapshot: WarmStartSnapshot = serde_json::from_str(include_str!(
-            "../resources/benchmarks/warm-cache/warm-start-mailbox-v5.json"
+            "../resources/benchmarks/warm-cache/warm-start-mailbox-v6.json"
         ))
         .unwrap();
 

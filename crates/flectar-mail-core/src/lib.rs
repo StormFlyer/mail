@@ -7823,6 +7823,16 @@ impl Core {
             .await
     }
 
+    pub async fn set_time_format(&self, format: TimeFormat) -> Result<()> {
+        self.db
+            .write(move |conn| {
+                let mut settings = repo::settings::get(conn)?;
+                settings.time_format = format;
+                repo::settings::set(conn, &settings)
+            })
+            .await
+    }
+
     /// Persist one or both OAuth registrations in a single settings write.
     /// Read on the writer thread so unrelated preferences aren't overwritten
     /// by a stale settings snapshot while this operation waits for the DB.

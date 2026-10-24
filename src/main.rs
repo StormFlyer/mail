@@ -12,6 +12,7 @@ mod compose_controller;
 mod compose_editor;
 mod contacts;
 mod data_controller;
+mod date_format;
 mod document_preview;
 pub mod documents;
 mod email_document;
@@ -84,6 +85,7 @@ use contacts::{
     ContactDirectoryState, apply_contact_directory, apply_contact_rows, clear_contact_form,
 };
 use data_controller::register_data_management_callbacks;
+use date_format::DateStyle;
 use favicon::{
     FaviconImage, FaviconImages, FaviconLoader, ProfileAvatarImages, ProfileAvatarLoader,
     physical_pixel_side,
@@ -1056,6 +1058,7 @@ fn apply_language(app: &AppWindow, preference: &str) {
         eprintln!("could not select {selected} translation: {error}");
     }
     app.set_language_mode(language_mode.into());
+    date_format::reload(app);
 }
 
 impl InboxState {
@@ -2641,6 +2644,24 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let calendar_editing_event_id = Rc::new(Cell::new(None::<i64>));
 
     let app_weak = app.as_weak();
+    let state_for_dates = Rc::clone(&state);
+    let runtime_for_dates = Rc::clone(&runtime);
+    let calendar_for_dates = Rc::clone(&calendar_state);
+    let contacts_for_dates = Rc::clone(&contact_state);
+    date_format::on_change(move || {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        refresh_message_dates(&app, &state_for_dates, &runtime_for_dates);
+        apply_calendar(
+            &app,
+            &calendar_for_dates.borrow(),
+            Local::now().date_naive(),
+        );
+        apply_contact_rows(&app, &contacts_for_dates);
+    });
+
+    let app_weak = app.as_weak();
     let calendar_for_navigation = Rc::clone(&calendar_state);
     let inbox_for_calendar_navigation = Rc::clone(&state);
     let runtime_for_navigation = Rc::clone(&runtime);
@@ -2836,7 +2857,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         app.set_calendar_event_editing(false);
         app.set_calendar_event_title("".into());
         app.set_calendar_event_date(calendar.selected_date.format("%Y-%m-%d").to_string().into());
-        app.set_calendar_event_time("09:00".into());
+        app.set_calendar_event_time(date_format::current().time(9, 0).into());
         app.set_calendar_event_duration("60".into());
         app.set_calendar_event_color(0);
         app.set_calendar_editor_open(true);
@@ -2865,14 +2886,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         app.set_calendar_event_editing(true);
         app.set_calendar_event_title(event.title.into());
         app.set_calendar_event_date(event.date.format("%Y-%m-%d").to_string().into());
-        app.set_calendar_event_time(
-            format!(
-                "{:02}:{:02}",
-                event.start_minutes / 60,
-                event.start_minutes % 60
-            )
-            .into(),
-        );
+        let start = event.start_minutes.clamp(0, 24 * 60 - 1) as u32;
+        app.set_calendar_event_time(date_format::current().time(start / 60, start % 60).into());
         app.set_calendar_event_duration(event.duration_minutes.to_string().into());
         app.set_calendar_event_color(event.color_index);
         app.set_calendar_editor_open(true);
@@ -2940,12 +2955,16 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        let parsed = NaiveDate::parse_from_str(date.trim(), "%Y-%m-%d").and_then(|date| {
-            NaiveTime::parse_from_str(time.trim(), "%H:%M").map(|time| (date, time))
-        });
-        let Ok((date, time)) = parsed else {
-            app.set_sync_status(UiMessage::plain(
-                "Use YYYY-MM-DD and a 24-hour time such as 09:30.",
+        let formats = date_format::current();
+        let parsed = NaiveDate::parse_from_str(date.trim(), "%Y-%m-%d").ok().zip(
+            formats
+                .parse_time(&time)
+                .and_then(|(hour, minute)| NaiveTime::from_hms_opt(hour, minute, 0)),
+        );
+        let Some((date, time)) = parsed else {
+            app.set_sync_status(UiMessage::detail(
+                "Use YYYY-MM-DD for the date and a time such as {}.",
+                formats.time(9, 30),
             ));
             return;
         };
@@ -6126,6 +6145,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             &source,
             action.as_str(),
             app.get_selected_plain_text().as_str(),
+            |message| translated(&app, &message).into(),
         ) {
             Ok(prepared) => prepared,
             Err(error) => {

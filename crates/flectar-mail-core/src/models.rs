@@ -1596,6 +1596,38 @@ impl MessageAppearance {
     }
 }
 
+/// How times of day are written: with the clock the user's region prefers,
+/// or always with a 12- or 24-hour clock.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TimeFormat {
+    #[default]
+    #[serde(rename = "automatic")]
+    Automatic,
+    #[serde(rename = "12h")]
+    TwelveHour,
+    #[serde(rename = "24h")]
+    TwentyFourHour,
+}
+
+impl TimeFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::TwelveHour => "12h",
+            Self::TwentyFourHour => "24h",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "automatic" => Some(Self::Automatic),
+            "12h" => Some(Self::TwelveHour),
+            "24h" => Some(Self::TwentyFourHour),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -1636,6 +1668,8 @@ pub struct Settings {
     /// UI language: "system" follows the OS locale, otherwise a code like "en".
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default)]
+    pub time_format: TimeFormat,
     /// First day shown in calendar week and month views: "sunday" | "monday".
     #[serde(default = "default_calendar_week_start")]
     pub calendar_week_start: String,
@@ -1926,6 +1960,7 @@ impl Default for Settings {
             window_frame: default_window_frame(),
             monochrome_sidebar_icons: false,
             language: "system".into(),
+            time_format: TimeFormat::default(),
             calendar_week_start: default_calendar_week_start(),
             undo_send_seconds: 10,
             load_remote_images: false,
@@ -2249,6 +2284,27 @@ mod tests {
         assert!(s.group_mail_by_date);
         assert_eq!(s.workspace_layout, "default");
         assert_eq!(s.workspace_list_pane_width, MIN_WORKSPACE_LIST_PANE_WIDTH);
+        assert_eq!(s.time_format, TimeFormat::Automatic);
+    }
+
+    #[test]
+    fn time_formats_round_trip_through_their_stored_names() {
+        for format in [
+            TimeFormat::Automatic,
+            TimeFormat::TwelveHour,
+            TimeFormat::TwentyFourHour,
+        ] {
+            assert_eq!(TimeFormat::parse(format.as_str()), Some(format));
+            let settings = Settings {
+                time_format: format,
+                ..Settings::default()
+            };
+            let serialized = serde_json::to_value(&settings).unwrap();
+            assert_eq!(serialized["timeFormat"], format.as_str());
+            let restored: Settings = serde_json::from_value(serialized).unwrap();
+            assert_eq!(restored.time_format, format);
+        }
+        assert_eq!(TimeFormat::parse("system"), None);
     }
 
     #[test]
