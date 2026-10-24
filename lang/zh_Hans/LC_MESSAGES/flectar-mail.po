@@ -2239,19 +2239,19 @@ msgstr "这封邮件是关于什么的？"
 msgid "Confirm"
 msgstr "确认"
 
-#: ui/components/controls.slint:188
+#: ui/components/controls.slint:185
 msgid "On"
 msgstr "开"
 
-#: ui/components/controls.slint:188 ui/dialogs/settings-dialog.slint:625
+#: ui/components/controls.slint:185 ui/dialogs/settings-dialog.slint:625
 msgid "Off"
 msgstr "关"
 
-#: ui/components/controls.slint:236 ui/views/mail-list-pane.slint:522
+#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:522
 msgid "Clear selection"
 msgstr "取消选择"
 
-#: ui/components/controls.slint:236
+#: ui/components/controls.slint:233
 msgid "Select"
 msgstr "选择"
 
