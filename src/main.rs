@@ -32,6 +32,7 @@ mod mail_setup;
 mod mail_view_model;
 mod mail_work;
 mod message_appearance;
+mod number_format;
 mod oauth_browser;
 #[cfg(test)]
 mod on_screen_surface_tests;
@@ -1068,6 +1069,7 @@ fn apply_language(app: &AppWindow, preference: &str) {
             .unwrap_or("en"),
         language => language,
     };
+    number_format::set_language(selected);
     if let Err(error) = slint::select_bundled_translation(selected) {
         eprintln!("could not select {selected} translation: {error}");
     }
@@ -2667,6 +2669,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let calendar_state = Rc::new(RefCell::new(LocalCalendarState::new(calendar_today)));
     app.set_calendar_sources(Rc::clone(&calendar_state.borrow().source_rows).into());
     let calendar_editing_event_id = Rc::new(Cell::new(None::<i64>));
+
+    // Counts group their digits the way the UI language does.
+    app.global::<Numbers>()
+        .on_count(|value| number_format::count(u64::try_from(value).unwrap_or(0)).into());
 
     let app_weak = app.as_weak();
     let state_for_dates = Rc::clone(&state);

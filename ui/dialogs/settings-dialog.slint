@@ -23,6 +23,7 @@ import { TypeScale } from "../typography.slint";
 import { AppTheme, LayoutMetrics, SettingsIconPalette, ServiceIconPalette } from "../design-system.slint";
 import { CompactPageHeader, WorkspaceSidebarSurface } from "../components/workspace-layout.slint";
 import { LocalMailUi } from "../local-mail.slint";
+import { Numbers } from "../numbers.slint";
 
 // Use the same focusable controls in both account-card layouts.
 component AccountActions inherits HorizontalLayout {
@@ -2145,7 +2146,7 @@ export component SettingsDialog inherits Rectangle {
                                 vertical-stretch: 0;
                                 local-card := SettingsCard { title: @tr("Mail on this device"); description: @tr("Mail you imported. It is kept only here, so export it to keep a copy elsewhere."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
                                 Image { x: 20px; y: local-note.y + (local-note.height - self.height) / 2; width: LayoutMetrics.icon-size; height: LayoutMetrics.icon-size; source: @image-url("../icons/lucide/outline/file-directory.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
-                                local-note := Text { x: 48px; y: local-card.content-y + 14px; width: root.compact ? parent.width - 68px : parent.width - 352px; height: max(42px, self.preferred-height); text: @tr("One message" | "{n} messages" % LocalMailUi.messages) + " · " + LocalMailUi.size; color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
+                                local-note := Text { x: 48px; y: local-card.content-y + 14px; width: root.compact ? parent.width - 68px : parent.width - 352px; height: max(42px, self.preferred-height); text: @tr("One message" | "{} messages" % LocalMailUi.messages, Numbers.count(LocalMailUi.messages)) + " · " + LocalMailUi.size; color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
                                 local-status := Text { x: 48px; y: local-note.y + local-note.height; width: local-note.width; height: root.mail_export_status == "" ? 0px : max(18px, self.preferred-height); text: root.mail_export_status; color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; }
                                 HorizontalLayout {
                                     x: root.compact ? 20px : parent.width - self.width - 20px;
@@ -3110,7 +3111,7 @@ export component SettingsDialog inherits Rectangle {
             height: parent.height;
             open <=> root.delete_local_mail_confirmation;
             title: @tr("Delete mail on this device?");
-            subject: @tr("One message" | "{n} messages" % LocalMailUi.messages);
+            subject: @tr("One message" | "{} messages" % LocalMailUi.messages, Numbers.count(LocalMailUi.messages));
             description: @tr("Delete the mail you imported and its folders from this device.");
             detail: @tr("It exists only here. Export it first to keep a copy.");
             action-label: @tr("Export mail…");

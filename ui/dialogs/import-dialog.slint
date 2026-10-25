@@ -3,6 +3,7 @@ import { AppTheme } from "../design-system.slint";
 import { Button } from "../components/button.slint";
 import { SelectionCheckBox } from "../components/controls.slint";
 import { FocusVisibleScope } from "../components/focus-visible-scope.slint";
+import { Numbers } from "../numbers.slint";
 import { TypeScale } from "../typography.slint";
 
 export struct ImportFindingRow {
@@ -590,7 +591,7 @@ export component ImportDialog inherits Rectangle {
                         }
                     }
                     if AccountImport.stage == "importing" && AccountImport.mail-progress >= 0 : Text {
-                        text: @tr("One message · {} of {}" | "{n} messages · {} of {}" % AccountImport.mail-progress-count, AccountImport.mail-progress-done, AccountImport.mail-progress-total);
+                        text: @tr("One message · {1} of {2}" | "{0} messages · {1} of {2}" % AccountImport.mail-progress-count, Numbers.count(AccountImport.mail-progress-count), AccountImport.mail-progress-done, AccountImport.mail-progress-total);
                         color: AppTheme.faint;
                         font-size: TypeScale.caption;
                         horizontal-alignment: center;
@@ -741,20 +742,20 @@ export component ImportDialog inherits Rectangle {
                     }
                     if AccountImport.mail-results : Text {
                         text: AccountImport.mail-imported > 0
-                            ? @tr("Imported one message." | "Imported {n} messages." % AccountImport.mail-imported)
+                            ? @tr("Imported one message." | "Imported {} messages." % AccountImport.mail-imported, Numbers.count(AccountImport.mail-imported))
                             : @tr("No new messages were imported.");
                         color: AppTheme.body;
                         font-size: TypeScale.body;
                         wrap: word-wrap;
                     }
                     if AccountImport.mail-results && AccountImport.mail-already-present > 0 : Text {
-                        text: @tr("One message was already here and was skipped." | "{n} messages were already here and were skipped." % AccountImport.mail-already-present);
+                        text: @tr("One message was already here and was skipped." | "{} messages were already here and were skipped." % AccountImport.mail-already-present, Numbers.count(AccountImport.mail-already-present));
                         color: AppTheme.secondary;
                         font-size: TypeScale.secondary;
                         wrap: word-wrap;
                     }
                     if AccountImport.mail-results && AccountImport.mail-too-large > 0 : Text {
-                        text: @tr("One message larger than 128 MB was skipped." | "{n} messages larger than 128 MB were skipped." % AccountImport.mail-too-large);
+                        text: @tr("One message larger than 128 MB was skipped." | "{} messages larger than 128 MB were skipped." % AccountImport.mail-too-large, Numbers.count(AccountImport.mail-too-large));
                         color: AppTheme.secondary;
                         font-size: TypeScale.secondary;
                         wrap: word-wrap;
