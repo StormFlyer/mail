@@ -255,6 +255,11 @@ fn start_picking(app: &AppWindow, session: &RefCell<ImportSession>) -> Option<u6
         return None;
     }
     session.picking = true;
+    // A phone copies what is chosen before it can be read, which takes a
+    // while for a large file; the dialog behind its picker shows that.
+    if cfg!(mobile) {
+        app.global::<AccountImport>().set_stage("reading".into());
+    }
     Some(session.opening)
 }
 
@@ -266,6 +271,10 @@ fn finish_picking(app: &AppWindow, session: &RefCell<ImportSession>, opening: u6
         return false;
     }
     session.picking = false;
+    let ui = app.global::<AccountImport>();
+    if cfg!(mobile) && ui.get_stage() == "reading" {
+        ui.set_stage("choose".into());
+    }
     can_choose(app, &session)
 }
 
@@ -844,7 +853,11 @@ fn refresh_accounts(
 fn source_label(paths: &[PathBuf]) -> String {
     let path = match paths {
         [path] => Some(path.as_path()),
-        [first, ..] => first.parent(),
+        // A phone copies each file into a folder of its own, which names
+        // nothing.
+        [first, rest @ ..] => first
+            .parent()
+            .filter(|parent| rest.iter().all(|path| path.parent() == Some(*parent))),
         [] => None,
     };
     path.and_then(|path| path.file_name())
@@ -1124,7 +1137,11 @@ pub(super) fn register_import_callbacks(
                             .iter()
                             .map(|document| document.path().to_owned())
                             .collect::<Vec<_>>();
-                        let label = source_label(&paths);
+                        let mut label = source_label(&paths);
+                        if label.is_empty() {
+                            label = translated(&app, &UiMessage::plain("Imported messages"))
+                                .to_string();
+                        }
                         let read: SourceReader = if paths.len() == 1 {
                             let path = paths[0].clone();
                             Box::new(move || migration::open(&path))
@@ -1684,6 +1701,14 @@ mod tests {
                 PathBuf::from("/home/me/Saved/b.eml"),
             ]),
             "Saved"
+        );
+        // Copies a phone made each sit in a folder of their own.
+        assert_eq!(
+            source_label(&[
+                PathBuf::from("/cache/file-imports/0b7c/a.eml"),
+                PathBuf::from("/cache/file-imports/9f21/b.eml"),
+            ]),
+            ""
         );
         assert_eq!(source_label(&[]), "");
     }
