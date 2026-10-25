@@ -1365,7 +1365,7 @@ msgstr "无法打开邮件编辑器：{}"
 msgid "Add an account to send mail."
 msgstr ""
 
-#: ui/app.slint:498 ui/components/sidebar.slint:471
+#: ui/app.slint:498 ui/components/sidebar.slint:479
 msgid "On this device"
 msgstr ""
 
@@ -2895,73 +2895,77 @@ msgstr "删除全局标签"
 msgid "Delete label from {}"
 msgstr "删除 {} 中的标签"
 
-#: ui/components/sidebar.slint:92 ui/views/mail-list-pane.slint:1125
+#: ui/components/sidebar.slint:94 ui/views/mail-list-pane.slint:1125
 msgid "New email"
 msgstr "新建邮件"
 
-#: ui/components/sidebar.slint:128 ui/components/sidebar.slint:137
-#: ui/components/sidebar.slint:157
+#: ui/components/sidebar.slint:94
+msgid "Add an account"
+msgstr ""
+
+#: ui/components/sidebar.slint:136 ui/components/sidebar.slint:145
+#: ui/components/sidebar.slint:165
 msgid "Find folder or label"
 msgstr "查找文件夹或标签"
 
-#: ui/components/sidebar.slint:174
+#: ui/components/sidebar.slint:182
 msgid "Clear folder filter"
 msgstr "清除文件夹筛选"
 
-#: ui/components/sidebar.slint:190
+#: ui/components/sidebar.slint:198
 msgid "Add account"
 msgstr "添加账户"
 
-#: ui/components/sidebar.slint:239
+#: ui/components/sidebar.slint:247
 msgid "ALL ACCOUNTS"
 msgstr "全部账户"
 
-#: ui/components/sidebar.slint:248
+#: ui/components/sidebar.slint:256
 msgid "All Inboxes"
 msgstr "所有收件箱"
 
-#: ui/components/sidebar.slint:264
+#: ui/components/sidebar.slint:272
 msgid "Inbox"
 msgstr "收件箱"
 
-#: ui/components/sidebar.slint:326
+#: ui/components/sidebar.slint:334
 msgid "Categories"
 msgstr "分类"
 
-#: ui/components/sidebar.slint:344
+#: ui/components/sidebar.slint:352
 msgid "Important"
 msgstr "重要"
 
-#: ui/components/sidebar.slint:364 ui/dialogs/settings-dialog.slint:267
+#: ui/components/sidebar.slint:372 ui/dialogs/settings-dialog.slint:267
 msgid "Other"
 msgstr "其他"
 
-#: ui/components/sidebar.slint:407 ui/components/sidebar.slint:566
+#: ui/components/sidebar.slint:415 ui/components/sidebar.slint:574
 msgid "Labels"
 msgstr "标签"
 
-#: ui/components/sidebar.slint:426
+#: ui/components/sidebar.slint:434
 msgid "Global label {}"
 msgstr "全局标签 {}"
 
-#: ui/components/sidebar.slint:458 ui/views/contacts-view.slint:221
+#: ui/components/sidebar.slint:466 ui/views/contacts-view.slint:221
 msgid "ACCOUNTS"
 msgstr "账户"
 
-#: ui/components/sidebar.slint:586
+#: ui/components/sidebar.slint:594
 msgid "{} label, {} account"
 msgstr "{} 标签，{} 账户"
 
-#: ui/components/sidebar.slint:628 ui/dialogs/folder-dialog.slint:27
+#: ui/components/sidebar.slint:636 ui/dialogs/folder-dialog.slint:27
 #: ui/views/files-view.slint:338
 msgid "New folder"
 msgstr "新建文件夹"
 
-#: ui/components/sidebar.slint:645 ui/dialogs/folder-dialog.slint:26
+#: ui/components/sidebar.slint:653 ui/dialogs/folder-dialog.slint:26
 msgid "New label"
 msgstr "新建标签"
 
-#: ui/components/sidebar.slint:665
+#: ui/components/sidebar.slint:673
 msgid "No folders found"
 msgstr "未找到文件夹"
 
@@ -6568,11 +6572,11 @@ msgstr "石板色"
 msgid "Use across all accounts (local only)"
 msgstr "在所有账户中使用（仅本地）"
 
-#: ui/views/mail-view.slint:389
+#: ui/views/mail-view.slint:391
 msgid "Message list width"
 msgstr "邮件列表宽度"
 
-#: ui/views/mail-view.slint:722
+#: ui/views/mail-view.slint:724
 msgid "Close folders"
 msgstr "关闭文件夹"
 

@@ -1406,7 +1406,7 @@ msgstr "No se pudo abrir el editor: {}"
 msgid "Add an account to send mail."
 msgstr "Añade una cuenta para enviar correo."
 
-#: ui/app.slint:498 ui/components/sidebar.slint:471
+#: ui/app.slint:498 ui/components/sidebar.slint:479
 msgid "On this device"
 msgstr "En este dispositivo"
 
@@ -2982,73 +2982,77 @@ msgstr "Eliminar etiqueta global"
 msgid "Delete label from {}"
 msgstr "Eliminar etiqueta de {}"
 
-#: ui/components/sidebar.slint:92 ui/views/mail-list-pane.slint:1125
+#: ui/components/sidebar.slint:94 ui/views/mail-list-pane.slint:1125
 msgid "New email"
 msgstr "Nuevo correo"
 
-#: ui/components/sidebar.slint:128 ui/components/sidebar.slint:137
-#: ui/components/sidebar.slint:157
+#: ui/components/sidebar.slint:94
+msgid "Add an account"
+msgstr "Añadir una cuenta"
+
+#: ui/components/sidebar.slint:136 ui/components/sidebar.slint:145
+#: ui/components/sidebar.slint:165
 msgid "Find folder or label"
 msgstr "Buscar carpeta o etiqueta"
 
-#: ui/components/sidebar.slint:174
+#: ui/components/sidebar.slint:182
 msgid "Clear folder filter"
 msgstr "Borrar filtro de carpetas"
 
-#: ui/components/sidebar.slint:190
+#: ui/components/sidebar.slint:198
 msgid "Add account"
 msgstr "Añadir cuenta"
 
-#: ui/components/sidebar.slint:239
+#: ui/components/sidebar.slint:247
 msgid "ALL ACCOUNTS"
 msgstr "TODAS LAS CUENTAS"
 
-#: ui/components/sidebar.slint:248
+#: ui/components/sidebar.slint:256
 msgid "All Inboxes"
 msgstr "Todas las bandejas"
 
-#: ui/components/sidebar.slint:264
+#: ui/components/sidebar.slint:272
 msgid "Inbox"
 msgstr "Bandeja de entrada"
 
-#: ui/components/sidebar.slint:326
+#: ui/components/sidebar.slint:334
 msgid "Categories"
 msgstr "Categorías"
 
-#: ui/components/sidebar.slint:344
+#: ui/components/sidebar.slint:352
 msgid "Important"
 msgstr "Importante"
 
-#: ui/components/sidebar.slint:364 ui/dialogs/settings-dialog.slint:267
+#: ui/components/sidebar.slint:372 ui/dialogs/settings-dialog.slint:267
 msgid "Other"
 msgstr "Otros"
 
-#: ui/components/sidebar.slint:407 ui/components/sidebar.slint:566
+#: ui/components/sidebar.slint:415 ui/components/sidebar.slint:574
 msgid "Labels"
 msgstr "Etiquetas"
 
-#: ui/components/sidebar.slint:426
+#: ui/components/sidebar.slint:434
 msgid "Global label {}"
 msgstr "Etiqueta global {}"
 
-#: ui/components/sidebar.slint:458 ui/views/contacts-view.slint:221
+#: ui/components/sidebar.slint:466 ui/views/contacts-view.slint:221
 msgid "ACCOUNTS"
 msgstr "CUENTAS"
 
-#: ui/components/sidebar.slint:586
+#: ui/components/sidebar.slint:594
 msgid "{} label, {} account"
 msgstr "Etiqueta {}, cuenta {}"
 
-#: ui/components/sidebar.slint:628 ui/dialogs/folder-dialog.slint:27
+#: ui/components/sidebar.slint:636 ui/dialogs/folder-dialog.slint:27
 #: ui/views/files-view.slint:338
 msgid "New folder"
 msgstr "Nueva carpeta"
 
-#: ui/components/sidebar.slint:645 ui/dialogs/folder-dialog.slint:26
+#: ui/components/sidebar.slint:653 ui/dialogs/folder-dialog.slint:26
 msgid "New label"
 msgstr "Nueva etiqueta"
 
-#: ui/components/sidebar.slint:665
+#: ui/components/sidebar.slint:673
 msgid "No folders found"
 msgstr "No se encontraron carpetas"
 
@@ -6877,11 +6881,11 @@ msgstr "Pizarra"
 msgid "Use across all accounts (local only)"
 msgstr "Usar en todas las cuentas (solo local)"
 
-#: ui/views/mail-view.slint:389
+#: ui/views/mail-view.slint:391
 msgid "Message list width"
 msgstr "Ancho de la lista de mensajes"
 
-#: ui/views/mail-view.slint:722
+#: ui/views/mail-view.slint:724
 msgid "Close folders"
 msgstr "Cerrar carpetas"
 

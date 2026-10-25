@@ -86,14 +86,22 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
             }
         }
 
+        // With only local mail, nothing could send; adding an account comes
+        // first.
         Button {
             height: LayoutMetrics.sidebar-action-height;
             horizontal-stretch: 1;
-            text: @tr("New email");
-            icon: @image-url("../icons/lucide/filled/compose.svg");
+            text: LocalMailUi.can-send ? @tr("New email") : @tr("Add an account");
+            icon: LocalMailUi.can-send ? @image-url("../icons/lucide/filled/compose.svg") : @image-url("../icons/lucide/filled/person-add.svg");
             has-icon: true;
             primary: true;
-            clicked => { root.compose(); }
+            clicked => {
+                if LocalMailUi.can-send {
+                    root.compose();
+                } else {
+                    root.manage-accounts();
+                }
+            }
         }
 
 

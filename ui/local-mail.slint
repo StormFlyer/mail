@@ -7,4 +7,7 @@ export global LocalMailUi {
     in property <string> size: "";
     // The conversation the reader shows is local mail.
     in property <bool> selected: false;
+    // An account can send. With only local mail, nothing can, so writing
+    // and replying wait for one.
+    in property <bool> can-send: true;
 }

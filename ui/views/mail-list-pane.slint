@@ -1118,7 +1118,7 @@ export component MailListPane inherits FocusScope {
                         FloatingActionButton {
                             // Replaces the full-width sidebar action whenever
                             // folders are collapsed or unavailable.
-                            visible: root.single-pane-navigation || root.mail_sidebar_collapsed;
+                            visible: (root.single-pane-navigation || root.mail_sidebar_collapsed) && LocalMailUi.can-send;
                             x: parent.width - self.width - 16px;
                             y: parent.height - self.height - 16px;
                             icon: @image-url("../icons/lucide/filled/compose.svg");

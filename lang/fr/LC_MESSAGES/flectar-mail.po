@@ -1586,7 +1586,7 @@ msgstr "Impossible d’ouvrir l’éditeur de message : {}"
 msgid "Add an account to send mail."
 msgstr ""
 
-#: ui/app.slint:498 ui/components/sidebar.slint:471
+#: ui/app.slint:498 ui/components/sidebar.slint:479
 msgid "On this device"
 msgstr ""
 
@@ -3475,88 +3475,92 @@ msgstr "Supprimer l’étiquette globale"
 msgid "Delete label from {}"
 msgstr "Supprimer l’étiquette de {}"
 
-#: ui/components/sidebar.slint:92 ui/views/mail-list-pane.slint:1125
+#: ui/components/sidebar.slint:94 ui/views/mail-list-pane.slint:1125
 #, fuzzy
 msgid "New email"
 msgstr "Nouvel e-mail"
 
-#: ui/components/sidebar.slint:128 ui/components/sidebar.slint:137
-#: ui/components/sidebar.slint:157
+#: ui/components/sidebar.slint:94
+msgid "Add an account"
+msgstr ""
+
+#: ui/components/sidebar.slint:136 ui/components/sidebar.slint:145
+#: ui/components/sidebar.slint:165
 #, fuzzy
 msgid "Find folder or label"
 msgstr "Rechercher un dossier ou une étiquette"
 
-#: ui/components/sidebar.slint:174
+#: ui/components/sidebar.slint:182
 #, fuzzy
 msgid "Clear folder filter"
 msgstr "Effacer le filtre des dossiers"
 
-#: ui/components/sidebar.slint:190
+#: ui/components/sidebar.slint:198
 #, fuzzy
 msgid "Add account"
 msgstr "Ajouter un compte"
 
-#: ui/components/sidebar.slint:239
+#: ui/components/sidebar.slint:247
 #, fuzzy
 msgid "ALL ACCOUNTS"
 msgstr "TOUS LES COMPTES"
 
-#: ui/components/sidebar.slint:248
+#: ui/components/sidebar.slint:256
 #, fuzzy
 msgid "All Inboxes"
 msgstr "Toutes les boîtes de réception"
 
-#: ui/components/sidebar.slint:264
+#: ui/components/sidebar.slint:272
 #, fuzzy
 msgid "Inbox"
 msgstr "Boîte de réception"
 
-#: ui/components/sidebar.slint:326
+#: ui/components/sidebar.slint:334
 #, fuzzy
 msgid "Categories"
 msgstr "Catégories"
 
-#: ui/components/sidebar.slint:344
+#: ui/components/sidebar.slint:352
 msgid "Important"
 msgstr "Important"
 
-#: ui/components/sidebar.slint:364 ui/dialogs/settings-dialog.slint:267
+#: ui/components/sidebar.slint:372 ui/dialogs/settings-dialog.slint:267
 #, fuzzy
 msgid "Other"
 msgstr "Autre"
 
-#: ui/components/sidebar.slint:407 ui/components/sidebar.slint:566
+#: ui/components/sidebar.slint:415 ui/components/sidebar.slint:574
 #, fuzzy
 msgid "Labels"
 msgstr "Étiquettes"
 
-#: ui/components/sidebar.slint:426
+#: ui/components/sidebar.slint:434
 #, fuzzy
 msgid "Global label {}"
 msgstr "Étiquette globale {}"
 
-#: ui/components/sidebar.slint:458 ui/views/contacts-view.slint:221
+#: ui/components/sidebar.slint:466 ui/views/contacts-view.slint:221
 #, fuzzy
 msgid "ACCOUNTS"
 msgstr "COMPTES"
 
-#: ui/components/sidebar.slint:586
+#: ui/components/sidebar.slint:594
 #, fuzzy
 msgid "{} label, {} account"
 msgstr "{} étiquette, {} compte"
 
-#: ui/components/sidebar.slint:628 ui/dialogs/folder-dialog.slint:27
+#: ui/components/sidebar.slint:636 ui/dialogs/folder-dialog.slint:27
 #: ui/views/files-view.slint:338
 #, fuzzy
 msgid "New folder"
 msgstr "Nouveau dossier"
 
-#: ui/components/sidebar.slint:645 ui/dialogs/folder-dialog.slint:26
+#: ui/components/sidebar.slint:653 ui/dialogs/folder-dialog.slint:26
 #, fuzzy
 msgid "New label"
 msgstr "Nouvelle étiquette"
 
-#: ui/components/sidebar.slint:665
+#: ui/components/sidebar.slint:673
 #, fuzzy
 msgid "No folders found"
 msgstr "Aucun dossier trouvé"
@@ -7934,12 +7938,12 @@ msgstr "Gris ardoise"
 msgid "Use across all accounts (local only)"
 msgstr "Utiliser pour tous les comptes (local uniquement)"
 
-#: ui/views/mail-view.slint:389
+#: ui/views/mail-view.slint:391
 #, fuzzy
 msgid "Message list width"
 msgstr "Largeur de la liste des messages"
 
-#: ui/views/mail-view.slint:722
+#: ui/views/mail-view.slint:724
 #, fuzzy
 msgid "Close folders"
 msgstr "Fermer le panneau des dossiers"

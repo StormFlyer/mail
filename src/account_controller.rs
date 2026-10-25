@@ -364,6 +364,7 @@ pub(super) fn refresh_connected_accounts(app: &AppWindow, state: &Rc<RefCell<Inb
         state.local_mail.is_some(),
     );
     let ui = app.global::<LocalMailUi>();
+    ui.set_can_send(!state.connected_accounts.is_empty());
     ui.set_account_id(
         state
             .local_mail
