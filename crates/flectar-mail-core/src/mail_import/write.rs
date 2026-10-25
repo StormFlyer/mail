@@ -72,6 +72,9 @@ pub struct MailImportProgress {
     pub done_bytes: u64,
     pub total_bytes: u64,
     pub imported: u64,
+    /// The source folder being imported, an index into the source's
+    /// folders.
+    pub folder: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -172,6 +175,7 @@ impl crate::Core {
             done_bytes: 0,
             total_bytes,
             imported: 0,
+            folder: None,
         });
         let paths = chosen
             .iter()
@@ -363,6 +367,7 @@ fn folder_name(name: &str) -> String {
 enum Item {
     Message(Box<Incoming>),
     TooLarge {
+        folder: usize,
         read: u64,
     },
     /// A folder whose mail couldn't be read to the end.
@@ -481,7 +486,10 @@ fn read_mbox(
         *read = start + reader.position();
         let item = match entry {
             None => return Ok(()),
-            Some(mbox::Entry::TooLarge) => Item::TooLarge { read: *read },
+            Some(mbox::Entry::TooLarge) => Item::TooLarge {
+                folder,
+                read: *read,
+            },
             Some(mbox::Entry::Message { raw, stored_at }) => {
                 match incoming(folder, raw, stored_at, None, *read) {
                     Some(message) => Item::Message(Box::new(message)),
@@ -513,7 +521,10 @@ fn read_file(
         .map_err(|error| Halt::Failed(error.to_string()))?;
     *read += raw.len() as u64;
     let item = if raw.len() > MAX_MESSAGE_BYTES {
-        Item::TooLarge { read: *read }
+        Item::TooLarge {
+            folder,
+            read: *read,
+        }
     } else {
         match incoming(folder, raw, None, location.file_name(), *read) {
             Some(message) => Item::Message(Box::new(message)),
@@ -631,15 +642,18 @@ struct Written {
 impl Writer<'_> {
     async fn store(&mut self, batch: Vec<Item>) -> Result<()> {
         let mut read = None;
+        let mut current = None;
         let mut messages = Vec::new();
         for item in batch {
             match item {
                 Item::Message(message) => {
                     read = Some(message.read);
+                    current = Some(message.folder);
                     messages.push(*message);
                 }
-                Item::TooLarge { read: done } => {
+                Item::TooLarge { folder, read: done } => {
                     read = Some(done);
+                    current = Some(folder);
                     self.report.too_large += 1;
                 }
                 Item::Unreadable {
@@ -648,6 +662,7 @@ impl Writer<'_> {
                     read: done,
                 } => {
                     read = Some(done);
+                    current = Some(folder);
                     // The first problem of a folder stands for the rest.
                     let path = self.paths.get(&folder).cloned().unwrap_or_default();
                     if !self
@@ -836,6 +851,9 @@ impl Writer<'_> {
         self.progress.send_modify(|progress| {
             if let Some(read) = read {
                 progress.done_bytes = read.min(progress.total_bytes);
+            }
+            if current.is_some() {
+                progress.folder = current;
             }
             progress.imported = self.report.imported;
         });

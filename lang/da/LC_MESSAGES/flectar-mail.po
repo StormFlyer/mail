@@ -902,7 +902,7 @@ msgstr ""
 msgid "Flectar Mail backup"
 msgstr ""
 
-#: ui/app.slint:358 ui/dialogs/import-dialog.slint:399
+#: ui/app.slint:358 ui/dialogs/import-dialog.slint:401
 #: ui/views/onboarding-view.slint:222
 msgid "Import accounts and mail"
 msgstr ""
@@ -3373,158 +3373,158 @@ msgstr ""
 msgid "Create folder"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:123
+#: ui/dialogs/import-dialog.slint:125
 msgid "No valid email address was found."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:124
+#: ui/dialogs/import-dialog.slint:126
 msgid "No incoming mail server is configured."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:125
+#: ui/dialogs/import-dialog.slint:127
 msgid "The incoming server {} uses a protocol Flectar Mail does not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:126
+#: ui/dialogs/import-dialog.slint:128
 msgid "No outgoing mail server is configured."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:127
+#: ui/dialogs/import-dialog.slint:129
 msgid "The outgoing server {} uses a protocol Flectar Mail does not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:128
+#: ui/dialogs/import-dialog.slint:130
 msgid ""
 "The incoming server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:129
+#: ui/dialogs/import-dialog.slint:131
 msgid ""
 "The outgoing server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:130
+#: ui/dialogs/import-dialog.slint:132
 msgid ""
 "{} keeps your password off its unencrypted connection, but Flectar Mail "
 "would send it in the clear. Turn on SSL/TLS or STARTTLS for this server "
 "first."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:132
+#: ui/dialogs/import-dialog.slint:134
 msgid ""
 "The incoming server connects without signing in, which Flectar Mail does not "
 "support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:133
+#: ui/dialogs/import-dialog.slint:135
 msgid ""
 "The incoming server signs in with a client certificate, which Flectar Mail "
 "does not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:134
+#: ui/dialogs/import-dialog.slint:136
 msgid ""
 "The incoming server signs in with {}, which Flectar Mail does not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:135
+#: ui/dialogs/import-dialog.slint:137
 msgid ""
 "The outgoing server sends mail without signing in, which Flectar Mail does "
 "not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:136
+#: ui/dialogs/import-dialog.slint:138
 msgid ""
 "The outgoing server signs in with a client certificate, which Flectar Mail "
 "does not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:137
+#: ui/dialogs/import-dialog.slint:139
 msgid ""
 "The outgoing server signs in with {}, which Flectar Mail does not support."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:138
+#: ui/dialogs/import-dialog.slint:140
 msgid ""
 "The outgoing server signs in as {}. Flectar Mail uses one sign-in for both "
 "servers."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:139
+#: ui/dialogs/import-dialog.slint:141
 msgid "The incoming server has no user name."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:140
+#: ui/dialogs/import-dialog.slint:142
 msgid "The server settings for {} are not valid."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:141
+#: ui/dialogs/import-dialog.slint:143
 msgid "This address appears earlier in the file."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:142
+#: ui/dialogs/import-dialog.slint:144
 msgid ""
 "Your password will be sent over the encrypted connection instead of with "
 "CRAM-MD5."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:143
+#: ui/dialogs/import-dialog.slint:145
 msgid "You will sign in with Microsoft instead of a password."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:144
+#: ui/dialogs/import-dialog.slint:146
 msgid "You will sign in with Google instead of a password."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:145
+#: ui/dialogs/import-dialog.slint:147
 msgid ""
 "The account signs in as {}, which is not an email address. Add it with its "
 "own address instead."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:146
+#: ui/dialogs/import-dialog.slint:148
 msgid ""
 "Flectar Mail cannot use browser sign-in for {}. Sign in with an app password."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:147
+#: ui/dialogs/import-dialog.slint:149
 msgid "The provider's standard outgoing server replaces {}."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:148
+#: ui/dialogs/import-dialog.slint:150
 msgid "This account syncs with {} instead of downloading mail with POP3."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:149 ui/dialogs/settings-dialog.slint:1983
+#: ui/dialogs/import-dialog.slint:151 ui/dialogs/settings-dialog.slint:1983
 msgid "Mail is removed from the server once it's on this device."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:150 ui/dialogs/settings-dialog.slint:1982
+#: ui/dialogs/import-dialog.slint:152 ui/dialogs/settings-dialog.slint:1982
 msgid "Mail you delete here is removed from the server too."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:151
+#: ui/dialogs/import-dialog.slint:153
 msgid ""
 "Mail is removed from the server {} days after it's downloaded, or once "
 "deleted here."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:152
+#: ui/dialogs/import-dialog.slint:154
 msgid ""
 "No choice here matches how long the account kept mail on the server, so the "
 "closest one is used."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:153
+#: ui/dialogs/import-dialog.slint:155
 msgid "One other address is managed by Gmail and appears after you sign in."
 msgid_plural ""
 "{n} other addresses are managed by Gmail and appear after you sign in."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:154
+#: ui/dialogs/import-dialog.slint:156
 msgid ""
 "One sending address was not imported because it is invalid or uses another "
 "outgoing server."
@@ -3534,209 +3534,209 @@ msgid_plural ""
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:155
+#: ui/dialogs/import-dialog.slint:157
 msgid "A signature stored in a file outside the profile was not imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:156
+#: ui/dialogs/import-dialog.slint:158
 msgid "A signature larger than 32 KB was not imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:161
+#: ui/dialogs/import-dialog.slint:163
 msgid "The file could not be read: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:162
+#: ui/dialogs/import-dialog.slint:164
 msgid "The settings file is too large."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:163
+#: ui/dialogs/import-dialog.slint:165
 msgid ""
 "This is not a supported settings export or mail file. Choose a .k9s file, a "
 "Thunderbird profile export or prefs.js, a Flectar Mail backup, or mail saved "
 "as .mbox or .eml files."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:164
+#: ui/dialogs/import-dialog.slint:166
 msgid "The file is damaged: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:165
+#: ui/dialogs/import-dialog.slint:167
 msgid "This settings format (version {}) is not supported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:166
+#: ui/dialogs/import-dialog.slint:168
 msgid "The settings contain no mail accounts."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:167
+#: ui/dialogs/import-dialog.slint:169
 msgid "No mail was found in this folder."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:168
+#: ui/dialogs/import-dialog.slint:170
 msgid ""
 "This folder contains several Thunderbird profiles. Choose the profile folder "
 "inside it that you want to import."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:169
+#: ui/dialogs/import-dialog.slint:171
 msgid ""
 "This folder is not a Thunderbird profile. Choose the folder that contains "
 "prefs.js."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:170
+#: ui/dialogs/import-dialog.slint:172
 msgid ""
 "This Thunderbird profile is on a network location. Choose the profile folder "
 "itself to import it."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:171
+#: ui/dialogs/import-dialog.slint:173
 msgid "The backup could not be restored: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:172
+#: ui/dialogs/import-dialog.slint:174
 msgid ""
 "The import stopped: {}. The mail imported until then was kept, and importing "
 "the same mail again adds the rest."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:173
+#: ui/dialogs/import-dialog.slint:175
 msgid "Import failed: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:178
+#: ui/dialogs/import-dialog.slint:180
 msgid "Could not import accounts"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:179
+#: ui/dialogs/import-dialog.slint:181
 msgid "Could not import all the mail"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:180
+#: ui/dialogs/import-dialog.slint:182
 msgid "No mail found"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:181
+#: ui/dialogs/import-dialog.slint:183
 msgid "Could not read your selection"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:187
+#: ui/dialogs/import-dialog.slint:189
 msgid "In the folder “{}”"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:189
+#: ui/dialogs/import-dialog.slint:191
 msgid "Kept on this device, in the folder “{}”"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:190
+#: ui/dialogs/import-dialog.slint:192
 msgid "Kept on this device"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:221
+#: ui/dialogs/import-dialog.slint:223
 msgid ""
 "Local Folders kept outside the profile were not found. Choose their folder "
 "to import them."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:222
+#: ui/dialogs/import-dialog.slint:224
 msgid "Local Folders kept outside the profile were not found."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:228
+#: ui/dialogs/import-dialog.slint:230
 msgid "Feeds and newsgroups are not imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:252 ui/dialogs/import-dialog.slint:658
+#: ui/dialogs/import-dialog.slint:254 ui/dialogs/import-dialog.slint:667
 msgid "Import {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:293
+#: ui/dialogs/import-dialog.slint:295
 msgid "Where to import {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:314
+#: ui/dialogs/import-dialog.slint:316
 msgid "Stopping…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:314
+#: ui/dialogs/import-dialog.slint:316
 msgid "Stop"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:320
+#: ui/dialogs/import-dialog.slint:322
 msgid "Continue in background"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:325 ui/views/files-view.slint:324
+#: ui/dialogs/import-dialog.slint:327 ui/views/files-view.slint:324
 msgid "Back"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:330
+#: ui/dialogs/import-dialog.slint:332
 msgid "Choose folder…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:343
+#: ui/dialogs/import-dialog.slint:345
 msgid "Choose file…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:351
+#: ui/dialogs/import-dialog.slint:353
 msgid "Next"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:357 ui/dialogs/import-dialog.slint:366
+#: ui/dialogs/import-dialog.slint:359 ui/dialogs/import-dialog.slint:368
 msgid "Import one account"
 msgid_plural "Import {n} accounts"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:367 ui/dialogs/settings-dialog.slint:2186
+#: ui/dialogs/import-dialog.slint:369 ui/dialogs/settings-dialog.slint:2186
 msgid "Import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:374
+#: ui/dialogs/import-dialog.slint:376
 msgid "Open accounts"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:383
+#: ui/dialogs/import-dialog.slint:385
 msgid "Show mail"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:466
+#: ui/dialogs/import-dialog.slint:468
 msgid "Choose accounts to import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:467
+#: ui/dialogs/import-dialog.slint:469
 msgid "Choose mail to import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:468 ui/dialogs/import-dialog.slint:864
+#: ui/dialogs/import-dialog.slint:470 ui/dialogs/import-dialog.slint:873
 msgid "Import stopped"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:469 ui/dialogs/import-dialog.slint:865
+#: ui/dialogs/import-dialog.slint:471 ui/dialogs/import-dialog.slint:874
 msgid "Import complete"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:484
+#: ui/dialogs/import-dialog.slint:486
 msgid ""
 "Bring your accounts from Thunderbird, Thunderbird for Android, K-9 Mail, or "
 "a Flectar Mail backup, and mail from Thunderbird or saved mail files. "
 "Passwords are never imported: you sign in to each account afterward."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:490
+#: ui/dialogs/import-dialog.slint:492
 msgid "Thunderbird on this device"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:504
+#: ui/dialogs/import-dialog.slint:506
 msgid "Import from Thunderbird profile {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:532
+#: ui/dialogs/import-dialog.slint:534
 msgid "{} (default profile)"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:567
+#: ui/dialogs/import-dialog.slint:569
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip), profile folders and prefs.js, Flectar Mail backups (."
@@ -3744,146 +3744,146 @@ msgid ""
 "archives of them."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:568
+#: ui/dialogs/import-dialog.slint:570
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip) and prefs.js, Flectar Mail backups (.json), and mail "
 "saved as .mbox or .eml files or in ZIP archives of them."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:581
+#: ui/dialogs/import-dialog.slint:583
 msgid "Looking for accounts and mail…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:582 ui/dialogs/import-dialog.slint:862
+#: ui/dialogs/import-dialog.slint:584 ui/dialogs/import-dialog.slint:871
 msgid "Importing accounts…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:583 ui/dialogs/import-dialog.slint:595
+#: ui/dialogs/import-dialog.slint:585 ui/dialogs/import-dialog.slint:604
 msgid "Importing mail…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:607
+#: ui/dialogs/import-dialog.slint:616
 msgid "One message · {1} of {2}"
 msgid_plural "{0} messages · {1} of {2}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:634
+#: ui/dialogs/import-dialog.slint:643
 msgid ""
 "From Thunderbird for Android or K-9 Mail. Existing accounts are never "
 "changed."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:635
+#: ui/dialogs/import-dialog.slint:644
 msgid "From Thunderbird. Existing accounts are never changed."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:673
+#: ui/dialogs/import-dialog.slint:682
 msgid "Already in Flectar Mail"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:674
+#: ui/dialogs/import-dialog.slint:683
 msgid "Cannot be imported"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:675
+#: ui/dialogs/import-dialog.slint:684
 msgid "Sign in with Google after import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:676
+#: ui/dialogs/import-dialog.slint:685
 msgid "Sign in with Microsoft after import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:677
+#: ui/dialogs/import-dialog.slint:686
 msgid "{} · enter your password after import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:683
+#: ui/dialogs/import-dialog.slint:692
 msgid "Named “{}” in the other app"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:702
+#: ui/dialogs/import-dialog.slint:711
 msgid ""
 "Imported mail is kept only on this device. Messages already here are "
 "skipped, so an import can be repeated."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:722
+#: ui/dialogs/import-dialog.slint:731
 msgid "No folders chosen"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:722
+#: ui/dialogs/import-dialog.slint:731
 msgid "One folder chosen, {}"
 msgid_plural "{n} folders chosen, {}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:733
+#: ui/dialogs/import-dialog.slint:742
 msgid "Imported one account. Sign in to it to start syncing."
 msgid_plural "Imported {n} accounts. Sign in to each one to start syncing."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:739
+#: ui/dialogs/import-dialog.slint:748
 msgid "No accounts were imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:745
+#: ui/dialogs/import-dialog.slint:754
 msgid "One account was already in Flectar Mail and was left unchanged."
 msgid_plural ""
 "{n} accounts were already in Flectar Mail and were left unchanged."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:751
+#: ui/dialogs/import-dialog.slint:760
 msgid ""
 "The theme, language, and other preferences from the backup were applied."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:758
+#: ui/dialogs/import-dialog.slint:767
 msgid "Imported one message."
 msgid_plural "Imported {} messages."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:759
+#: ui/dialogs/import-dialog.slint:768
 msgid "No new messages were imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:765
+#: ui/dialogs/import-dialog.slint:774
 msgid "One message was already here and was skipped."
 msgid_plural "{} messages were already here and were skipped."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:771
+#: ui/dialogs/import-dialog.slint:780
 msgid "One message larger than 128 MB was skipped."
 msgid_plural "{} messages larger than 128 MB were skipped."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/dialogs/import-dialog.slint:777
+#: ui/dialogs/import-dialog.slint:786
 msgid "The import was stopped. Importing the same mail again adds the rest."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:789
+#: ui/dialogs/import-dialog.slint:798
 msgid "{} could not be imported: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:795
+#: ui/dialogs/import-dialog.slint:804
 msgid "Some mail in {} could not be read: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:862
+#: ui/dialogs/import-dialog.slint:871
 msgid "Importing mail… {}%"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:920
+#: ui/dialogs/import-dialog.slint:929
 msgid "Show"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:930 ui/views/files-view.slint:696
+#: ui/dialogs/import-dialog.slint:939 ui/views/files-view.slint:696
 msgid "Dismiss"
 msgstr ""
 

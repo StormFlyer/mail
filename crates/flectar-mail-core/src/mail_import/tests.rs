@@ -491,7 +491,7 @@ async fn mail_can_go_into_a_folder_of_its_own() {
     source
         .folders
         .extend(crate::mail_import::scan_files(&[loose]).unwrap().folders);
-    let (progress, _) = watch::channel(MailImportProgress::default());
+    let (progress, receiver) = watch::channel(MailImportProgress::default());
     let report = core
         .import_mail(
             MailImportRequest {
@@ -510,6 +510,9 @@ async fn mail_can_go_into_a_folder_of_its_own() {
 
     assert_eq!(report.imported, 4);
     assert_eq!(report.already_present, 1);
+    // Progress names the folder it got to: the messages chosen one by one.
+    assert_eq!(receiver.borrow().folder, Some(3));
+    assert_eq!(receiver.borrow().imported, 4);
     assert_eq!(report.folders.len(), 4);
     // Its Trash is no longer anyone's, so it stays an ordinary folder.
     assert_eq!(

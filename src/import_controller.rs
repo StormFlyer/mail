@@ -178,13 +178,15 @@ struct MailJob {
 }
 
 /// How far the whole import is, across stores.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct Progress {
     /// Mail is being imported, after any accounts.
     mail: bool,
     done_bytes: u64,
     total_bytes: u64,
     imported: u64,
+    /// The folder being imported.
+    folder: String,
 }
 
 #[derive(Debug, Default)]
@@ -551,7 +553,7 @@ async fn import_mail(
         mail: true,
         done_bytes,
         total_bytes,
-        imported: 0,
+        ..Progress::default()
     });
     for job in jobs {
         if stop.load(Ordering::Relaxed) {
@@ -573,6 +575,24 @@ async fn import_mail(
                 job.parent.clone().or_else(|| job.destination.clone()),
             ),
         };
+        // How progress names each of the job's folders.
+        let names = job
+            .source
+            .folders
+            .iter()
+            .map(|folder| {
+                let path = if folder.path.is_empty() {
+                    loose_folder_name.clone()
+                } else {
+                    folder.path.join("/")
+                };
+                if several {
+                    format!("{}/{path}", job.label)
+                } else {
+                    path
+                }
+            })
+            .collect::<Vec<_>>();
         let request = MailImportRequest {
             source: job.source,
             folders: job.folders,
@@ -596,6 +616,10 @@ async fn import_mail(
                 done_bytes: done_bytes + job_progress.done_bytes,
                 total_bytes,
                 imported: imported_before + job_progress.imported,
+                folder: job_progress
+                    .folder
+                    .and_then(|index| names.get(index).cloned())
+                    .unwrap_or_default(),
             });
         }
         done_bytes += job.bytes;
@@ -646,6 +670,7 @@ fn show_progress(app: &AppWindow, progress: Progress) {
     ui.set_mail_progress_count(i32::try_from(progress.imported).unwrap_or(i32::MAX));
     ui.set_mail_progress_done(format_storage_size(progress.done_bytes).into());
     ui.set_mail_progress_total(format_storage_size(progress.total_bytes).into());
+    ui.set_mail_progress_folder(progress.folder.into());
 }
 
 fn ui_count(value: u64) -> i32 {
@@ -1246,6 +1271,7 @@ pub(super) fn register_import_callbacks(
         ui.set_stopping(false);
         ui.set_mail_progress(if has_accounts { -1.0 } else { 0.0 });
         ui.set_mail_progress_count(0);
+        ui.set_mail_progress_folder(slint::SharedString::default());
         ui.set_mail_progress_done(format_storage_size(0).into());
         ui.set_mail_progress_total(
             format_storage_size(jobs.iter().map(|job| job.bytes).sum()).into(),
@@ -1257,7 +1283,7 @@ pub(super) fn register_import_callbacks(
         let progress_app = app.as_weak();
         confirm_runtime.spawn(async move {
             while progress_receiver.changed().await.is_ok() {
-                let progress = *progress_receiver.borrow_and_update();
+                let progress = progress_receiver.borrow_and_update().clone();
                 let _ =
                     progress_app.upgrade_in_event_loop(move |app| show_progress(&app, progress));
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;

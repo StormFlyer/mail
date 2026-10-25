@@ -430,6 +430,7 @@ fn mail_is_chosen_imported_and_reported(ui: &ImportHarness, window: &MinimalSoft
 
     // Mail can be stopped, but the dialog stays until it has.
     state.set_mail_progress(0.42);
+    state.set_mail_progress_folder("Local Folders/Archives/2023".into());
     state.set_mail_progress_count(1234);
     state.set_mail_progress_done("1.31 GB".into());
     state.set_mail_progress_total("3.13 GB".into());

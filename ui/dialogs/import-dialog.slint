@@ -81,6 +81,8 @@ export global AccountImport {
     // How much of the mail is imported, from 0 to 1; below 0 while accounts
     // are imported.
     in property <float> mail-progress: -1;
+    // The folder being imported.
+    in property <string> mail-progress-folder;
     in property <string> mail-progress-done;
     in property <string> mail-progress-total;
     in property <int> mail-progress-count;
@@ -586,6 +588,13 @@ export component ImportDialog inherits Rectangle {
                         horizontal-alignment: center;
                         wrap: word-wrap;
                         accessible-role: text;
+                    }
+                    if AccountImport.stage == "importing" && AccountImport.mail-progress >= 0 && AccountImport.mail-progress-folder != "" : Text {
+                        text: AccountImport.mail-progress-folder;
+                        color: AppTheme.secondary;
+                        font-size: TypeScale.caption;
+                        horizontal-alignment: center;
+                        overflow: elide;
                     }
                     if AccountImport.stage == "importing" && AccountImport.mail-progress >= 0 : Rectangle {
                         height: 6px;
