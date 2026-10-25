@@ -260,7 +260,7 @@ msgctxt "time of day"
 msgid "AM"
 msgstr "上午"
 
-#: ui/app.slint:150 ui/views/mail-list-pane.slint:415
+#: ui/app.slint:150 ui/views/mail-list-pane.slint:416
 msgid "Yesterday"
 msgstr "昨天"
 
@@ -903,7 +903,7 @@ msgstr "导出 Flectar Mail 账户备份"
 msgid "Flectar Mail backup"
 msgstr "Flectar Mail 备份"
 
-#: ui/app.slint:358 ui/dialogs/import-dialog.slint:390
+#: ui/app.slint:358 ui/dialogs/import-dialog.slint:399
 #: ui/views/onboarding-view.slint:222
 msgid "Import accounts and mail"
 msgstr ""
@@ -2098,7 +2098,7 @@ msgid "Filters only affect this agenda."
 msgstr "筛选仅影响此日程视图。"
 
 #: ui/components/calendar-agenda.slint:212 ui/components/calendar.slint:580
-#: ui/views/mail-list-pane.slint:414
+#: ui/views/mail-list-pane.slint:415
 msgid "Today"
 msgstr "今天"
 
@@ -2493,7 +2493,7 @@ msgstr "开"
 msgid "Off"
 msgstr "关"
 
-#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:506
+#: ui/components/controls.slint:233 ui/views/mail-list-pane.slint:507
 msgid "Clear selection"
 msgstr "取消选择"
 
@@ -2895,7 +2895,7 @@ msgstr "删除全局标签"
 msgid "Delete label from {}"
 msgstr "删除 {} 中的标签"
 
-#: ui/components/sidebar.slint:94 ui/views/mail-list-pane.slint:1125
+#: ui/components/sidebar.slint:94 ui/views/mail-list-pane.slint:1128
 msgid "New email"
 msgstr "新建邮件"
 
@@ -3400,157 +3400,157 @@ msgstr "创建标签"
 msgid "Create folder"
 msgstr "创建文件夹"
 
-#: ui/dialogs/import-dialog.slint:119
+#: ui/dialogs/import-dialog.slint:123
 msgid "No valid email address was found."
 msgstr "未找到有效的电子邮件地址。"
 
-#: ui/dialogs/import-dialog.slint:120
+#: ui/dialogs/import-dialog.slint:124
 msgid "No incoming mail server is configured."
 msgstr "未配置收件服务器。"
 
-#: ui/dialogs/import-dialog.slint:121
+#: ui/dialogs/import-dialog.slint:125
 msgid "The incoming server {} uses a protocol Flectar Mail does not support."
 msgstr "收件服务器 {} 使用了 Flectar Mail 不支持的协议。"
 
-#: ui/dialogs/import-dialog.slint:122
+#: ui/dialogs/import-dialog.slint:126
 msgid "No outgoing mail server is configured."
 msgstr "未配置发件服务器。"
 
-#: ui/dialogs/import-dialog.slint:123
+#: ui/dialogs/import-dialog.slint:127
 msgid "The outgoing server {} uses a protocol Flectar Mail does not support."
 msgstr "发件服务器 {} 使用了 Flectar Mail 不支持的协议。"
 
-#: ui/dialogs/import-dialog.slint:124
+#: ui/dialogs/import-dialog.slint:128
 msgid ""
 "The incoming server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:125
+#: ui/dialogs/import-dialog.slint:129
 msgid ""
 "The outgoing server {} is not encrypted, so your password and mail cross the "
 "network unprotected."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:126
+#: ui/dialogs/import-dialog.slint:130
 msgid ""
 "{} keeps your password off its unencrypted connection, but Flectar Mail "
 "would send it in the clear. Turn on SSL/TLS or STARTTLS for this server "
 "first."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:128
+#: ui/dialogs/import-dialog.slint:132
 msgid ""
 "The incoming server connects without signing in, which Flectar Mail does not "
 "support."
 msgstr "收件服务器无需登录即可连接，Flectar Mail 不支持这种方式。"
 
-#: ui/dialogs/import-dialog.slint:129
+#: ui/dialogs/import-dialog.slint:133
 msgid ""
 "The incoming server signs in with a client certificate, which Flectar Mail "
 "does not support."
 msgstr "收件服务器使用客户端证书登录，Flectar Mail 不支持该方式。"
 
-#: ui/dialogs/import-dialog.slint:130
+#: ui/dialogs/import-dialog.slint:134
 msgid ""
 "The incoming server signs in with {}, which Flectar Mail does not support."
 msgstr "收件服务器使用 {} 登录，Flectar Mail 不支持该方式。"
 
-#: ui/dialogs/import-dialog.slint:131
+#: ui/dialogs/import-dialog.slint:135
 msgid ""
 "The outgoing server sends mail without signing in, which Flectar Mail does "
 "not support."
 msgstr "发件服务器无需登录即可发送邮件，Flectar Mail 不支持这种方式。"
 
-#: ui/dialogs/import-dialog.slint:132
+#: ui/dialogs/import-dialog.slint:136
 msgid ""
 "The outgoing server signs in with a client certificate, which Flectar Mail "
 "does not support."
 msgstr "发件服务器使用客户端证书登录，Flectar Mail 不支持该方式。"
 
-#: ui/dialogs/import-dialog.slint:133
+#: ui/dialogs/import-dialog.slint:137
 msgid ""
 "The outgoing server signs in with {}, which Flectar Mail does not support."
 msgstr "发件服务器使用 {} 登录，Flectar Mail 不支持该方式。"
 
-#: ui/dialogs/import-dialog.slint:134
+#: ui/dialogs/import-dialog.slint:138
 msgid ""
 "The outgoing server signs in as {}. Flectar Mail uses one sign-in for both "
 "servers."
 msgstr "发件服务器以 {} 身份登录。Flectar Mail 对两个服务器使用同一登录信息。"
 
-#: ui/dialogs/import-dialog.slint:135
+#: ui/dialogs/import-dialog.slint:139
 msgid "The incoming server has no user name."
 msgstr "收件服务器没有用户名。"
 
-#: ui/dialogs/import-dialog.slint:136
+#: ui/dialogs/import-dialog.slint:140
 msgid "The server settings for {} are not valid."
 msgstr "{} 的服务器设置无效。"
 
-#: ui/dialogs/import-dialog.slint:137
+#: ui/dialogs/import-dialog.slint:141
 msgid "This address appears earlier in the file."
 msgstr "此地址已在文件中较早出现。"
 
-#: ui/dialogs/import-dialog.slint:138
+#: ui/dialogs/import-dialog.slint:142
 msgid ""
 "Your password will be sent over the encrypted connection instead of with "
 "CRAM-MD5."
 msgstr "您的密码将通过加密连接发送，而不是使用 CRAM-MD5。"
 
-#: ui/dialogs/import-dialog.slint:139
+#: ui/dialogs/import-dialog.slint:143
 msgid "You will sign in with Microsoft instead of a password."
 msgstr "您将使用 Microsoft 登录，而不是密码。"
 
-#: ui/dialogs/import-dialog.slint:140
+#: ui/dialogs/import-dialog.slint:144
 msgid "You will sign in with Google instead of a password."
 msgstr "您将使用 Google 登录，而不是密码。"
 
-#: ui/dialogs/import-dialog.slint:141
+#: ui/dialogs/import-dialog.slint:145
 msgid ""
 "The account signs in as {}, which is not an email address. Add it with its "
 "own address instead."
 msgstr "该账户以 {} 登录，这不是电子邮件地址。请改用其自身的地址添加。"
 
-#: ui/dialogs/import-dialog.slint:142
+#: ui/dialogs/import-dialog.slint:146
 msgid ""
 "Flectar Mail cannot use browser sign-in for {}. Sign in with an app password."
 msgstr "Flectar Mail 无法为 {} 使用浏览器登录。请使用应用专用密码登录。"
 
-#: ui/dialogs/import-dialog.slint:143
+#: ui/dialogs/import-dialog.slint:147
 msgid "The provider's standard outgoing server replaces {}."
 msgstr "将使用服务商的标准发件服务器代替 {}。"
 
-#: ui/dialogs/import-dialog.slint:144
+#: ui/dialogs/import-dialog.slint:148
 msgid "This account syncs with {} instead of downloading mail with POP3."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:145 ui/dialogs/settings-dialog.slint:1983
+#: ui/dialogs/import-dialog.slint:149 ui/dialogs/settings-dialog.slint:1983
 msgid "Mail is removed from the server once it's on this device."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:146 ui/dialogs/settings-dialog.slint:1982
+#: ui/dialogs/import-dialog.slint:150 ui/dialogs/settings-dialog.slint:1982
 msgid "Mail you delete here is removed from the server too."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:147
+#: ui/dialogs/import-dialog.slint:151
 msgid ""
 "Mail is removed from the server {} days after it's downloaded, or once "
 "deleted here."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:148
+#: ui/dialogs/import-dialog.slint:152
 msgid ""
 "No choice here matches how long the account kept mail on the server, so the "
 "closest one is used."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:149
+#: ui/dialogs/import-dialog.slint:153
 msgid "One other address is managed by Gmail and appears after you sign in."
 msgid_plural ""
 "{n} other addresses are managed by Gmail and appear after you sign in."
 msgstr[0] "另有 {n} 个地址由 Gmail 管理，登录后会显示。"
 
-#: ui/dialogs/import-dialog.slint:150
+#: ui/dialogs/import-dialog.slint:154
 msgid ""
 "One sending address was not imported because it is invalid or uses another "
 "outgoing server."
@@ -3559,205 +3559,209 @@ msgid_plural ""
 "another outgoing server."
 msgstr[0] "有 {n} 个发件地址未导入，因为它们无效或使用了其他发件服务器。"
 
-#: ui/dialogs/import-dialog.slint:151
+#: ui/dialogs/import-dialog.slint:155
 msgid "A signature stored in a file outside the profile was not imported."
 msgstr "存储在配置文件之外的签名文件未导入。"
 
-#: ui/dialogs/import-dialog.slint:152
+#: ui/dialogs/import-dialog.slint:156
 msgid "A signature larger than 32 KB was not imported."
 msgstr "大于 32 KB 的签名未导入。"
 
-#: ui/dialogs/import-dialog.slint:157
+#: ui/dialogs/import-dialog.slint:161
 msgid "The file could not be read: {}"
 msgstr "无法读取文件：{}"
 
-#: ui/dialogs/import-dialog.slint:158
+#: ui/dialogs/import-dialog.slint:162
 msgid "The settings file is too large."
 msgstr "设置文件过大。"
 
-#: ui/dialogs/import-dialog.slint:159
+#: ui/dialogs/import-dialog.slint:163
 msgid ""
 "This is not a supported settings export or mail file. Choose a .k9s file, a "
 "Thunderbird profile export or prefs.js, a Flectar Mail backup, or mail saved "
 "as .mbox or .eml files."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:160
+#: ui/dialogs/import-dialog.slint:164
 msgid "The file is damaged: {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:161
+#: ui/dialogs/import-dialog.slint:165
 msgid "This settings format (version {}) is not supported."
 msgstr "不支持此设置格式（版本 {}）。"
 
-#: ui/dialogs/import-dialog.slint:162
+#: ui/dialogs/import-dialog.slint:166
 msgid "The settings contain no mail accounts."
 msgstr "设置中不包含邮件账户。"
 
-#: ui/dialogs/import-dialog.slint:163
+#: ui/dialogs/import-dialog.slint:167
 msgid "No mail was found in this folder."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:164
+#: ui/dialogs/import-dialog.slint:168
 msgid ""
 "This folder contains several Thunderbird profiles. Choose the profile folder "
 "inside it that you want to import."
 msgstr "此文件夹包含多个 Thunderbird 配置文件。请选择其中要导入的配置文件夹。"
 
-#: ui/dialogs/import-dialog.slint:165
+#: ui/dialogs/import-dialog.slint:169
 msgid ""
 "This folder is not a Thunderbird profile. Choose the folder that contains "
 "prefs.js."
 msgstr "此文件夹不是 Thunderbird 配置文件。请选择包含 prefs.js 的文件夹。"
 
-#: ui/dialogs/import-dialog.slint:166
+#: ui/dialogs/import-dialog.slint:170
 msgid ""
 "This Thunderbird profile is on a network location. Choose the profile folder "
 "itself to import it."
 msgstr ""
 "此 Thunderbird 配置文件位于网络位置。要导入它，请直接选择该配置文件夹。"
 
-#: ui/dialogs/import-dialog.slint:167
+#: ui/dialogs/import-dialog.slint:171
 msgid "The backup could not be restored: {}"
 msgstr "无法恢复备份：{}"
 
-#: ui/dialogs/import-dialog.slint:168
+#: ui/dialogs/import-dialog.slint:172
 msgid ""
 "The import stopped: {}. The mail imported until then was kept, and importing "
 "the same mail again adds the rest."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:169
+#: ui/dialogs/import-dialog.slint:173
 msgid "Import failed: {}"
 msgstr "导入失败：{}"
 
-#: ui/dialogs/import-dialog.slint:174
+#: ui/dialogs/import-dialog.slint:178
 msgid "Could not import accounts"
 msgstr "无法导入账户"
 
-#: ui/dialogs/import-dialog.slint:175
+#: ui/dialogs/import-dialog.slint:179
 msgid "Could not import all the mail"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:176
+#: ui/dialogs/import-dialog.slint:180
 msgid "No mail found"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:177
+#: ui/dialogs/import-dialog.slint:181
 msgid "Could not read your selection"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:183
+#: ui/dialogs/import-dialog.slint:187
 msgid "In the folder “{}”"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:185
+#: ui/dialogs/import-dialog.slint:189
 msgid "Kept on this device, in the folder “{}”"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:186
+#: ui/dialogs/import-dialog.slint:190
 msgid "Kept on this device"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:217
+#: ui/dialogs/import-dialog.slint:221
 msgid ""
 "Local Folders kept outside the profile were not found. Choose their folder "
 "to import them."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:218
+#: ui/dialogs/import-dialog.slint:222
 msgid "Local Folders kept outside the profile were not found."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:224
+#: ui/dialogs/import-dialog.slint:228
 msgid "Feeds and newsgroups are not imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:248 ui/dialogs/import-dialog.slint:645
+#: ui/dialogs/import-dialog.slint:252 ui/dialogs/import-dialog.slint:658
 msgid "Import {}"
 msgstr "导入 {}"
 
-#: ui/dialogs/import-dialog.slint:289
+#: ui/dialogs/import-dialog.slint:293
 msgid "Where to import {}"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:310
+#: ui/dialogs/import-dialog.slint:314
 msgid "Stopping…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:310
+#: ui/dialogs/import-dialog.slint:314
 msgid "Stop"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:316 ui/views/files-view.slint:324
+#: ui/dialogs/import-dialog.slint:320
+msgid "Continue in background"
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:325 ui/views/files-view.slint:324
 msgid "Back"
 msgstr "返回"
 
-#: ui/dialogs/import-dialog.slint:321
+#: ui/dialogs/import-dialog.slint:330
 msgid "Choose folder…"
 msgstr "选择文件夹…"
 
-#: ui/dialogs/import-dialog.slint:334
+#: ui/dialogs/import-dialog.slint:343
 msgid "Choose file…"
 msgstr "选择文件…"
 
-#: ui/dialogs/import-dialog.slint:342
+#: ui/dialogs/import-dialog.slint:351
 msgid "Next"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:348 ui/dialogs/import-dialog.slint:357
+#: ui/dialogs/import-dialog.slint:357 ui/dialogs/import-dialog.slint:366
 msgid "Import one account"
 msgid_plural "Import {n} accounts"
 msgstr[0] "导入 {n} 个账户"
 
-#: ui/dialogs/import-dialog.slint:358 ui/dialogs/settings-dialog.slint:2186
+#: ui/dialogs/import-dialog.slint:367 ui/dialogs/settings-dialog.slint:2186
 msgid "Import"
 msgstr "导入"
 
-#: ui/dialogs/import-dialog.slint:365
+#: ui/dialogs/import-dialog.slint:374
 msgid "Open accounts"
 msgstr "打开账户"
 
-#: ui/dialogs/import-dialog.slint:374
+#: ui/dialogs/import-dialog.slint:383
 msgid "Show mail"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:453
+#: ui/dialogs/import-dialog.slint:466
 msgid "Choose accounts to import"
 msgstr "选择要导入的账户"
 
-#: ui/dialogs/import-dialog.slint:454
+#: ui/dialogs/import-dialog.slint:467
 msgid "Choose mail to import"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:455
+#: ui/dialogs/import-dialog.slint:468 ui/dialogs/import-dialog.slint:864
 msgid "Import stopped"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:456
+#: ui/dialogs/import-dialog.slint:469 ui/dialogs/import-dialog.slint:865
 msgid "Import complete"
 msgstr "导入完成"
 
-#: ui/dialogs/import-dialog.slint:471
+#: ui/dialogs/import-dialog.slint:484
 msgid ""
 "Bring your accounts from Thunderbird, Thunderbird for Android, K-9 Mail, or "
 "a Flectar Mail backup, and mail from Thunderbird or saved mail files. "
 "Passwords are never imported: you sign in to each account afterward."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:477
+#: ui/dialogs/import-dialog.slint:490
 msgid "Thunderbird on this device"
 msgstr "此设备上的 Thunderbird"
 
-#: ui/dialogs/import-dialog.slint:491
+#: ui/dialogs/import-dialog.slint:504
 msgid "Import from Thunderbird profile {}"
 msgstr "从 Thunderbird 配置文件 {} 导入"
 
-#: ui/dialogs/import-dialog.slint:519
+#: ui/dialogs/import-dialog.slint:532
 msgid "{} (default profile)"
 msgstr "{}（默认配置文件）"
 
-#: ui/dialogs/import-dialog.slint:554
+#: ui/dialogs/import-dialog.slint:567
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip), profile folders and prefs.js, Flectar Mail backups (."
@@ -3765,129 +3769,141 @@ msgid ""
 "archives of them."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:555
+#: ui/dialogs/import-dialog.slint:568
 msgid ""
 "Supported: Thunderbird for Android and K-9 Mail settings (.k9s), Thunderbird "
 "profile exports (.zip) and prefs.js, Flectar Mail backups (.json), and mail "
 "saved as .mbox or .eml files or in ZIP archives of them."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:568
+#: ui/dialogs/import-dialog.slint:581
 msgid "Looking for accounts and mail…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:569
+#: ui/dialogs/import-dialog.slint:582 ui/dialogs/import-dialog.slint:862
 msgid "Importing accounts…"
 msgstr "正在导入账户…"
 
-#: ui/dialogs/import-dialog.slint:570 ui/dialogs/import-dialog.slint:582
+#: ui/dialogs/import-dialog.slint:583 ui/dialogs/import-dialog.slint:595
 msgid "Importing mail…"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:594
+#: ui/dialogs/import-dialog.slint:607
 msgid "One message · {1} of {2}"
 msgid_plural "{0} messages · {1} of {2}"
 msgstr[0] ""
 
-#: ui/dialogs/import-dialog.slint:621
+#: ui/dialogs/import-dialog.slint:634
 msgid ""
 "From Thunderbird for Android or K-9 Mail. Existing accounts are never "
 "changed."
 msgstr "来自 Android 版 Thunderbird 或 K-9 Mail。现有账户不会被更改。"
 
-#: ui/dialogs/import-dialog.slint:622
+#: ui/dialogs/import-dialog.slint:635
 msgid "From Thunderbird. Existing accounts are never changed."
 msgstr "来自 Thunderbird。现有账户不会被更改。"
 
-#: ui/dialogs/import-dialog.slint:660
+#: ui/dialogs/import-dialog.slint:673
 msgid "Already in Flectar Mail"
 msgstr "已在 Flectar Mail 中"
 
-#: ui/dialogs/import-dialog.slint:661
+#: ui/dialogs/import-dialog.slint:674
 msgid "Cannot be imported"
 msgstr "无法导入"
 
-#: ui/dialogs/import-dialog.slint:662
+#: ui/dialogs/import-dialog.slint:675
 msgid "Sign in with Google after import"
 msgstr "导入后使用 Google 登录"
 
-#: ui/dialogs/import-dialog.slint:663
+#: ui/dialogs/import-dialog.slint:676
 msgid "Sign in with Microsoft after import"
 msgstr "导入后使用 Microsoft 登录"
 
-#: ui/dialogs/import-dialog.slint:664
+#: ui/dialogs/import-dialog.slint:677
 msgid "{} · enter your password after import"
 msgstr "{} · 导入后输入密码"
 
-#: ui/dialogs/import-dialog.slint:670
+#: ui/dialogs/import-dialog.slint:683
 msgid "Named “{}” in the other app"
 msgstr "在另一应用中名为“{}”"
 
-#: ui/dialogs/import-dialog.slint:689
+#: ui/dialogs/import-dialog.slint:702
 msgid ""
 "Imported mail is kept only on this device. Messages already here are "
 "skipped, so an import can be repeated."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:709
+#: ui/dialogs/import-dialog.slint:722
 msgid "No folders chosen"
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:709
+#: ui/dialogs/import-dialog.slint:722
 msgid "One folder chosen, {}"
 msgid_plural "{n} folders chosen, {}"
 msgstr[0] ""
 
-#: ui/dialogs/import-dialog.slint:720
+#: ui/dialogs/import-dialog.slint:733
 msgid "Imported one account. Sign in to it to start syncing."
 msgid_plural "Imported {n} accounts. Sign in to each one to start syncing."
 msgstr[0] "已导入 {n} 个账户。请登录每个账户以开始同步。"
 
-#: ui/dialogs/import-dialog.slint:726
+#: ui/dialogs/import-dialog.slint:739
 msgid "No accounts were imported."
 msgstr "未导入任何账户。"
 
-#: ui/dialogs/import-dialog.slint:732
+#: ui/dialogs/import-dialog.slint:745
 msgid "One account was already in Flectar Mail and was left unchanged."
 msgid_plural ""
 "{n} accounts were already in Flectar Mail and were left unchanged."
 msgstr[0] "有 {n} 个账户已在 Flectar Mail 中，未作更改。"
 
-#: ui/dialogs/import-dialog.slint:738
+#: ui/dialogs/import-dialog.slint:751
 msgid ""
 "The theme, language, and other preferences from the backup were applied."
 msgstr "已应用备份中的主题、语言和其他偏好设置。"
 
-#: ui/dialogs/import-dialog.slint:745
+#: ui/dialogs/import-dialog.slint:758
 msgid "Imported one message."
 msgid_plural "Imported {} messages."
 msgstr[0] ""
 
-#: ui/dialogs/import-dialog.slint:746
+#: ui/dialogs/import-dialog.slint:759
 msgid "No new messages were imported."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:752
+#: ui/dialogs/import-dialog.slint:765
 msgid "One message was already here and was skipped."
 msgid_plural "{} messages were already here and were skipped."
 msgstr[0] ""
 
-#: ui/dialogs/import-dialog.slint:758
+#: ui/dialogs/import-dialog.slint:771
 msgid "One message larger than 128 MB was skipped."
 msgid_plural "{} messages larger than 128 MB were skipped."
 msgstr[0] ""
 
-#: ui/dialogs/import-dialog.slint:764
+#: ui/dialogs/import-dialog.slint:777
 msgid "The import was stopped. Importing the same mail again adds the rest."
 msgstr ""
 
-#: ui/dialogs/import-dialog.slint:776
+#: ui/dialogs/import-dialog.slint:789
 msgid "{} could not be imported: {}"
 msgstr "无法导入 {}：{}"
 
-#: ui/dialogs/import-dialog.slint:782
+#: ui/dialogs/import-dialog.slint:795
 msgid "Some mail in {} could not be read: {}"
 msgstr ""
+
+#: ui/dialogs/import-dialog.slint:862
+msgid "Importing mail… {}%"
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:920
+msgid "Show"
+msgstr ""
+
+#: ui/dialogs/import-dialog.slint:930 ui/views/files-view.slint:696
+msgid "Dismiss"
+msgstr "忽略"
 
 #: ui/dialogs/oauth-setup-dialog.slint:28 ui/views/onboarding-view.slint:206
 msgid "Sign-in settings"
@@ -4151,7 +4167,7 @@ msgstr "6 个月 · 推荐"
 msgid "1 year"
 msgstr "1 年"
 
-#: ui/dialogs/settings-dialog.slint:640 ui/views/mail-list-pane.slint:457
+#: ui/dialogs/settings-dialog.slint:640 ui/views/mail-list-pane.slint:458
 msgid "All mail"
 msgstr "全部邮件"
 
@@ -4990,22 +5006,22 @@ msgstr "无需离开键盘即可操作邮件。"
 msgid "Compose a new message"
 msgstr "撰写新邮件"
 
-#: ui/dialogs/settings-dialog.slint:2263 ui/views/mail-list-pane.slint:455
+#: ui/dialogs/settings-dialog.slint:2263 ui/views/mail-list-pane.slint:456
 msgid "Search mail"
 msgstr "搜索邮件"
 
 #. Local mail has no archive or spam.
-#: ui/dialogs/settings-dialog.slint:2264 ui/views/mail-list-pane.slint:1043
+#: ui/dialogs/settings-dialog.slint:2264 ui/views/mail-list-pane.slint:1046
 #: ui/views/mail-reading-pane.slint:406
 msgid "Archive"
 msgstr "归档"
 
-#: ui/dialogs/settings-dialog.slint:2265 ui/views/mail-list-pane.slint:537
+#: ui/dialogs/settings-dialog.slint:2265 ui/views/mail-list-pane.slint:538
 #: ui/views/mail-reading-pane.slint:390 ui/views/mail-reading-pane.slint:836
 msgid "Move to spam"
 msgstr "移到垃圾邮件"
 
-#: ui/dialogs/settings-dialog.slint:2266 ui/views/mail-list-pane.slint:546
+#: ui/dialogs/settings-dialog.slint:2266 ui/views/mail-list-pane.slint:547
 #: ui/views/mail-reading-pane.slint:373 ui/views/mail-reading-pane.slint:408
 #: ui/views/mail-reading-pane.slint:440
 msgid "Move to trash"
@@ -6169,153 +6185,149 @@ msgstr "被中断的更改需要先复核才能重试。请先刷新存储并检
 msgid "Resume"
 msgstr "继续"
 
-#: ui/views/files-view.slint:696
-msgid "Dismiss"
-msgstr "忽略"
-
 #: ui/views/files-view.slint:697
 msgid "Reviewed as completed"
 msgstr "确认为已完成"
 
-#: ui/views/mail-list-pane.slint:77
+#: ui/views/mail-list-pane.slint:78
 msgid "{n} message"
 msgid_plural "{n} messages"
 msgstr[0] "{n}条消息"
 
-#: ui/views/mail-list-pane.slint:416
+#: ui/views/mail-list-pane.slint:417
 msgid "This week"
 msgstr "本周"
 
-#: ui/views/mail-list-pane.slint:417
+#: ui/views/mail-list-pane.slint:418
 msgid "Last week"
 msgstr "上周"
 
-#: ui/views/mail-list-pane.slint:418
+#: ui/views/mail-list-pane.slint:419
 msgid "This month"
 msgstr "本月"
 
-#: ui/views/mail-list-pane.slint:419
+#: ui/views/mail-list-pane.slint:420
 msgid "Last month"
 msgstr "上个月"
 
-#: ui/views/mail-list-pane.slint:420
+#: ui/views/mail-list-pane.slint:421
 msgid "Earlier"
 msgstr "更早以前"
 
-#: ui/views/mail-list-pane.slint:452
+#: ui/views/mail-list-pane.slint:453
 msgid "Show folders"
 msgstr "显示文件夹"
 
-#: ui/views/mail-list-pane.slint:452
+#: ui/views/mail-list-pane.slint:453
 msgid "Hide folders"
 msgstr "隐藏文件夹"
 
-#: ui/views/mail-list-pane.slint:458
+#: ui/views/mail-list-pane.slint:459
 msgid "Unread"
 msgstr "未读"
 
-#: ui/views/mail-list-pane.slint:459
+#: ui/views/mail-list-pane.slint:460
 msgid "Starred"
 msgstr "星标"
 
-#: ui/views/mail-list-pane.slint:460 ui/views/mail-list-pane.slint:682
+#: ui/views/mail-list-pane.slint:461 ui/views/mail-list-pane.slint:685
 msgid "Has attachments"
 msgstr "含附件"
 
-#: ui/views/mail-list-pane.slint:463
+#: ui/views/mail-list-pane.slint:464
 msgid "Filter mail"
 msgstr "筛选邮件"
 
-#: ui/views/mail-list-pane.slint:466
+#: ui/views/mail-list-pane.slint:467
 msgid "Synchronizing mail"
 msgstr "正在同步邮件"
 
-#: ui/views/mail-list-pane.slint:466
+#: ui/views/mail-list-pane.slint:467
 msgid "Reload mail"
 msgstr "重新加载邮件"
 
-#: ui/views/mail-list-pane.slint:506
+#: ui/views/mail-list-pane.slint:507
 msgid "Select all messages on this page"
 msgstr "全选本页邮件"
 
-#: ui/views/mail-list-pane.slint:528
+#: ui/views/mail-list-pane.slint:529
 msgid "Archive selected message"
 msgstr "归档所选邮件"
 
-#: ui/views/mail-list-pane.slint:546
+#: ui/views/mail-list-pane.slint:547
 msgid "Delete selected permanently"
 msgstr "永久删除选定项"
 
-#: ui/views/mail-list-pane.slint:559 ui/views/mail-reading-pane.slint:1057
+#: ui/views/mail-list-pane.slint:560 ui/views/mail-reading-pane.slint:1057
 msgid "More message actions"
 msgstr "更多邮件操作"
 
-#: ui/views/mail-list-pane.slint:565 ui/views/mail-list-pane.slint:1041
+#: ui/views/mail-list-pane.slint:566 ui/views/mail-list-pane.slint:1044
 #: ui/views/mail-reading-pane.slint:405 ui/views/mail-reading-pane.slint:439
 msgid "Mark as read"
 msgstr "标记为已读"
 
-#: ui/views/mail-list-pane.slint:566 ui/views/mail-list-pane.slint:1041
+#: ui/views/mail-list-pane.slint:567 ui/views/mail-list-pane.slint:1044
 #: ui/views/mail-reading-pane.slint:405 ui/views/mail-reading-pane.slint:439
 msgid "Mark as unread"
 msgstr "标记为未读"
 
-#: ui/views/mail-list-pane.slint:567 ui/views/mail-list-pane.slint:1040
+#: ui/views/mail-list-pane.slint:568 ui/views/mail-list-pane.slint:1043
 #: ui/views/mail-reading-pane.slint:397 ui/views/mail-reading-pane.slint:431
 msgid "Star message"
 msgstr "加星标"
 
-#: ui/views/mail-list-pane.slint:568 ui/views/mail-list-pane.slint:1040
+#: ui/views/mail-list-pane.slint:569 ui/views/mail-list-pane.slint:1043
 #: ui/views/mail-reading-pane.slint:397 ui/views/mail-reading-pane.slint:431
 msgid "Remove star"
 msgstr "取消星标"
 
-#: ui/views/mail-list-pane.slint:677 ui/views/mail-list-pane.slint:860
+#: ui/views/mail-list-pane.slint:680 ui/views/mail-list-pane.slint:863
 msgid "(No subject)"
 msgstr "（无主题）"
 
-#: ui/views/mail-list-pane.slint:679
+#: ui/views/mail-list-pane.slint:682
 msgid "Profile: {}"
 msgstr "分组：{}"
 
-#: ui/views/mail-list-pane.slint:680
+#: ui/views/mail-list-pane.slint:683
 msgid "{} messages"
 msgstr "{} 封邮件"
 
-#: ui/views/mail-list-pane.slint:683
+#: ui/views/mail-list-pane.slint:686
 msgid "Replied"
 msgstr "已回复"
 
-#: ui/views/mail-list-pane.slint:803
+#: ui/views/mail-list-pane.slint:806
 msgid "{} messages in this conversation"
 msgstr "此会话中有 {} 封邮件"
 
-#: ui/views/mail-list-pane.slint:888
+#: ui/views/mail-list-pane.slint:891
 msgid "Account: {}"
 msgstr "账户：{}"
 
-#: ui/views/mail-list-pane.slint:1030
+#: ui/views/mail-list-pane.slint:1033
 msgid "Deselect {}"
 msgstr "取消选择 {}"
 
-#: ui/views/mail-list-pane.slint:1038
+#: ui/views/mail-list-pane.slint:1041
 msgid "Open in new tab"
 msgstr "在新标签页打开"
 
-#: ui/views/mail-list-pane.slint:1045 ui/views/mail-reading-pane.slint:373
+#: ui/views/mail-list-pane.slint:1048 ui/views/mail-reading-pane.slint:373
 #: ui/views/mail-reading-pane.slint:408 ui/views/mail-reading-pane.slint:440
 msgid "Delete permanently…"
 msgstr "永久删除…"
 
-#: ui/views/mail-list-pane.slint:1102 ui/views/onboarding-view.slint:138
+#: ui/views/mail-list-pane.slint:1105 ui/views/onboarding-view.slint:138
 msgid "Opening your mailbox…"
 msgstr "正在打开您的邮箱…"
 
-#: ui/views/mail-list-pane.slint:1102
+#: ui/views/mail-list-pane.slint:1105
 msgid "Nothing here"
 msgstr "这里没有内容"
 
-#: ui/views/mail-list-pane.slint:1103
+#: ui/views/mail-list-pane.slint:1106
 msgid "Try another folder or search term."
 msgstr "请尝试其他文件夹或搜索词。"
 

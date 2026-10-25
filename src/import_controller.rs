@@ -918,8 +918,14 @@ pub(super) fn register_import_callbacks(
             return;
         };
         // Focus can reach the entry points behind the dialog; reopening must
-        // not discard an import in progress or its report.
-        if app.global::<AccountImport>().get_open() {
+        // not discard an import in progress or its report. One going on in
+        // the background is shown again.
+        let ui = app.global::<AccountImport>();
+        if ui.get_open() {
+            return;
+        }
+        if ui.get_in_background() {
+            ui.set_open(true);
             return;
         }
         let opening = {
@@ -928,7 +934,6 @@ pub(super) fn register_import_callbacks(
             session.opening += 1;
             session.opening
         };
-        let ui = app.global::<AccountImport>();
         ui.set_stage("choose".into());
         ui.set_accounts(ModelRc::default());
         ui.set_profiles(ModelRc::default());
@@ -1383,6 +1388,7 @@ pub(super) fn register_import_callbacks(
         };
         let ui = app.global::<AccountImport>();
         ui.set_open(false);
+        ui.set_in_background(false);
         ui.set_accounts(ModelRc::default());
         ui.set_mail_rows(ModelRc::default());
         ui.set_destinations(ModelRc::default());

@@ -6,7 +6,7 @@ use slint::{Model, ModelRc, VecModel};
 use std::{cell::RefCell, rc::Rc};
 
 slint::slint! {
-    import { AccountImport, ImportDialog } from "../ui/dialogs/import-dialog.slint";
+    import { AccountImport, ImportActivity, ImportDialog } from "../ui/dialogs/import-dialog.slint";
     export { AccountImport, ImportAccountRow, ImportFindingRow, ImportProfileRow, ImportFailureRow, ImportMailRow } from "../ui/dialogs/import-dialog.slint";
 
     export component ImportHarness inherits Window {
@@ -23,7 +23,14 @@ slint::slint! {
             height: 10px;
         }
 
-        ImportDialog {
+        // The mail list's activity row, at the top as in the app.
+        ImportActivity {
+            y: 0px;
+            width: parent.width;
+            compact: root.compact;
+        }
+
+        if AccountImport.open : ImportDialog {
             width: parent.width;
             height: parent.height;
             compact: root.compact;
@@ -435,16 +442,32 @@ fn mail_is_chosen_imported_and_reported(ui: &ImportHarness, window: &MinimalSoft
         events.borrow().iter().any(|event| event == "stop"),
         "Stop is offered"
     );
+    state.set_stopping(true);
+    render(window, 800, 700, "stopping-desktop");
+
+    // Escape, or Continue in background, hides the dialog but not the
+    // import: a row above the mail list takes over until it is shown again.
     events.borrow_mut().clear();
     ui.window().dispatch_event(WindowEvent::KeyPressed {
         text: slint::platform::Key::Escape.into(),
     });
+    assert!(events.borrow().is_empty(), "importing mail is not closed");
+    assert!(!state.get_open() && state.get_in_background());
+    render(window, 800, 700, "background-running");
+    // Show, at the row's right end, brings the dialog back.
+    for x in (500..800).rev().step_by(6) {
+        click(ui, x as f32, 22.0);
+        if state.get_open() {
+            break;
+        }
+    }
+    assert!(state.get_open(), "Show reopens the dialog");
+    render(window, 800, 700, "importing-mail-reopened");
+    click_footer(ui, true, || !state.get_open());
     assert!(
-        events.borrow().is_empty(),
-        "importing mail cannot be dismissed"
+        !state.get_open() && state.get_in_background(),
+        "Continue in background hides it"
     );
-    state.set_stopping(true);
-    render(window, 800, 700, "stopping-desktop");
 
     state.set_account_results(false);
     state.set_imported(0);
@@ -459,6 +482,8 @@ fn mail_is_chosen_imported_and_reported(ui: &ImportHarness, window: &MinimalSoft
         error: "unexpected end of file".into(),
     }])));
     state.set_stage("done".into());
+    render(window, 800, 700, "background-done");
+    state.set_open(true);
     render(window, 800, 700, "done-mail-desktop");
     click_footer(ui, true, || {
         events.borrow().iter().any(|event| event == "show-mail")
