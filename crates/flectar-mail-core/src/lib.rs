@@ -328,6 +328,25 @@ fn gmail_needs_google_sign_in() -> CoreError {
     CoreError::Auth("Gmail accounts sign in with Google, not with a password".into())
 }
 
+/// Whether an account stored as `stored` takes the address `signed_in` that
+/// its provider reported for a sign-in. Google ignores dots in Gmail
+/// addresses and treats googlemail.com as gmail.com, so an imported login can
+/// be another spelling of the address Google reports. Addresses that differ
+/// only in case keep the stored spelling.
+fn sign_in_respells(provider: Provider, stored: &str, signed_in: &str) -> Result<bool> {
+    if signed_in.eq_ignore_ascii_case(stored) {
+        Ok(false)
+    } else if provider == Provider::Gmail && accounts::same_mailbox(signed_in, stored) {
+        Ok(true)
+    } else {
+        // Refuse to graft another mailbox's tokens onto this account. Signing
+        // in as a different address is "add account", not "reauth".
+        Err(CoreError::Auth(format!(
+            "signed in as {signed_in} but this account is {stored}"
+        )))
+    }
+}
+
 fn normalize_account_password(value: String) -> String {
     // Password controls are one-line inputs. Apply that invariant at the core
     // boundary too so clipboard line endings cannot reach protocol encoders.
@@ -336,6 +355,38 @@ fn normalize_account_password(value: String) -> String {
         .chars()
         .filter(|character| !matches!(character, '\r' | '\n'))
         .collect()
+}
+
+#[cfg(test)]
+mod sign_in_address_tests {
+    use super::*;
+
+    #[test]
+    fn gmail_sign_ins_take_googles_spelling_of_the_same_mailbox() {
+        use Provider::{Gmail, Microsoft};
+        for (provider, stored, signed_in, respells) in [
+            (Gmail, "JohnDoe@gmail.com", "johndoe@gmail.com", Some(false)),
+            (Gmail, "johndoe@gmail.com", "john.doe@gmail.com", Some(true)),
+            (Gmail, "J.Doe@googlemail.com", "jdoe@gmail.com", Some(true)),
+            (Gmail, "johndoe@gmail.com", "jane@gmail.com", None),
+            // Workspace addresses and Microsoft sign-ins keep their dots.
+            (Gmail, "jane.doe@example.com", "janedoe@example.com", None),
+            (Microsoft, "johndoe@gmail.com", "john.doe@gmail.com", None),
+            (Microsoft, "Jo@Contoso.test", "jo@contoso.test", Some(false)),
+        ] {
+            assert_eq!(
+                sign_in_respells(provider, stored, signed_in).ok(),
+                respells,
+                "{stored} signed in as {signed_in}"
+            );
+        }
+        assert_eq!(
+            sign_in_respells(Gmail, "johndoe@gmail.com", "jane@gmail.com")
+                .unwrap_err()
+                .to_string(),
+            "auth failed: signed in as jane@gmail.com but this account is johndoe@gmail.com"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -938,6 +989,25 @@ impl Core {
         self.handles.write().await.insert(handle.account_id, handle);
     }
 
+    /// Replace the account's mail worker with one that uses its stored
+    /// configuration, after a change the running worker would not see.
+    async fn restart_actor(&self, account_id: i64) {
+        if let Some(handle) = self.handles.write().await.remove(&account_id) {
+            handle.abort();
+        }
+        match self
+            .db
+            .read(move |conn| repo::accounts::get_config(conn, account_id))
+            .await
+        {
+            Ok(Some(cfg)) => self.spawn_actor(cfg).await,
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(account_id, %error, "could not restart the mail worker");
+            }
+        }
+    }
+
     async fn spawn_cal_task(&self, account_id: i64) {
         let handle = caldav::task::spawn(
             self.calendar_db.clone(),
@@ -1133,7 +1203,8 @@ impl Core {
                 let transaction = conn.transaction()?;
                 let mut imported = 0usize;
                 for config in &configs {
-                    if repo::accounts::find_by_email(&transaction, config.email.trim())?.is_some() {
+                    if repo::accounts::find_by_mailbox(&transaction, config.email.trim())?.is_some()
+                    {
                         continue;
                     }
                     repo::accounts::insert_with_sync_state(
@@ -1414,9 +1485,19 @@ impl Core {
             .db
             .read({
                 let email = args.email.clone();
-                move |conn| repo::accounts::find_by_email(conn, &email)
+                move |conn| repo::accounts::find_by_mailbox(conn, &email)
             })
             .await?;
+        // A Gmail account is edited under the spelling it was added with:
+        // the update below would take another spelling for another user.
+        if let Some(existing) = &existing
+            && !existing.email.eq_ignore_ascii_case(&args.email)
+        {
+            return Err(CoreError::Auth(format!(
+                "{} is already added",
+                existing.email
+            )));
+        }
         // POP3 mail exists only on this device, so it can't move to or from
         // a protocol that keeps mail on the server.
         if let Some(existing) = &existing
@@ -1747,7 +1828,7 @@ impl Core {
             .db
             .read({
                 let email = email.clone();
-                move |conn| repo::accounts::find_by_email(conn, &email)
+                move |conn| repo::accounts::find_by_mailbox(conn, &email)
             })
             .await?;
         if let Some(existing) = existing {
@@ -1758,50 +1839,7 @@ impl Core {
                     existing.provider.as_str()
                 )));
             }
-
-            let id = existing.id;
-            let display_name = outcome.display_name.clone();
-            let avatar_url = outcome.avatar_url.clone();
-            self.tokens
-                .store_initial(
-                    id,
-                    outcome.access_token,
-                    outcome.expires_in,
-                    outcome.refresh_token,
-                    outcome.client_id,
-                    outcome.client_secret,
-                )
-                .await?;
-            self.db
-                .write(move |conn| {
-                    repo::accounts::update_oauth_identity(
-                        conn,
-                        id,
-                        display_name.as_deref(),
-                        avatar_url.as_deref(),
-                    )
-                })
-                .await?;
-            self.db
-                .write(move |conn| repo::accounts::set_sync_state(conn, id, "idle"))
-                .await?;
-
-            if let Some(handle) = self.handles.read().await.get(&id).cloned() {
-                handle.send(SyncCmd::SyncNow { complete: None });
-            } else {
-                let cfg = self
-                    .db
-                    .read(move |conn| repo::accounts::get_config(conn, id))
-                    .await?
-                    .ok_or_else(|| CoreError::NotFound("account".into()))?;
-                self.spawn_actor(cfg).await;
-            }
-
-            return self
-                .db
-                .read(move |conn| repo::accounts::get(conn, id))
-                .await?
-                .ok_or_else(|| CoreError::NotFound("account".into()));
+            return self.reconnect(existing, outcome).await;
         }
 
         let display_name = outcome.display_name.clone();
@@ -1898,7 +1936,7 @@ impl Core {
         let outcome = tokio::select! {
             // Hint the provider at the account being repaired so the browser
             // preselects it instead of silently reusing whatever session is
-            // active (which then fails the email match below).
+            // active (which then fails the mailbox check).
             r = oauth::flow::authorize_with_broker(
                 account.provider,
                 consent_extra,
@@ -1910,37 +1948,18 @@ impl Core {
                 return Err(CoreError::Auth("sign-in cancelled".into()));
             }
         };
-        // Refuse to graft another mailbox's tokens onto this account. Signing in
-        // as a different address is "add account", not "reauth".
-        if !outcome.email.eq_ignore_ascii_case(&account.email) {
-            return Err(CoreError::Auth(format!(
-                "signed in as {} but this account is {}",
-                outcome.email, account.email
-            )));
-        }
+        self.reconnect(account, outcome).await
+    }
 
-        let display_name = outcome.display_name.clone();
-        let avatar_url = outcome.avatar_url.clone();
-        self.tokens
-            .store_initial(
-                account_id,
-                outcome.access_token,
-                outcome.expires_in,
-                outcome.refresh_token,
-                outcome.client_id,
-                outcome.client_secret,
-            )
-            .await?;
-        self.db
-            .write(move |conn| {
-                repo::accounts::update_oauth_identity(
-                    conn,
-                    account_id,
-                    display_name.as_deref(),
-                    avatar_url.as_deref(),
-                )
-            })
-            .await?;
+    /// Store a completed sign-in for an existing account and resume its sync,
+    /// which waits paused while the account needs a sign-in.
+    async fn reconnect(
+        &self,
+        account: Account,
+        outcome: oauth::flow::OAuthOutcome,
+    ) -> Result<Account> {
+        let account_id = account.id;
+        self.store_sign_in(&account, outcome).await?;
 
         // Clear needs_reauth and wake the actor. The reauth pause loop retries
         // its connect on the next SyncNow; if no actor is live (e.g. reauth
@@ -1966,6 +1985,64 @@ impl Core {
             .read(move |conn| repo::accounts::get(conn, account_id))
             .await?
             .ok_or_else(|| CoreError::NotFound("account".into()))
+    }
+
+    /// Store the tokens and profile of a sign-in for an existing account.
+    /// When the provider spells the account's address differently, such as
+    /// Gmail's dotted form of an imported login, the account takes that
+    /// spelling and its mail worker restarts with it.
+    async fn store_sign_in(
+        &self,
+        account: &Account,
+        outcome: oauth::flow::OAuthOutcome,
+    ) -> Result<()> {
+        let account_id = account.id;
+        let respelled = sign_in_respells(account.provider, &account.email, &outcome.email)?;
+        if respelled {
+            let email = outcome.email.clone();
+            self.db
+                .write(move |conn| {
+                    let transaction = conn.transaction()?;
+                    repo::accounts::set_signed_in_address(&transaction, account_id, &email)?;
+                    transaction.commit()?;
+                    Ok(())
+                })
+                .await?;
+        }
+
+        let display_name = outcome.display_name.clone();
+        let avatar_url = outcome.avatar_url.clone();
+        let stored = async {
+            self.tokens
+                .store_initial(
+                    account_id,
+                    outcome.access_token,
+                    outcome.expires_in,
+                    outcome.refresh_token,
+                    outcome.client_id,
+                    outcome.client_secret,
+                )
+                .await?;
+            self.db
+                .write(move |conn| {
+                    repo::accounts::update_oauth_identity(
+                        conn,
+                        account_id,
+                        display_name.as_deref(),
+                        avatar_url.as_deref(),
+                    )
+                })
+                .await
+        }
+        .await;
+        // Only an account that never signed in can have another spelling of
+        // its Gmail address, so its worker waits paused with no work in
+        // flight. It restarts with the new spelling even when the tokens
+        // could not be stored.
+        if respelled {
+            self.restart_actor(account_id).await;
+        }
+        stored
     }
 
     async fn purge_calendar_account(&self, account_id: i64) -> Result<()> {
@@ -5971,22 +6048,7 @@ impl Core {
                 return Err(CoreError::Auth("sign-in cancelled".into()));
             }
         };
-        if !outcome.email.eq_ignore_ascii_case(&account.email) {
-            return Err(CoreError::Auth(format!(
-                "consent was granted for {} - expected {}",
-                outcome.email, account.email
-            )));
-        }
-        self.tokens
-            .store_initial(
-                account_id,
-                outcome.access_token,
-                outcome.expires_in,
-                outcome.refresh_token,
-                outcome.client_id,
-                outcome.client_secret,
-            )
-            .await?;
+        self.store_sign_in(&account, outcome).await?;
 
         self.attach_google_calendar(account_id).await
     }
@@ -6032,22 +6094,7 @@ impl Core {
                         return Err(CoreError::Auth("sign-in cancelled".into()));
                     }
                 };
-                if !outcome.email.eq_ignore_ascii_case(&account.email) {
-                    return Err(CoreError::Auth(format!(
-                        "consent was granted for {} - expected {}",
-                        outcome.email, account.email
-                    )));
-                }
-                self.tokens
-                    .store_initial(
-                        account_id,
-                        outcome.access_token,
-                        outcome.expires_in,
-                        outcome.refresh_token,
-                        outcome.client_id,
-                        outcome.client_secret,
-                    )
-                    .await?;
+                self.store_sign_in(&account, outcome).await?;
                 self.tokens
                     .access_token_for_scope(account_id, Provider::Microsoft, scope)
                     .await
@@ -10013,6 +10060,39 @@ mod account_backup_import_tests {
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].sync_state, "needs_reauth");
         assert_eq!(configs[0].incoming_host, "imap.example.com");
+    }
+
+    #[tokio::test]
+    async fn imported_gmail_configuration_merges_by_mailbox() {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::start_mail_ui(Paths::for_tests(temp.path()))
+            .await
+            .unwrap();
+        let gmail = |email: &str| PortableAccountConfig {
+            provider: Provider::Gmail,
+            auth_kind: AuthKind::Oauth2,
+            mail_protocol: MailProtocol::Gmail,
+            ..portable_imap(email)
+        };
+
+        assert_eq!(
+            core.import_account_configs(vec![
+                gmail("jane.doe@gmail.com"),
+                gmail("JaneDoe@googlemail.com"),
+            ])
+            .await
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            core.import_account_configs(vec![gmail("janedoe@gmail.com")])
+                .await
+                .unwrap(),
+            0
+        );
+        let accounts = core.list_accounts().await.unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].email, "jane.doe@gmail.com");
     }
 }
 
