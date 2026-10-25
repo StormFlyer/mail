@@ -2174,11 +2174,12 @@ export component SettingsDialog inherits Rectangle {
                                 vertical-stretch: 0;
                                 transfer-card := SettingsCard { title: @tr("Transfer account setup"); description: @tr("Import accounts and mail from Thunderbird, K-9 Mail, mail files, or a backup, or export one connected account and your preferences." | "Import accounts and mail from Thunderbird, K-9 Mail, mail files, or a backup, or export {n} connected accounts and your preferences." % root.connected_accounts.length); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
                                 Image { x: 20px; y: transfer-note.y + (transfer-note.height - self.height) / 2; width: LayoutMetrics.icon-size; height: LayoutMetrics.icon-size; source: @image-url("../icons/lucide/outline/check-circle.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
-                                transfer-note := Text { x: 48px; y: transfer-card.content-y + 14px; width: root.compact ? parent.width - 68px : parent.width - 360px; height: max(42px, self.preferred-height); text: @tr("Passwords and OAuth tokens stay in the system keyring. A restored device asks you to sign in securely."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
-                                HorizontalBox {
-                                    x: root.compact ? 20px : parent.width - 300px;
+                                transfer-note := Text { x: 48px; y: transfer-card.content-y + 14px; width: root.compact ? parent.width - 68px : parent.width - 352px; height: max(42px, self.preferred-height); text: @tr("Passwords and OAuth tokens stay in the system keyring. A restored device asks you to sign in securely."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
+                                // Unpadded, so the buttons line up with the other cards'.
+                                HorizontalLayout {
+                                    x: root.compact ? 20px : parent.width - self.width - 20px;
                                     y: root.compact ? transfer-note.y + transfer-note.height + 25px : transfer-note.y + (transfer-note.height - self.height) / 2;
-                                    width: root.compact ? parent.width - 40px : 280px;
+                                    width: root.compact ? parent.width - 40px : 264px;
                                     height: 32px;
                                     spacing: 8px;
                                     Button { text: @tr("Import"); icon: @image-url("../icons/lucide/outline/download.svg"); has-icon: true; clicked => { root.import_accounts(); } }
