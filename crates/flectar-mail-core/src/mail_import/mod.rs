@@ -12,6 +12,7 @@
 
 pub(crate) mod scan;
 pub(crate) mod state;
+mod upload;
 mod write;
 
 pub use scan::{scan_files, scan_folder};

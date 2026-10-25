@@ -259,7 +259,7 @@ fn has_permanent_smtp_reply(message: &str) -> bool {
     })
 }
 
-fn is_connection_failure(msg: &str) -> bool {
+pub(crate) fn is_connection_failure(msg: &str) -> bool {
     let msg = msg.to_ascii_lowercase();
     msg.contains("connect")
         || msg.contains("broken")
@@ -577,7 +577,10 @@ fn valid_uid(uid: Option<i64>) -> Option<u32> {
 /// mailbox syncs, and an undo or a flag change can come first. SEARCH HEADER
 /// matches substrings, or words on some servers, so each candidate's header
 /// is compared whole, and copies awaiting expunge don't count.
-async fn uid_by_message_id(session: &mut Session, message_id: Option<&str>) -> Result<Option<u32>> {
+pub(crate) async fn uid_by_message_id(
+    session: &mut Session,
+    message_id: Option<&str>,
+) -> Result<Option<u32>> {
     let Some(bare) = message_id
         .map(|id| id.trim_matches(['<', '>']))
         .filter(|id| !id.is_empty())

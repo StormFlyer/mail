@@ -1347,7 +1347,7 @@ pub(super) async fn emit_sync_status(ctx: &SyncCtx, account_id: i64) {
     }
 }
 
-async fn connect(ctx: &SyncCtx, config: &AccountConfig) -> Result<Session> {
+pub(crate) async fn connect(ctx: &SyncCtx, config: &AccountConfig) -> Result<Session> {
     crate::events::sync_diagnostic("imap_credentials", Some(config.id), "loading");
     let creds = imap_credentials(ctx, config).await?;
     crate::events::sync_diagnostic("imap_connect", Some(config.id), "connecting");
@@ -1485,7 +1485,7 @@ async fn run_cycle(
     Ok(false)
 }
 
-async fn discover_folders(
+pub(crate) async fn discover_folders(
     ctx: &SyncCtx,
     config: &AccountConfig,
     session: &mut Session,

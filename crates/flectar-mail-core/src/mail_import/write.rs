@@ -34,7 +34,7 @@ const BATCH_WAIT: Duration = Duration::from_millis(250);
 /// Originals written at the same time.
 const PARALLEL_WRITES: usize = 8;
 /// Messages read and parsed ahead of those being stored.
-const READ_AHEAD: usize = 4;
+pub(super) const READ_AHEAD: usize = 4;
 const READ_BUFFER: usize = 256 * 1024;
 /// The largest message imported. Larger ones are skipped, since originals
 /// are read back with this limit.
@@ -45,7 +45,9 @@ const MAX_MESSAGE_BYTES: usize = crate::MAX_CACHED_MESSAGE_BYTES;
 pub enum Destination {
     /// Local mail, which the first import creates.
     Local,
-    /// The folders of a POP3 account, which exist only on this device.
+    /// The folders of an account: a POP3 account's, which exist only on this
+    /// device, or those on the server of an IMAP, JMAP or Gmail account,
+    /// which the mail is uploaded to.
     Account(i64),
 }
 
@@ -57,6 +59,10 @@ pub struct MailImportRequest {
     pub destination: Destination,
     /// A folder to put the source's folders in, instead of next to the
     /// destination's own. Folders for a purpose stay ordinary folders in it.
+    /// Mail uploaded to a server always goes in one, so it never mixes with
+    /// the account's own mail: this one, or else one named
+    /// `loose_folder_name`, which then also holds the messages chosen one by
+    /// one.
     pub parent_folder: Option<String>,
     /// The name of the folder that messages chosen one by one go into.
     pub loose_folder_name: String,
@@ -93,6 +99,9 @@ pub struct MailImportReport {
     /// Whether the import was stopped before it was done. What it stored
     /// until then stays.
     pub stopped: bool,
+    /// Messages a server refused, and the first reason it gave.
+    pub refused: u64,
+    pub refusal: Option<String>,
 }
 
 impl crate::Core {
@@ -124,9 +133,19 @@ impl crate::Core {
         match protocol {
             MailProtocol::Pop3 | MailProtocol::Local => {}
             MailProtocol::Gmail | MailProtocol::Imap | MailProtocol::Jmap => {
-                return Err(CoreError::Other(
-                    "mail is only imported into folders that exist on this device alone".into(),
-                ));
+                return self
+                    .upload_mail(
+                        super::upload::Upload {
+                            account_id,
+                            protocol,
+                            source,
+                            chosen,
+                            parent_folder: parent_folder.unwrap_or(loose_folder_name),
+                        },
+                        &progress,
+                        stop,
+                    )
+                    .await;
             }
         }
 
@@ -345,7 +364,7 @@ fn role_for(protocol: MailProtocol, kind: FolderKind) -> Option<&'static str> {
 
 /// A folder name a path level can hold: the separator and control
 /// characters become `_`, and it has a length a folder name may have.
-fn folder_name(name: &str) -> String {
+pub(super) fn folder_name(name: &str) -> String {
     let name = name
         .trim()
         .chars()
@@ -364,7 +383,7 @@ fn folder_name(name: &str) -> String {
 }
 
 /// What the reader sends.
-enum Item {
+pub(super) enum Item {
     Message(Box<Incoming>),
     TooLarge {
         folder: usize,
@@ -387,14 +406,14 @@ impl Item {
     }
 }
 
-struct Incoming {
-    folder: usize,
-    raw: Vec<u8>,
-    stored_at: Option<i64>,
-    recorded: Recorded,
-    parsed: ParsedBody,
+pub(super) struct Incoming {
+    pub(super) folder: usize,
+    pub(super) raw: Vec<u8>,
+    pub(super) stored_at: Option<i64>,
+    pub(super) recorded: Recorded,
+    pub(super) parsed: ParsedBody,
     /// Bytes of the chosen folders read once this message was.
-    read: u64,
+    pub(super) read: u64,
 }
 
 /// Why reading a folder's file ended early.
@@ -406,7 +425,7 @@ enum Halt {
 
 /// Reads the chosen folders' messages in order, until all are read, the
 /// import is stopped, or the import no longer receives them.
-fn read_folders(
+pub(super) fn read_folders(
     source: &MailSource,
     chosen: &[usize],
     sender: &mpsc::Sender<Item>,
@@ -535,7 +554,7 @@ fn read_file(
 }
 
 /// A message to store, unless it is empty or its app had deleted it.
-fn incoming(
+pub(super) fn incoming(
     folder: usize,
     raw: Vec<u8>,
     stored_at: Option<i64>,

@@ -3351,13 +3351,25 @@ impl Core {
         parent_folder_id: Option<i64>,
         name: String,
     ) -> Result<()> {
+        self.create_folder_in(account_id, parent_folder_id, name)
+            .await
+            .map(|_| ())
+    }
+
+    /// Create a folder, here and on the account's server, and return its id.
+    pub(crate) async fn create_folder_in(
+        &self,
+        account_id: i64,
+        parent_folder_id: Option<i64>,
+        name: String,
+    ) -> Result<i64> {
         let name = validate_folder_leaf(&name)?;
         let protocol = self.account_protocol(account_id).await?;
         let parent = match parent_folder_id {
             Some(folder_id) => Some(self.folder_for_child(account_id, folder_id).await?),
             None => None,
         };
-        match protocol {
+        let folder_id = match protocol {
             MailProtocol::Gmail => {
                 let config = self.folder_account_config(account_id).await?;
                 if name.contains('/') {
@@ -3370,6 +3382,15 @@ impl Core {
                     .map(|parent| format!("{}/{}", parent.path, name))
                     .unwrap_or(name);
                 sync::gmail::create_user_folder(&self.sync_ctx(), &config, &full_name).await?;
+                self.db
+                    .read(move |conn| {
+                        repo::folders::list(conn, Some(account_id))?
+                            .into_iter()
+                            .find(|folder| folder.path == full_name)
+                            .map(|folder| folder.id)
+                            .ok_or_else(|| CoreError::NotFound(format!("Gmail folder {full_name}")))
+                    })
+                    .await?
             }
             MailProtocol::Jmap => {
                 let config = self.folder_account_config(account_id).await?;
@@ -3413,9 +3434,9 @@ impl Core {
                         )?;
                         repo::folders::set_parent(conn, folder_id, parent_local_id)?;
                         repo::folders::set_permissions(conn, folder_id, permissions)?;
-                        Ok(())
+                        Ok(folder_id)
                     })
-                    .await?;
+                    .await?
             }
             MailProtocol::Imap => {
                 let config = self.folder_account_config(account_id).await?;
@@ -3458,9 +3479,9 @@ impl Core {
                             None,
                         )?;
                         repo::folders::set_parent(conn, folder_id, parent_local_id)?;
-                        Ok(())
+                        Ok(folder_id)
                     })
-                    .await?;
+                    .await?
             }
             MailProtocol::Pop3 | MailProtocol::Local => {
                 let delimiter = repo::folders::DEVICE_DELIMITER;
@@ -3484,13 +3505,60 @@ impl Core {
                             repo::folders::upsert(&tx, account_id, &path, Some(delimiter), None)?;
                         repo::folders::set_parent(&tx, folder_id, parent_local_id)?;
                         tx.commit()?;
-                        Ok(())
+                        Ok(folder_id)
                     })
-                    .await?;
+                    .await?
             }
-        }
+        };
         self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
-        Ok(())
+        Ok(folder_id)
+    }
+
+    /// The folder named `name` in `parent`, or at the top of the account,
+    /// found the way [`Self::create_folder_in`] names the folders it creates.
+    pub(crate) async fn child_folder(
+        &self,
+        account_id: i64,
+        parent_folder_id: Option<i64>,
+        name: &str,
+    ) -> Result<Option<i64>> {
+        let protocol = self.account_protocol(account_id).await?;
+        let name = name.trim().to_owned();
+        self.db
+            .read(move |conn| {
+                let folders = repo::folders::list(conn, Some(account_id))?;
+                let leaf = match protocol {
+                    MailProtocol::Imap => imap::encode_mailbox_name(&name),
+                    _ => name,
+                };
+                let path = match parent_folder_id {
+                    Some(id) => {
+                        let parent = folders
+                            .iter()
+                            .find(|folder| folder.id == id)
+                            .ok_or_else(|| CoreError::NotFound(format!("folder {id}")))?;
+                        let delimiter = match protocol {
+                            MailProtocol::Gmail => "/".to_owned(),
+                            // As for a new IMAP folder: its parent's, or
+                            // the account's.
+                            MailProtocol::Imap => std::iter::once(parent)
+                                .chain(&folders)
+                                .find_map(|folder| {
+                                    folder.delimiter.clone().filter(|value| !value.is_empty())
+                                })
+                                .unwrap_or_else(|| "/".into()),
+                            _ => folder_path_delimiter(protocol, parent),
+                        };
+                        format!("{}{delimiter}{leaf}", parent.path)
+                    }
+                    None => leaf,
+                };
+                Ok(folders
+                    .iter()
+                    .find(|folder| folder.path == path)
+                    .map(|folder| folder.id))
+            })
+            .await
     }
 
     pub async fn rename_folder(&self, folder_id: i64, name: String) -> Result<()> {

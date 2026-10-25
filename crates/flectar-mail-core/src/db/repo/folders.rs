@@ -545,6 +545,17 @@ pub fn set_last_seen_uid(conn: &Connection, id: i64, uid: i64) -> Result<()> {
     Ok(())
 }
 
+/// Let the sync fetch again the messages above `uid`, such as those
+/// uploaded to the folder before its first sync, which would otherwise count
+/// as history and could fall outside the account's history window.
+pub fn lower_last_seen_uid(conn: &Connection, id: i64, uid: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE folders SET last_seen_uid = MIN(last_seen_uid, ?2) WHERE id = ?1",
+        params![id, uid],
+    )?;
+    Ok(())
+}
+
 pub fn set_backfill(conn: &Connection, id: i64, cursor: Option<i64>, done: bool) -> Result<()> {
     conn.execute(
         "UPDATE folders SET backfill_cursor = ?2, backfill_done = ?3 WHERE id = ?1",
