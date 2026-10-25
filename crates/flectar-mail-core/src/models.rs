@@ -962,6 +962,13 @@ pub struct ThreadSummary {
     pub snoozed_until: Option<i64>,
     /// Ids of labels present on any message in the thread.
     pub labels: Vec<i64>,
+    /// The one-time code the newest message asks its reader to enter.
+    pub verification_code: Option<String>,
+    /// The thread's first file, from its newest message that has one.
+    /// Inline images are not files.
+    pub first_attachment: Option<AttachmentMeta>,
+    /// How many files the thread holds.
+    pub attachment_total: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1646,6 +1653,54 @@ impl TimeFormat {
     }
 }
 
+/// The application icon shown by the window, tray, Dock, and launcher.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppIcon {
+    #[default]
+    Orange,
+    Graphite,
+    Light,
+    Blue,
+    Green,
+    Purple,
+}
+
+impl AppIcon {
+    pub const ALL: [Self; 6] = [
+        Self::Orange,
+        Self::Graphite,
+        Self::Light,
+        Self::Blue,
+        Self::Green,
+        Self::Purple,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Orange => "orange",
+            Self::Graphite => "graphite",
+            Self::Light => "light",
+            Self::Blue => "blue",
+            Self::Green => "green",
+            Self::Purple => "purple",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|icon| icon.as_str() == value)
+    }
+}
+
+/// Unknown values, including those written by newer versions, fall back to
+/// the default icon instead of failing the whole settings blob.
+impl<'de> Deserialize<'de> for AppIcon {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::parse(&value).unwrap_or_default())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -1683,6 +1738,8 @@ pub struct Settings {
     /// the default semantic palette.
     #[serde(default)]
     pub monochrome_sidebar_icons: bool,
+    #[serde(default)]
+    pub app_icon: AppIcon,
     /// UI language: "system" follows the OS locale, otherwise a code like "en".
     #[serde(default = "default_language")]
     pub language: String,
@@ -1959,6 +2016,7 @@ pub struct StartupPresentation {
     /// Whether a background launch may stay in the system tray without
     /// first showing the window.
     pub close_to_tray: bool,
+    pub app_icon: AppIcon,
 }
 fn default_theme_preset() -> String {
     "default".into()
@@ -1977,6 +2035,7 @@ impl Default for Settings {
             workspace_list_pane_width: default_workspace_list_pane_width(),
             window_frame: default_window_frame(),
             monochrome_sidebar_icons: false,
+            app_icon: AppIcon::default(),
             language: "system".into(),
             time_format: TimeFormat::default(),
             calendar_week_start: default_calendar_week_start(),
@@ -2106,12 +2165,49 @@ pub struct CalendarEvent {
     pub method: Option<String>,
 }
 
-/// A discovered CalDAV calendar collection.
+/// How a calendar connection reaches its server. An account holds at most
+/// one Google or Microsoft connection, which signs in with the account's own
+/// OAuth tokens, and any number of CalDAV connections with their own
+/// username and app password (for example a shared mailbox's calendar).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CalendarConnectionKind {
+    /// Google Calendar over CalDAV, enumerated with the Calendar API.
+    Google,
+    /// Any CalDAV server.
+    Generic,
+    /// Outlook and Microsoft 365 over Microsoft Graph.
+    Microsoft,
+}
+
+impl CalendarConnectionKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Google => "google",
+            Self::Generic => "generic",
+            Self::Microsoft => "microsoft",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "google" => Some(Self::Google),
+            "generic" => Some(Self::Generic),
+            "microsoft" => Some(Self::Microsoft),
+            _ => None,
+        }
+    }
+}
+
+/// A calendar collection synced through one connection.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Calendar {
     pub id: i64,
     pub account_id: i64,
+    pub connection_id: i64,
+    /// The owning connection's kind.
+    pub kind: CalendarConnectionKind,
     pub url: String,
     pub display_name: Option<String>,
     pub color: Option<String>,
@@ -2121,17 +2217,20 @@ pub struct Calendar {
     pub last_synced_at: Option<i64>,
 }
 
-/// Per-account calendar-provider connection shown in account settings.
+/// A calendar server connected to an account, shown in account settings.
+/// Events created in its calendars use the account's address as organizer.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarConnection {
+    pub id: i64,
     pub account_id: i64,
-    /// google | microsoft | generic
-    pub kind: String,
+    pub kind: CalendarConnectionKind,
     pub base_url: String,
     pub username: String,
     pub enabled: bool,
     pub last_error: Option<String>,
+    /// Display names of the connection's calendars, in sidebar order.
+    pub calendars: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2199,14 +2298,16 @@ pub struct UpdateEventArgs {
 // Deliberately no `Debug`: it would print the CalDAV app password.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectCalendarArgs {
+pub struct ConnectCaldavArgs {
     pub account_id: i64,
-    /// "google" | "generic"
-    pub kind: String,
+    /// The CalDAV connection to change; None adds a new one.
     #[serde(default)]
-    pub url: Option<String>,
+    pub connection_id: Option<i64>,
+    /// A server address, or one calendar's own address.
+    pub url: String,
     #[serde(default)]
-    pub username: Option<String>,
+    pub username: String,
+    /// Required for a new connection; an empty one keeps the saved password.
     #[serde(default)]
     pub password: Option<String>,
 }
@@ -2300,6 +2401,7 @@ mod tests {
         assert_eq!(s.ai_base_url, crate::ai::DEFAULT_BASE_URL);
         assert!(s.show_avatars);
         assert_eq!(s.message_appearance, MessageAppearance::System);
+        assert_eq!(s.app_icon, AppIcon::Orange);
         assert!(s.group_mail_by_date);
         assert_eq!(s.workspace_layout, "default");
         assert_eq!(s.workspace_list_pane_width, MIN_WORKSPACE_LIST_PANE_WIDTH);
@@ -2324,6 +2426,22 @@ mod tests {
             assert_eq!(restored.time_format, format);
         }
         assert_eq!(TimeFormat::parse("system"), None);
+    }
+
+    #[test]
+    fn app_icon_round_trips_and_tolerates_unknown_values() {
+        for icon in AppIcon::ALL {
+            assert_eq!(AppIcon::parse(icon.as_str()), Some(icon));
+            let json = serde_json::to_string(&icon).unwrap();
+            assert_eq!(json, format!("\"{}\"", icon.as_str()));
+            assert_eq!(serde_json::from_str::<AppIcon>(&json).unwrap(), icon);
+        }
+        assert_eq!(AppIcon::parse("Graphite"), None);
+        let settings: Settings = serde_json::from_str(
+            r#"{"theme":"system","undoSendSeconds":10,"appIcon":"from-a-newer-version"}"#,
+        )
+        .unwrap();
+        assert_eq!(settings.app_icon, AppIcon::Orange);
     }
 
     #[test]

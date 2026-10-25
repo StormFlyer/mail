@@ -7,7 +7,7 @@
 
 use super::*;
 use chrono::Utc;
-use flectar_mail_core::accounts::backup as account_backup;
+use flectar_mail_core::accounts::{backup as account_backup, mailbox_key};
 use flectar_mail_core::models::{
     MIN_WORKSPACE_LIST_PANE_WIDTH, MailExport, PortableAccountConfig, Settings,
     normalized_workspace_list_pane_width,
@@ -401,6 +401,13 @@ pub(super) fn restore_account_backup(
             {
                 settings.monochrome_sidebar_icons = enabled;
             }
+            if let Some(icon) = preferences
+                .get("appIcon")
+                .and_then(|value| value.as_str())
+                .and_then(flectar_mail_core::models::AppIcon::parse)
+            {
+                settings.app_icon = icon;
+            }
             if let Some(enabled) = preferences
                 .get("showAvatars")
                 .and_then(|value| value.as_bool())
@@ -535,26 +542,42 @@ pub(super) fn restore_account_backup(
         runtime.block_on(core.save_settings(settings.clone()))?;
         let accounts = runtime.block_on(core.load_accounts())?;
         let configs = runtime.block_on(core.load_account_configs())?;
-        let account_ids = accounts
+        // A backup address can be another spelling of an account's Gmail
+        // address, which the restore kept instead of adding it again. As
+        // there, the account stored with the exact address comes first.
+        let exact_ids = accounts
             .iter()
             .map(|account| (account.email.trim().to_ascii_lowercase(), account.id))
             .collect::<HashMap<_, _>>();
+        let mut mailbox_ids = HashMap::new();
+        for account in &accounts {
+            mailbox_ids
+                .entry(mailbox_key(&account.email))
+                .and_modify(|id: &mut i64| *id = (*id).min(account.id))
+                .or_insert(account.id);
+        }
+        let account_for = |email: &str| {
+            exact_ids
+                .get(&email.trim().to_ascii_lowercase())
+                .or_else(|| mailbox_ids.get(&mailbox_key(email)))
+                .copied()
+        };
         if has_portable_colors {
             for email in &imported_emails {
-                if let Some(account_id) = account_ids.get(email) {
-                    runtime.block_on(core.set_account_color(*account_id, None))?;
+                if let Some(account_id) = account_for(email) {
+                    runtime.block_on(core.set_account_color(account_id, None))?;
                 }
             }
             for (email, color) in portable_colors {
-                if let Some(account_id) = account_ids.get(&email) {
-                    runtime.block_on(core.set_account_color(*account_id, Some(color)))?;
+                if let Some(account_id) = account_for(&email) {
+                    runtime.block_on(core.set_account_color(account_id, Some(color)))?;
                 }
             }
         }
         if has_portable_profiles {
             for email in &imported_emails {
-                if let Some(account_id) = account_ids.get(email) {
-                    runtime.block_on(core.assign_account_profile(*account_id, None))?;
+                if let Some(account_id) = account_for(email) {
+                    runtime.block_on(core.assign_account_profile(account_id, None))?;
                 }
             }
         }
@@ -571,9 +594,9 @@ pub(super) fn restore_account_backup(
                 profile.color,
             ))?;
             for email in profile.account_emails {
-                if let Some(account_id) = account_ids.get(&email.trim().to_ascii_lowercase()) {
+                if let Some(account_id) = account_for(&email) {
                     runtime.block_on(
-                        core.assign_account_profile(*account_id, Some(saved.id.clone())),
+                        core.assign_account_profile(account_id, Some(saved.id.clone())),
                     )?;
                 }
             }
@@ -604,6 +627,7 @@ pub(super) fn restore_account_backup(
         .into(),
     );
     app.set_monochrome_sidebar_icons(settings.monochrome_sidebar_icons);
+    crate::app_icon::apply(app, settings.app_icon);
     app.global::<MessageColors>()
         .set_preference(settings.message_appearance.as_str().into());
     app.set_show_avatars(settings.show_avatars);
@@ -1226,6 +1250,7 @@ pub(super) fn register_data_management_callbacks(
                     "workspaceLayout": settings.workspace_layout,
                     "workspaceListPaneWidth": settings.workspace_list_pane_width,
                     "monochromeSidebarIcons": settings.monochrome_sidebar_icons,
+                    "appIcon": settings.app_icon,
                     "language": settings.language,
                     "timeFormat": settings.time_format,
                     "calendarWeekStart": settings.calendar_week_start,
@@ -1508,6 +1533,7 @@ pub(super) fn register_data_management_callbacks(
                     app.set_theme_mode("system".into());
                     app.global::<MessageColors>().set_preference("system".into());
                     app.set_monochrome_sidebar_icons(false);
+                    crate::app_icon::apply(&app, Default::default());
                     app.set_show_avatars(true);
                     app.set_show_account_markers(false);
                     app.set_workspace_layout("default".into());
