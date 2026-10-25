@@ -395,12 +395,29 @@ fn mail_is_chosen_imported_and_reported(ui: &ImportHarness, window: &MinimalSoft
     state.set_destinations(ModelRc::new(VecModel::from(vec![
         slint::SharedString::from("On this device"),
         slint::SharedString::from("jane@example.com"),
+        slint::SharedString::from("work@example.com"),
     ])));
     state.set_mail_rows(ModelRc::new(VecModel::from(mail_rows())));
     state.set_mail_selected_count(3);
     state.set_mail_selected_size("3.13 GB".into());
     state.set_stage("mail".into());
     render(window, 800, 700, "mail-desktop");
+    // Mail for an IMAP, JMAP or Gmail account goes to its server.
+    let uploading = mail_rows()
+        .into_iter()
+        .enumerate()
+        .map(|(index, row)| match index {
+            0 => ImportMailRow {
+                destination: 2,
+                upload_folder: "Local Folders".into(),
+                ..row
+            },
+            _ => row,
+        })
+        .collect::<Vec<_>>();
+    state.set_mail_rows(ModelRc::new(VecModel::from(uploading)));
+    render(window, 800, 700, "mail-upload-desktop");
+    state.set_mail_rows(ModelRc::new(VecModel::from(mail_rows())));
 
     // The first store's checkbox chooses all of its folders.
     let card_x = (800.0 - 600.0) / 2.0;
@@ -477,6 +494,8 @@ fn mail_is_chosen_imported_and_reported(ui: &ImportHarness, window: &MinimalSoft
     state.set_mail_imported(1234);
     state.set_mail_already_present(12);
     state.set_mail_too_large(1);
+    state.set_mail_refused(2);
+    state.set_mail_refusal("NO [OVERQUOTA] Mailbox is full".into());
     state.set_mail_stopped(true);
     state.set_mail_failures(ModelRc::new(VecModel::from(vec![ImportFailureRow {
         email: "Local Folders/Archives/2023".into(),

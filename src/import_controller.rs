@@ -33,8 +33,8 @@ struct ImportSession {
     source: Option<migration::SourceKind>,
     /// Mail the source keeps, by store, and the folders chosen from it.
     mail: Vec<MailChoice>,
-    /// Where mail can go: this device, then POP3 accounts by address.
-    destinations: Vec<Option<String>>,
+    /// Where mail can go: this device, then accounts.
+    destinations: Vec<Option<MailAccount>>,
     /// What each mail row shows: a store, or one of its folders.
     rows: Vec<(usize, Option<usize>)>,
     /// Addresses the source's accounts send from. Mail from them is filed
@@ -85,15 +85,44 @@ impl ImportSession {
     }
 }
 
+/// An account mail can go into, by address and protocol: one here, or one
+/// chosen for import.
+#[derive(Debug, Clone, PartialEq)]
+struct MailAccount {
+    email: String,
+    protocol: MailProtocol,
+}
+
+impl MailAccount {
+    /// Its mail is on its server, so mail imported into it is uploaded
+    /// there. A POP3 account's exists only on this device.
+    fn uploads(&self) -> bool {
+        self.protocol != MailProtocol::Pop3
+    }
+}
+
 /// One store of mail, the folders chosen from it, and where it goes.
 struct MailChoice {
     store: MailStore,
     selected: Vec<bool>,
     /// An index into the session's destinations.
     destination: usize,
+    /// The folder its mail goes in on an account's server; without one, the
+    /// folder for messages chosen one by one.
+    upload_folder: Option<String>,
 }
 
 impl MailChoice {
+    /// A store of an app's profile, whose mail is named after it on a
+    /// server.
+    fn from_profile(store: MailStore) -> Self {
+        let upload_folder = Some(store.label.clone());
+        Self {
+            upload_folder,
+            ..Self::new(store)
+        }
+    }
+
     fn new(store: MailStore) -> Self {
         // Mail that was thrown away or was junk is left out unless chosen.
         let tops = store
@@ -120,6 +149,7 @@ impl MailChoice {
             store,
             selected,
             destination: 0,
+            upload_folder: None,
         }
     }
 
@@ -172,9 +202,11 @@ struct MailJob {
     source: MailSource,
     folders: Vec<usize>,
     bytes: u64,
-    destination: Option<String>,
+    destination: Option<MailAccount>,
     /// The folder the mail goes in on this device, if it goes there.
     parent: Option<String>,
+    /// The folder it goes in on an account's server.
+    upload_folder: Option<String>,
 }
 
 /// How far the whole import is, across stores.
@@ -194,6 +226,9 @@ struct MailOutcome {
     imported: u64,
     already_present: u64,
     too_large: u64,
+    /// Messages a server refused, and why it refused the first.
+    refused: u64,
+    refusal: Option<String>,
     stopped: bool,
     /// Folders not read to the end, by name, with the reason.
     unreadable: Vec<(String, String)>,
@@ -342,31 +377,32 @@ fn show_review(app: &AppWindow, session: &ImportSession) {
     ui.set_stage("review".into());
 }
 
-/// The POP3 accounts mail can go into: those here, and those chosen for
-/// import. Their mail, like local mail, exists only on this device.
-fn mail_destinations(session: &ImportSession, accounts: &[Account]) -> Vec<Option<String>> {
-    let mut destinations: Vec<Option<String>> = vec![None];
-    let pop3 = accounts
+/// The accounts mail can go into: those here, and the POP3 accounts chosen
+/// for import. A POP3 account's mail, like local mail, exists only on this
+/// device; mail for another account is uploaded to its server, so it needs
+/// one already signed in.
+fn mail_destinations(session: &ImportSession, accounts: &[Account]) -> Vec<Option<MailAccount>> {
+    let mut destinations: Vec<Option<MailAccount>> = vec![None];
+    let here = accounts.iter().map(|account| MailAccount {
+        email: account.email.clone(),
+        protocol: account.mail_protocol,
+    });
+    let chosen = session
+        .plans
         .iter()
-        .filter(|account| account.mail_protocol == MailProtocol::Pop3)
-        .map(|account| account.email.clone())
-        .chain(
-            session
-                .plans
-                .iter()
-                .zip(&session.selected)
-                .filter(|(_, selected)| **selected)
-                .filter_map(|(plan, _)| plan.draft.as_ref())
-                .filter(|draft| draft.config.mail_protocol == MailProtocol::Pop3)
-                .map(|draft| draft.config.email.clone()),
-        );
-    for email in pop3 {
-        if !destinations
-            .iter()
-            .flatten()
-            .any(|known| known.eq_ignore_ascii_case(&email))
-        {
-            destinations.push(Some(email));
+        .zip(&session.selected)
+        .filter(|(_, selected)| **selected)
+        .filter_map(|(plan, _)| plan.draft.as_ref())
+        .filter(|draft| draft.config.mail_protocol == MailProtocol::Pop3)
+        .map(|draft| MailAccount {
+            email: draft.config.email.clone(),
+            protocol: MailProtocol::Pop3,
+        });
+    for account in here.chain(chosen) {
+        if !destinations.iter().flatten().any(|known| {
+            known.protocol == account.protocol && known.email.eq_ignore_ascii_case(&account.email)
+        }) {
+            destinations.push(Some(account));
         }
     }
     destinations
@@ -376,7 +412,7 @@ fn mail_destinations(session: &ImportSession, accounts: &[Account]) -> Vec<Optio
 /// account's mail into that account, everything else onto this device.
 fn default_destination(
     session: &ImportSession,
-    destinations: &[Option<String>],
+    destinations: &[Option<MailAccount>],
     store: &MailStore,
 ) -> usize {
     let Some(email) = store.account.as_ref().and_then(|account| {
@@ -393,9 +429,31 @@ fn default_destination(
         .position(|destination| {
             destination
                 .as_ref()
-                .is_some_and(|known| known.eq_ignore_ascii_case(email))
+                .is_some_and(|known| !known.uploads() && known.email.eq_ignore_ascii_case(email))
         })
         .unwrap_or(0)
+}
+
+/// How the destination menu names a destination: by address, with the
+/// protocol where an address has more than one account.
+fn destination_name(destinations: &[Option<MailAccount>], index: usize, device: &str) -> String {
+    let Some(account) = &destinations[index] else {
+        return device.to_owned();
+    };
+    let shared = destinations.iter().flatten().any(|other| {
+        other.protocol != account.protocol && other.email.eq_ignore_ascii_case(&account.email)
+    });
+    if !shared {
+        return account.email.clone();
+    }
+    let protocol = match account.protocol {
+        MailProtocol::Imap => "IMAP",
+        MailProtocol::Jmap => "JMAP",
+        MailProtocol::Gmail => "Gmail",
+        MailProtocol::Pop3 => "POP3",
+        MailProtocol::Local => "",
+    };
+    format!("{} ({protocol})", account.email)
 }
 
 /// Present the mail step for the accounts chosen before it.
@@ -421,13 +479,9 @@ fn show_mail(app: &AppWindow, session: &mut ImportSession, accounts: &[Account])
     let device = translated(app, &UiMessage::plain("On this device")).to_string();
     let ui = app.global::<AccountImport>();
     ui.set_destinations(ModelRc::new(VecModel::from(
-        session
-            .destinations
-            .iter()
-            .map(|destination| {
-                slint::SharedString::from(destination.as_deref().unwrap_or(device.as_str()))
-            })
-            .collect::<Vec<_>>(),
+        (0..session.destinations.len())
+            .map(|index| destination_name(&session.destinations, index, &device).into())
+            .collect::<Vec<slint::SharedString>>(),
     )));
     show_mail_rows(app, session);
     ui.set_stage("mail".into());
@@ -441,6 +495,11 @@ fn show_mail_rows(app: &AppWindow, session: &mut ImportSession) {
     let mut chosen_bytes = 0;
     for (store_index, choice) in session.mail.iter().enumerate() {
         let (selected, partial) = choice.state(0..choice.folders().len());
+        let uploads = session
+            .destinations
+            .get(choice.destination)
+            .and_then(Option::as_ref)
+            .is_some_and(MailAccount::uploads);
         rows.push((store_index, None));
         models.push(ImportMailRow {
             is_store: true,
@@ -452,6 +511,15 @@ fn show_mail_rows(app: &AppWindow, session: &mut ImportSession) {
             destination: choice.destination as i32,
             folder: if choice.store.account.is_some() {
                 choice.store.label.as_str().into()
+            } else {
+                slint::SharedString::default()
+            },
+            upload_folder: if uploads {
+                choice
+                    .upload_folder
+                    .as_deref()
+                    .unwrap_or(loose.as_str())
+                    .into()
             } else {
                 slint::SharedString::default()
             },
@@ -484,6 +552,7 @@ fn show_mail_rows(app: &AppWindow, session: &mut ImportSession) {
                 partial,
                 destination: 0,
                 folder: slint::SharedString::default(),
+                upload_folder: slint::SharedString::default(),
             });
         }
     }
@@ -523,6 +592,7 @@ fn mail_jobs(session: &ImportSession) -> Vec<MailJob> {
                     .account
                     .is_some()
                     .then(|| choice.store.label.clone()),
+                upload_folder: choice.upload_folder.clone(),
             })
         })
         .collect()
@@ -560,19 +630,26 @@ async fn import_mail(
             outcome.stopped = true;
             break;
         }
-        let account = job.destination.as_ref().and_then(|email| {
+        let account = job.destination.as_ref().and_then(|destination| {
             accounts.iter().find(|account| {
-                account.mail_protocol == MailProtocol::Pop3
-                    && account.email.eq_ignore_ascii_case(email)
+                account.mail_protocol == destination.protocol
+                    && account.email.eq_ignore_ascii_case(&destination.email)
             })
         });
         let (destination, parent) = match account {
-            Some(account) => (Destination::Account(account.id), None),
+            Some(account) if account.mail_protocol == MailProtocol::Pop3 => {
+                (Destination::Account(account.id), None)
+            }
+            Some(account) => (Destination::Account(account.id), job.upload_folder.clone()),
             // An account that couldn't be added leaves its mail on this
             // device, apart from the rest.
             None => (
                 Destination::Local,
-                job.parent.clone().or_else(|| job.destination.clone()),
+                job.parent.clone().or_else(|| {
+                    job.destination
+                        .as_ref()
+                        .map(|destination| destination.email.clone())
+                }),
             ),
         };
         // How progress names each of the job's folders.
@@ -637,6 +714,10 @@ async fn import_mail(
         outcome.imported += report.imported;
         outcome.already_present += report.already_present;
         outcome.too_large += report.too_large;
+        outcome.refused += report.refused;
+        if outcome.refusal.is_none() {
+            outcome.refusal = report.refusal;
+        }
         outcome.folders.extend(report.folders);
         for (path, error) in report.unreadable {
             let mut name = path.join("/");
@@ -683,6 +764,8 @@ fn show_mail_report(app: &AppWindow, outcome: &MailOutcome) {
     ui.set_mail_imported(ui_count(outcome.imported));
     ui.set_mail_already_present(ui_count(outcome.already_present));
     ui.set_mail_too_large(ui_count(outcome.too_large));
+    ui.set_mail_refused(ui_count(outcome.refused));
+    ui.set_mail_refusal(outcome.refusal.clone().unwrap_or_default().into());
     ui.set_mail_stopped(outcome.stopped);
     ui.set_mail_failures(ModelRc::new(VecModel::from(
         outcome
@@ -726,6 +809,8 @@ fn clear_results(app: &AppWindow) {
     ui.set_mail_imported(0);
     ui.set_mail_already_present(0);
     ui.set_mail_too_large(0);
+    ui.set_mail_refused(0);
+    ui.set_mail_refusal(slint::SharedString::default());
     ui.set_mail_stopped(false);
     ui.set_mail_failures(ModelRc::default());
 }
@@ -906,7 +991,7 @@ pub(super) fn register_import_callbacks(
                                 .collect();
                             session.plans = plans;
                             session.source = Some(source);
-                            session.mail = mail.into_iter().map(MailChoice::new).collect();
+                            session.mail = mail.into_iter().map(MailChoice::from_profile).collect();
                             session.own_addresses = own_addresses;
                             if session.plans.is_empty() {
                                 let accounts = state.borrow().connected_accounts.clone();
@@ -1509,15 +1594,24 @@ mod tests {
             account(2, "imap@example.com", MailProtocol::Imap),
         ];
         let mut session = ImportSession {
-            mail: vec![MailChoice::new(local), MailChoice::new(pop)],
+            mail: vec![MailChoice::new(local), MailChoice::from_profile(pop)],
             ..ImportSession::default()
         };
         session.destinations = mail_destinations(&session, &accounts);
-        // Only a POP3 account keeps its mail on this device alone.
+        let pop3 = MailAccount {
+            email: "pop@example.com".into(),
+            protocol: MailProtocol::Pop3,
+        };
+        let imap = MailAccount {
+            email: "imap@example.com".into(),
+            protocol: MailProtocol::Imap,
+        };
         assert_eq!(
             session.destinations,
-            [None, Some("pop@example.com".to_owned())]
+            [None, Some(pop3.clone()), Some(imap.clone())]
         );
+        // Only an IMAP account's mail is uploaded to its server.
+        assert!(!pop3.uploads() && imap.uploads());
         // Without a plan for its account, a store stays on this device.
         assert_eq!(
             default_destination(&session, &session.destinations, &session.mail[1].store),
@@ -1532,13 +1626,50 @@ mod tests {
         assert_eq!(jobs[0].bytes, folders[1].size + folders[2].size);
         assert_eq!(jobs[0].destination, None);
         assert_eq!(jobs[0].parent, None);
+        assert_eq!(jobs[0].upload_folder, None);
         // An account's mail goes in a folder of its own if it stays here.
-        assert_eq!(jobs[1].destination.as_deref(), Some("pop@example.com"));
+        assert_eq!(jobs[1].destination, Some(pop3));
         assert_eq!(jobs[1].parent.as_deref(), Some("Local Folders"));
+        // On a server, a profile's mail goes in a folder named after it.
+        session.mail[1].destination = 2;
+        let jobs = mail_jobs(&session);
+        assert_eq!(jobs[1].destination, Some(imap));
+        assert_eq!(jobs[1].upload_folder.as_deref(), Some("Local Folders"));
 
         // A store with nothing chosen is left out.
         session.mail[0].selected.fill(false);
         assert_eq!(mail_jobs(&session).len(), 1);
+    }
+
+    #[test]
+    fn destinations_are_named_by_address() {
+        let destinations = [
+            None,
+            Some(MailAccount {
+                email: "ana@example.com".into(),
+                protocol: MailProtocol::Pop3,
+            }),
+            Some(MailAccount {
+                email: "Ana@example.com".into(),
+                protocol: MailProtocol::Imap,
+            }),
+            Some(MailAccount {
+                email: "bo@example.com".into(),
+                protocol: MailProtocol::Jmap,
+            }),
+        ];
+        let names = (0..destinations.len())
+            .map(|index| destination_name(&destinations, index, "On this device"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                "On this device",
+                "ana@example.com (POP3)",
+                "Ana@example.com (IMAP)",
+                "bo@example.com"
+            ]
+        );
     }
 
     #[test]

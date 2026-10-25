@@ -47,10 +47,12 @@ export struct ImportMailRow {
     selected: bool,
     // Some of the folders it covers are chosen, not all.
     partial: bool,
-    // Stores: where the mail goes, an index into the destinations, and the
-    // folder it goes in on this device, if any.
+    // Stores: where the mail goes, an index into the destinations, the
+    // folder it goes in on this device, if any, and the folder it goes in on
+    // the server of the account it is uploaded to, if it is.
     destination: int,
     folder: string,
+    upload-folder: string,
 }
 
 // State of the account import flow. Rust owns the source, plan, and results;
@@ -74,7 +76,7 @@ export global AccountImport {
     // The source has mail, chosen after its accounts.
     in property <bool> has-mail;
     in property <[ImportMailRow]> mail-rows;
-    // On this device, then the POP3 accounts mail can go into.
+    // On this device, then the accounts mail can go into.
     in property <[string]> destinations;
     in property <int> mail-selected-count;
     in property <string> mail-selected-size;
@@ -103,6 +105,9 @@ export global AccountImport {
     in property <int> mail-imported;
     in property <int> mail-already-present;
     in property <int> mail-too-large;
+    // Messages a server refused, and why it refused the first.
+    in property <int> mail-refused;
+    in property <string> mail-refusal;
     in property <bool> mail-stopped;
     in property <[ImportFailureRow]> mail-failures;
     callback choose-file();
@@ -185,6 +190,7 @@ global ImportText {
 
     // Where a store's mail goes, beyond what its destination menu shows.
     public pure function destination(row: ImportMailRow) -> string {
+        if row.upload-folder != "" { return @tr("Uploaded to the account’s server, into the folder “{}”", row.upload-folder); }
         if AccountImport.destinations.length > 1 {
             return row.destination == 0 && row.folder != "" ? @tr("In the folder “{}”", row.folder) : "";
         }
@@ -279,7 +285,7 @@ component MailRow inherits Rectangle {
                 vertical-alignment: center;
             }
         }
-        // Mail can go into a POP3 account's folders instead.
+        // Mail can go into an account instead.
         if root.entry.is-store && AccountImport.destinations.length > 1 : HorizontalLayout {
             padding-left: 38px;
             padding-top: 4px;
@@ -708,7 +714,9 @@ export component ImportDialog inherits Rectangle {
                     spacing: 10px;
                     vertical-stretch: 1;
                     Text {
-                        text: @tr("Imported mail is kept only on this device. Messages already here are skipped, so an import can be repeated.");
+                        text: AccountImport.destinations.length > 1
+                            ? @tr("Mail stays on this device unless you choose an account for it. Messages already there are skipped, so an import can be repeated.")
+                            : @tr("Imported mail is kept only on this device. Messages already here are skipped, so an import can be repeated.");
                         color: AppTheme.secondary;
                         font-size: TypeScale.secondary;
                         wrap: word-wrap;
@@ -779,6 +787,12 @@ export component ImportDialog inherits Rectangle {
                     if AccountImport.mail-results && AccountImport.mail-too-large > 0 : Text {
                         text: @tr("One message larger than 128 MB was skipped." | "{} messages larger than 128 MB were skipped." % AccountImport.mail-too-large, Numbers.count(AccountImport.mail-too-large));
                         color: AppTheme.secondary;
+                        font-size: TypeScale.secondary;
+                        wrap: word-wrap;
+                    }
+                    if AccountImport.mail-results && AccountImport.mail-refused > 0 : Text {
+                        text: @tr("The server refused one message: {1}" | "The server refused {0} messages: {1}" % AccountImport.mail-refused, Numbers.count(AccountImport.mail-refused), AccountImport.mail-refusal);
+                        color: AppTheme.destructive;
                         font-size: TypeScale.secondary;
                         wrap: word-wrap;
                     }
