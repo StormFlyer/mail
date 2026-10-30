@@ -6420,11 +6420,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     skipped += 1;
                     continue;
                 }
-                let filename = document
-                    .name()
-                    .map(ToOwned::to_owned)
-                    .or_else(|| path.file_name().map(|name| name.to_string_lossy().into_owned()));
-                let Some(filename) = filename else {
+                let Some(filename) = document.name() else {
                     skipped += 1;
                     continue;
                 };
